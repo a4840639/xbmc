@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,16 +32,15 @@ namespace ADDON
 class CImageResource : public CResource
 {
 public:
-  static std::unique_ptr<CImageResource> FromExtension(AddonProps props, const cp_extension_t* ext);
+  static std::unique_ptr<CImageResource> FromExtension(CAddonInfo addonInfo, const cp_extension_t* ext);
 
-  explicit CImageResource(AddonProps props) : CResource(std::move(props)) {};
-  CImageResource(AddonProps props, std::string type);
+  explicit CImageResource(CAddonInfo addonInfo) : CResource(std::move(addonInfo)) {};
+  CImageResource(CAddonInfo addonInfo, std::string type);
 
-  virtual AddonPtr Clone() const;
-  virtual void OnPreUnInstall();
+  void OnPreUnInstall() override;
 
-  virtual bool IsAllowed(const std::string &file) const;
-  virtual std::string GetFullPath(const std::string &filePath) const;
+  bool IsAllowed(const std::string &file) const override;
+  std::string GetFullPath(const std::string &filePath) const override;
 
   //! \brief Returns type of image collection
   const std::string& GetType() const { return m_type; }

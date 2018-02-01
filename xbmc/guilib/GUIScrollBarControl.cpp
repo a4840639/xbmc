@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -42,9 +42,7 @@ GUIScrollBarControl::GUIScrollBarControl(int parentID, int controlID, float posX
   m_showOnePage = showOnePage;
 }
 
-GUIScrollBarControl::~GUIScrollBarControl(void)
-{
-}
+GUIScrollBarControl::~GUIScrollBarControl(void) = default;
 
 void GUIScrollBarControl::Process(unsigned int currentTime, CDirtyRegionList &dirtyregions)
 {
@@ -343,7 +341,7 @@ EVENT_RESULT GUIScrollBarControl::OnMouseEvent(const CPoint &point, const CMouse
     SetFromPosition(point);
     return EVENT_RESULT_HANDLED;
   }
-  else if (event.m_id == ACTION_GESTURE_END)
+  else if (event.m_id == ACTION_GESTURE_END || event.m_id == ACTION_GESTURE_ABORT)
   { // release exclusive access
     CGUIMessage msg(GUI_MSG_EXCLUSIVE_MOUSE, 0, GetParentID());
     SendWindowMessage(msg);

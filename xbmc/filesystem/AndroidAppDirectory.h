@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -31,10 +31,10 @@ class CAndroidAppDirectory :
 public:
   CAndroidAppDirectory(void);
   virtual ~CAndroidAppDirectory(void);
-  virtual bool GetDirectory(const CURL& url, CFileItemList &items);
-  virtual bool Exists(const CURL& url) { return true; };
-  virtual bool AllowAll() const { return true; };
-  virtual DIR_CACHE_TYPE GetCacheType(const std::string& strPath) const { return DIR_CACHE_NEVER; }
+  virtual bool GetDirectory(const CURL& url, CFileItemList &items) override;
+  virtual bool Exists(const CURL& url) override { return true; };
+  virtual bool AllowAll() const override { return true; };
+  virtual DIR_CACHE_TYPE GetCacheType(const CURL& url) const override { return DIR_CACHE_NEVER; }
 };
 }
 #endif

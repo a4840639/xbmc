@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@
 
 #define MODULE      "xbmc"
 
-#define RUNSCRIPT_PRAMBLE \
+#define RUNSCRIPT_PREAMBLE \
   "" \
   "import " MODULE "\n" \
   "xbmc.abortRequested = False\n" \
@@ -69,14 +69,15 @@
 
 #if defined(TARGET_ANDROID)
 #define RUNSCRIPT \
-  RUNSCRIPT_PRAMBLE RUNSCRIPT_SETUPTOOLS_HACK RUNSCRIPT_POSTSCRIPT
+  RUNSCRIPT_PREAMBLE RUNSCRIPT_SETUPTOOLS_HACK RUNSCRIPT_POSTSCRIPT
 #else
 #define RUNSCRIPT \
-  RUNSCRIPT_PRAMBLE RUNSCRIPT_POSTSCRIPT
+  RUNSCRIPT_PREAMBLE RUNSCRIPT_POSTSCRIPT
 #endif
 
 namespace PythonBindings {
   void initModule_xbmc(void);
+  void initModule_xbmcaddon(void);
   void initModule_xbmcwsgi(void);
 }
 
@@ -91,6 +92,7 @@ typedef struct
 static PythonModule PythonModules[] =
 {
   { "xbmc",           initModule_xbmc },
+  { "xbmcaddon",      initModule_xbmcaddon  },
   { "xbmcwsgi",       initModule_xbmcwsgi }
 };
 
@@ -351,8 +353,11 @@ std::map<std::string, std::string> CHTTPPythonWsgiInvoker::createCgiEnvironment(
   environment.insert(std::make_pair("PATH_INFO", pathInfo));
 
   // QUERY_STRING
-  CURL url(httpRequest->url);
-  environment.insert(std::make_pair("QUERY_STRING", url.GetOptions()));
+  size_t iOptions = httpRequest->url.find_first_of('?');
+  if (iOptions != std::string::npos)
+    environment.insert(std::make_pair("QUERY_STRING", httpRequest->url.substr(iOptions+1)));
+  else
+    environment.insert(std::make_pair("QUERY_STRING", ""));
 
   // CONTENT_TYPE
   std::string headerValue;

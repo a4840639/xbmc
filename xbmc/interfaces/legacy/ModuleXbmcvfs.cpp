@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,10 +32,10 @@ namespace XBMCAddon
 
   namespace xbmcvfs
   {
-    bool copy(const String& strSource, const String& strDestnation)
+    bool copy(const String& strSource, const String& strDestination)
     {
       DelayedCallGuard dg;
-      return XFILE::CFile::Copy(strSource, strDestnation);
+      return XFILE::CFile::Copy(strSource, strDestination);
     }
 
     // delete a file
@@ -52,7 +52,7 @@ namespace XBMCAddon
       return XFILE::CFile::Rename(file,newFile);
     }  
 
-    // check for a file or folder existance, mimics Pythons os.path.exists()
+    // check for a file or folder existence, mimics Pythons os.path.exists()
     bool exists(const String& path)
     {
       DelayedCallGuard dg;

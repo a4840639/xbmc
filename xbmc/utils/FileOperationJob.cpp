@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -82,7 +82,7 @@ bool CFileOperationJob::DoWork()
   if (m_displayProgress && GetProgressDialog() == NULL)
   {
     CGUIDialogExtendedProgressBar* dialog =
-      (CGUIDialogExtendedProgressBar*)g_windowManager.GetWindow(WINDOW_DIALOG_EXT_PROGRESS);
+      g_windowManager.GetWindow<CGUIDialogExtendedProgressBar>(WINDOW_DIALOG_EXT_PROGRESS);
     SetProgressBar(dialog->GetHandle(GetActionString(m_action)));
   }
 
@@ -316,13 +316,18 @@ inline bool CFileOperationJob::CanBeRenamed(const std::string &strFileA, const s
 #else
   if (URIUtils::IsHD(strFileA) && URIUtils::IsHD(strFileB))
     return true;
+  else if (URIUtils::IsSmb(strFileA) && URIUtils::IsSmb(strFileB)) {
+    CURL smbFileA(strFileA), smbFileB(strFileB);
+    return smbFileA.GetHostName() == smbFileB.GetHostName() &&
+           smbFileA.GetShareName() == smbFileB.GetShareName();
+  }
 #endif
   return false;
 }
 
 bool CFileOperationJob::CFileOperation::OnFileCallback(void* pContext, int ipercent, float avgSpeed)
 {
-  DataHolder *data = (DataHolder *)pContext;
+  DataHolder *data = static_cast<DataHolder*>(pContext);
   double current = data->current + ((double)ipercent * data->opWeight * (double)m_time)/ 100.0;
 
   if (avgSpeed > 1000000.0f)

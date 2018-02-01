@@ -1,16 +1,8 @@
-/*!
-\file GUITextureGLES.h
-\brief
-*/
-
-#ifndef GUILIB_GUITEXTUREGLES_H
-#define GUILIB_GUITEXTUREGLES_H
-
 #pragma once
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -41,6 +33,8 @@ struct PackedVertex
 };
 typedef std::vector<PackedVertex> PackedVertices;
 
+class CRenderSystemGLES;
+
 class CGUITextureGLES : public CGUITextureBase
 {
 public:
@@ -55,6 +49,6 @@ protected:
 
   PackedVertices m_packedVertices;
   std::vector<GLushort> m_idx;
+  CRenderSystemGLES *m_renderSystem;
 };
 
-#endif

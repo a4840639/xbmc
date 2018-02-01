@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
  */
 
 #include <cstring>
+#include <memory>
 
 #include "DVDSubtitleStream.h"
 #include "DVDInputStreams/DVDFactoryInputStream.h"
@@ -31,32 +32,26 @@
 #include "utils/URIUtils.h"
 
 
-CDVDSubtitleStream::CDVDSubtitleStream()
-{
-}
+CDVDSubtitleStream::CDVDSubtitleStream() = default;
 
-CDVDSubtitleStream::~CDVDSubtitleStream()
-{
-}
+CDVDSubtitleStream::~CDVDSubtitleStream() = default;
 
 bool CDVDSubtitleStream::Open(const std::string& strFile)
 {
-  CDVDInputStream* pInputStream;
   CFileItem item(strFile, false);
   item.SetContentLookup(false);
-  pInputStream = CDVDFactoryInputStream::CreateInputStream(NULL, item);
+  std::shared_ptr<CDVDInputStream> pInputStream(CDVDFactoryInputStream::CreateInputStream(NULL, item));
   if (pInputStream && pInputStream->Open())
   {
     // prepare buffer
     size_t totalread = 0;
     XUTILS::auto_buffer buf(1024);
 
-    if (URIUtils::HasExtension(strFile, ".sub") && IsIncompatible(pInputStream, buf, &totalread))
+    if (URIUtils::HasExtension(strFile, ".sub") && IsIncompatible(pInputStream.get(), buf, &totalread))
     {
       CLog::Log(LOGDEBUG, "%s: file %s seems to be a vob sub"
         "file without an idx file, skipping it", __FUNCTION__, CURL::GetRedacted(pInputStream->GetFileName()).c_str());
       buf.clear();
-      delete pInputStream;
       return false;
     }
 
@@ -73,7 +68,6 @@ bool CDVDSubtitleStream::Open(const std::string& strFile)
         totalread += read;
     } while (read > 0);
 
-    delete pInputStream;
     if (!totalread)
       return false;
 
@@ -105,7 +99,6 @@ bool CDVDSubtitleStream::Open(const std::string& strFile)
     return true;
   }
 
-  delete pInputStream;
   return false;
 }
 

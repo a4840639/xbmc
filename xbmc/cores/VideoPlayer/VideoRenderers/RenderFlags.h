@@ -29,7 +29,6 @@
 
 #define RENDER_FLAG_FIELD0      0x80
 #define RENDER_FLAG_FIELD1      0x100
-#define RENDER_FLAG_WEAVE       0x200
 
 // #define RENDER_FLAG_LAST        0x40
 
@@ -46,29 +45,25 @@
 #define CONF_FLAGS_YUVCOEF_BT601 0x02
 #define CONF_FLAGS_YUVCOEF_240M  0x03
 #define CONF_FLAGS_YUVCOEF_EBU   0x04
+#define CONF_FLAGS_YUVCOEF_BT2020 0x05
 
 #define CONF_FLAGS_YUV_FULLRANGE 0x08
 #define CONF_FLAGS_FULLSCREEN    0x10
 
 /* defines color primaries */
 #define CONF_FLAGS_COLPRI_MASK(a) ((a) & 0xe0)
-#define CONF_FLAGS_COLPRI_BT709   0x20
-#define CONF_FLAGS_COLPRI_BT470M  0x40
-#define CONF_FLAGS_COLPRI_BT470BG 0x60
-#define CONF_FLAGS_COLPRI_170M    0x80
-#define CONF_FLAGS_COLPRI_240M    0xa0
+#define CONF_FLAGS_COLPRI_BT709   0x20  // sRGB, HDTV (ITU-R BT.709)
+#define CONF_FLAGS_COLPRI_BT470M  0x40  // NTSC (1953) (FCC 1953, ITU-R BT.470 System M)
+#define CONF_FLAGS_COLPRI_BT470BG 0x60  // PAL/SECAM (1970) (EBU Tech. 3213, ITU-R BT.470 System B, G)
+#define CONF_FLAGS_COLPRI_170M    0x80  // NTSC (1987) (SMPTE RP 145 "SMPTE C", SMPTE 170M)
+#define CONF_FLAGS_COLPRI_240M    0xa0  // SMPTE-240M
+#define CONF_FLAGS_COLPRI_BT2020  0xc0  // UHDTV (ITU-R BT.2020)
 
 /* defines chroma subsampling sample location */
 #define CONF_FLAGS_CHROMA_MASK(a) ((a) & 0x0300)
 #define CONF_FLAGS_CHROMA_LEFT    0x0100
 #define CONF_FLAGS_CHROMA_CENTER  0x0200
 #define CONF_FLAGS_CHROMA_TOPLEFT 0x0300
-
-/* defines color transfer function */
-#define CONF_FLAGS_TRC_MASK(a) ((a) & 0x0c00)
-#define CONF_FLAGS_TRC_BT709      0x0400
-#define CONF_FLAGS_TRC_GAMMA22    0x0800
-#define CONF_FLAGS_TRC_GAMMA28    0x0c00
 
 /* defines 3d modes */
 #define CONF_FLAGS_STEREO_MODE_MASK(a) ((a) & 0x007000)
@@ -79,16 +74,7 @@
 #define CONF_FLAGS_STEREO_CADANCE_LEFT_RIGHT 0x000000
 #define CONF_FLAGS_STEREO_CADANCE_RIGHT_LEFT 0x008000
 
-
-
-namespace RenderManager {
-
-  unsigned int GetFlagsColorMatrix(unsigned int color_matrix, unsigned width, unsigned height);
-  unsigned int GetFlagsChromaPosition(unsigned int chroma_position);
-  unsigned int GetFlagsColorPrimaries(unsigned int color_primaries);
-  unsigned int GetFlagsColorTransfer(unsigned int color_transfer);
-  unsigned int GetStereoModeFlags(const std::string& mode);
-  std::string  GetStereoModeInvert(const std::string& mode);
-
-}
-
+unsigned int GetFlagsColorMatrix(unsigned int color_matrix, unsigned width, unsigned height);
+unsigned int GetFlagsChromaPosition(unsigned int chroma_position);
+unsigned int GetFlagsColorPrimaries(unsigned int color_primaries);
+unsigned int GetFlagsStereoMode(const std::string& mode);

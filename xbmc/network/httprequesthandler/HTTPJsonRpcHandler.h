@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2011-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,22 +22,24 @@
 #include <string>
 
 #include "interfaces/json-rpc/IClient.h"
+#include "interfaces/json-rpc/ITransportLayer.h"
 #include "network/httprequesthandler/IHTTPRequestHandler.h"
 
 class CHTTPJsonRpcHandler : public IHTTPRequestHandler
 {
 public:
-  CHTTPJsonRpcHandler() { }
-  virtual ~CHTTPJsonRpcHandler() { }
+  CHTTPJsonRpcHandler() = default;
+  ~CHTTPJsonRpcHandler() override = default;
   
-  virtual IHTTPRequestHandler* Create(const HTTPRequest &request) { return new CHTTPJsonRpcHandler(request); }
-  virtual bool CanHandleRequest(const HTTPRequest &request);
+  // implementations of IHTTPRequestHandler
+  IHTTPRequestHandler* Create(const HTTPRequest &request) const override { return new CHTTPJsonRpcHandler(request); }
+  bool CanHandleRequest(const HTTPRequest &request) const override;
 
-  virtual int HandleRequest();
+  int HandleRequest() override;
 
-  virtual HttpResponseRanges GetResponseData() const;
+  HttpResponseRanges GetResponseData() const override;
 
-  virtual int GetPriority() const { return 5; }
+  int GetPriority() const override { return 5; }
 
 protected:
   explicit CHTTPJsonRpcHandler(const HTTPRequest &request)
@@ -45,9 +47,9 @@ protected:
   { }
 
 #if (MHD_VERSION >= 0x00040001)
-  virtual bool appendPostData(const char *data, size_t size);
+  bool appendPostData(const char *data, size_t size) override;
 #else
-  virtual bool appendPostData(const char *data, unsigned int size);
+  bool appendPostData(const char *data, unsigned int size) override;
 #endif
 
 private:
@@ -55,11 +57,30 @@ private:
   std::string m_responseData;
   CHttpResponseRange m_responseRange;
 
+  class CHTTPTransportLayer : public JSONRPC::ITransportLayer
+  {
+  public:
+    CHTTPTransportLayer() = default;
+    ~CHTTPTransportLayer() override = default;
+
+    // implementations of JSONRPC::ITransportLayer
+    bool PrepareDownload(const char *path, CVariant &details, std::string &protocol) override;
+    bool Download(const char *path, CVariant &result) override;
+    int GetCapabilities() override;
+  };
+  CHTTPTransportLayer m_transportLayer;
+
   class CHTTPClient : public JSONRPC::IClient
   {
   public:
-    virtual int  GetPermissionFlags();
-    virtual int  GetAnnouncementFlags();
-    virtual bool SetAnnouncementFlags(int flags);
+    explicit CHTTPClient(HTTPMethod method);
+    ~CHTTPClient() override = default;
+
+    int GetPermissionFlags() override { return m_permissionFlags; }
+    int GetAnnouncementFlags() override;
+    bool SetAnnouncementFlags(int flags) override;
+
+  private:
+    int m_permissionFlags;
   };
 };

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #include "GUIDialogTeletext.h"
 #include "utils/log.h"
 #include "Application.h"
+#include "ServiceBroker.h"
 #include "guilib/GUITexture.h"
 #include "guilib/Texture.h"
 #include "guilib/LocalizeStrings.h"
@@ -36,9 +37,7 @@ CGUIDialogTeletext::CGUIDialogTeletext()
   m_renderOrder = RENDER_ORDER_DIALOG_TELETEXT;
 }
 
-CGUIDialogTeletext::~CGUIDialogTeletext()
-{
-}
+CGUIDialogTeletext::~CGUIDialogTeletext() = default;
 
 bool CGUIDialogTeletext::OnAction(const CAction& action)
 {
@@ -63,7 +62,7 @@ bool CGUIDialogTeletext::OnMessage(CGUIMessage& message)
   if (message.GetMessage() == GUI_MSG_WINDOW_INIT)
   {
     /* Do not open if no teletext is available */
-    if (!g_application.m_pPlayer->GetTeletextCache())
+    if (!g_application.GetAppPlayer().GetTeletextCache())
     {
       Close();
       CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info, g_localizeStrings.Get(23049), "", 1500, false);
@@ -177,7 +176,7 @@ void CGUIDialogTeletext::SetCoordinates()
   top = g_graphicsContext.ScaleFinalYCoord(0, 0);
   bottom = g_graphicsContext.ScaleFinalYCoord(0, (float)m_coordsRes.iHeight);
 
-  if (CSettings::GetInstance().GetBool(CSettings::SETTING_VIDEOPLAYER_TELETEXTSCALE))
+  if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_VIDEOPLAYER_TELETEXTSCALE))
   {
     /* Fixed aspect ratio to 4:3 for teletext */
     float width = right - left;

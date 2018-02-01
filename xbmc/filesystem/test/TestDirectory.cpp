@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -51,4 +51,17 @@ TEST(TestDirectory, General)
   EXPECT_TRUE(XFILE::CDirectory::Exists(tmppath1));
   EXPECT_TRUE(XFILE::CDirectory::Remove(tmppath1));
   EXPECT_FALSE(XFILE::CDirectory::Exists(tmppath1));
+}
+
+TEST(TestDirectory, CreateRecursive)
+{
+  auto path1 = URIUtils::AddFileToFolder(
+    CSpecialProtocol::TranslatePath("special://temp/"),
+    "level1");
+  auto path2 = URIUtils::AddFileToFolder(path1,
+    "level2",
+    "level3");
+
+  EXPECT_TRUE(XFILE::CDirectory::Create(path2));
+  EXPECT_TRUE(XFILE::CDirectory::RemoveRecursive(path1));
 }

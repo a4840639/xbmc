@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2011-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
  *
  */
 
+#include <algorithm>
 #include <string>
 #include <sstream>
 
@@ -102,7 +103,10 @@ bool CWebSocketV13::Handshake(const char* data, size_t length, std::string &resp
 
   // There must be a "Connection" header with the value "Upgrade"
   value = header.getValue(WS_HEADER_CONNECTION_LC);
-  if (value == NULL || strstr(value, WS_HEADER_UPGRADE) == NULL)
+  std::vector<std::string> elements;
+  if (value != nullptr)
+    elements = StringUtils::Split(value, ",");
+  if (elements.empty() || !std::any_of(elements.begin(), elements.end(), [](std::string& elem) { return StringUtils::EqualsNoCase(StringUtils::Trim(elem), WS_HEADER_UPGRADE); }))
   {
     CLog::Log(LOGINFO, "WebSocket [RFC6455]: invalid \"%s\" received", WS_HEADER_CONNECTION_LC);
     return true;

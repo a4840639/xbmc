@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2011-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,16 +23,21 @@
 #include "DVDOverlayText.h"
 #include "DVDStreamInfo.h"
 #include "DVDCodecs/DVDCodecs.h"
+#include "cores/VideoPlayer/Interface/Addon/DemuxPacket.h"
+#include "ServiceBroker.h"
 #include "settings/Settings.h"
 #include "utils/log.h"
 #include "utils/StringUtils.h"
 #include "utils/auto_buffer.h"
+#include "utils/RegExp.h"
+
+#include <cstddef>
 
 // 3GPP/TX3G (aka MPEG-4 Timed Text) Subtitle support
 // 3GPP -> 3rd Generation Partnership Program
 // adapted from https://trac.handbrake.fr/browser/trunk/libhb/dectx3gsub.c;
 
-#define LEN_CHECK(x)    do { if((end - pos) < (x)) return OC_ERROR; } while(0)
+#define LEN_CHECK(x)    do { if((end - pos) < static_cast<std::ptrdiff_t>(x)) return OC_ERROR; } while(0)
 
 // NOTE: None of these macros check for buffer overflow
 #define READ_U8()       *pos;                                                     pos += 1;
@@ -67,7 +72,7 @@ CDVDOverlayCodecTX3G::CDVDOverlayCodecTX3G() : CDVDOverlayCodec("TX3G Subtitle D
   m_pOverlay = NULL;
   // stupid, this comes from a static global in GUIWindowFullScreen.cpp
   uint32_t colormap[8] = { 0xFFFFFF00, 0xFFFFFFFF, 0xFF0099FF, 0xFF00FF00, 0xFFCCFF00, 0xFF00FFFF, 0xFFE5E5E5, 0xFFC0C0C0 };
-  m_textColor = colormap[CSettings::GetInstance().GetInt(CSettings::SETTING_SUBTITLES_COLOR)];
+  m_textColor = colormap[CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SUBTITLES_COLOR)];
 }
 
 CDVDOverlayCodecTX3G::~CDVDOverlayCodecTX3G()
@@ -245,6 +250,18 @@ int CDVDOverlayCodecTX3G::Decode(DemuxPacket *pPacket)
 
   if (strUTF8[strUTF8.size()-1] == '\n')
     strUTF8.erase(strUTF8.size()-1);
+
+  // erase unsupport tags
+  CRegExp tags;
+  if (tags.RegComp("(\\{[^\\}]*\\})"))
+  {
+    int pos = 0;
+    while ((pos = tags.RegFind(strUTF8.c_str(), pos)) >= 0)
+    {
+      std::string tag = tags.GetMatch(0);
+      strUTF8.erase(pos, tag.length());
+    }
+  }
 
   // add a new text element to our container
   m_pOverlay->AddElement(new CDVDOverlayText::CElementText(strUTF8.c_str()));

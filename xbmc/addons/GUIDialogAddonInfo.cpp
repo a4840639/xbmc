@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,17 +25,21 @@
 #include "addons/AddonSystemSettings.h"
 #include "AddonDatabase.h"
 #include "FileItem.h"
+#include "ServiceBroker.h"
 #include "filesystem/Directory.h"
-#include "GUIDialogAddonSettings.h"
-#include "cores/AudioEngine/DSPAddons/ActiveAEDSP.h"
+#include "addons/settings/GUIDialogAddonSettings.h"
+#include "cores/AudioEngine/Engines/ActiveAE/AudioDSPAddons/ActiveAEDSP.h"
 #include "dialogs/GUIDialogContextMenu.h"
-#include "dialogs/GUIDialogTextViewer.h"
-#include "dialogs/GUIDialogOK.h"
 #include "dialogs/GUIDialogSelect.h"
 #include "dialogs/GUIDialogYesNo.h"
+#include "games/GameUtils.h"
+#include "guilib/LocalizeStrings.h"
 #include "GUIUserMessages.h"
 #include "guilib/GUIWindowManager.h"
 #include "input/Key.h"
+#include "messaging/helpers/DialogHelper.h"
+#include "messaging/helpers/DialogOKHelper.h"
+#include "pictures/GUIWindowSlideShow.h"
 #include "settings/Settings.h"
 #include "utils/JobManager.h"
 #include "utils/FileOperationJob.h"
@@ -46,44 +50,39 @@
 #include "Util.h"
 #include "interfaces/builtins/Builtins.h"
 
+#include <functional>
+#include <sstream>
 #include <utility>
 
 #define CONTROL_BTN_INSTALL          6
 #define CONTROL_BTN_ENABLE           7
 #define CONTROL_BTN_UPDATE           8
 #define CONTROL_BTN_SETTINGS         9
-#define CONTROL_BTN_CHANGELOG       10
+#define CONTROL_BTN_DEPENDENCIES    10
 #define CONTROL_BTN_SELECT          12
 #define CONTROL_BTN_AUTOUPDATE      13
+#define CONTROL_LIST_SCREENSHOTS    50
 
+using namespace KODI;
 using namespace ADDON;
 using namespace XFILE;
+using namespace KODI::MESSAGING;
+using KODI::MESSAGING::HELPERS::DialogResponse;
 
 CGUIDialogAddonInfo::CGUIDialogAddonInfo(void)
   : CGUIDialog(WINDOW_DIALOG_ADDON_INFO, "DialogAddonInfo.xml"),
-  m_addonEnabled(false),
-  m_jobid(0),
-  m_changelog(false)
+  m_addonEnabled(false)
 {
   m_item = CFileItemPtr(new CFileItem);
   m_loadType = KEEP_IN_MEMORY;
 }
 
-CGUIDialogAddonInfo::~CGUIDialogAddonInfo(void)
-{
-}
+CGUIDialogAddonInfo::~CGUIDialogAddonInfo(void) = default;
 
 bool CGUIDialogAddonInfo::OnMessage(CGUIMessage& message)
 {
   switch ( message.GetMessage() )
   {
-  case GUI_MSG_WINDOW_DEINIT:
-    {
-      if (m_jobid)
-        CJobManager::GetInstance().CancelJob(m_jobid);
-    }
-    break;
-
   case GUI_MSG_CLICKED:
     {
       int iControl = message.GetSenderId();
@@ -94,15 +93,6 @@ bool CGUIDialogAddonInfo::OnMessage(CGUIMessage& message)
       }
       if (iControl == CONTROL_BTN_INSTALL)
       {
-        if (m_localAddon)
-        {
-          if (m_localAddon->Type() == ADDON_ADSPDLL && ActiveAE::CActiveAEDSP::GetInstance().IsProcessing())
-          {
-            CGUIDialogOK::ShowAndGetInput(24137, 0, 24138, 0);
-            return true;
-          }
-        }
-
         if (!m_localAddon)
         {
           OnInstall();
@@ -121,16 +111,6 @@ bool CGUIDialogAddonInfo::OnMessage(CGUIMessage& message)
       }
       else if (iControl == CONTROL_BTN_ENABLE)
       {
-        //FIXME: should be moved to somewhere appropriate (e.g CAddonMgs::CanAddonBeDisabled or IsInUse) and button should be disabled
-        if (m_localAddon)
-        {
-          if (m_localAddon->Type() == ADDON_ADSPDLL && ActiveAE::CActiveAEDSP::GetInstance().IsProcessing())
-          {
-            CGUIDialogOK::ShowAndGetInput(24137, 0, 24138, 0);
-            return true;
-          }
-        }
-
         OnEnableDisable();
         return true;
       }
@@ -139,15 +119,27 @@ bool CGUIDialogAddonInfo::OnMessage(CGUIMessage& message)
         OnSettings();
         return true;
       }
-      else if (iControl == CONTROL_BTN_CHANGELOG)
+      else if (iControl == CONTROL_BTN_DEPENDENCIES)
       {
-        OnChangeLog();
+        ADDONDEPS deps = CServiceBroker::GetAddonMgr().GetDepsRecursive(m_item->GetAddonInfo()->ID());
+        ShowDependencyList(deps, true);
         return true;
       }
       else if (iControl == CONTROL_BTN_AUTOUPDATE)
       {
         OnToggleAutoUpdates();
         return true;
+      }
+      else if (iControl == CONTROL_LIST_SCREENSHOTS)
+      {
+        if (message.GetParam1() == ACTION_SELECT_ITEM || message.GetParam1() == ACTION_MOUSE_LEFT_CLICK)
+        {
+          CGUIMessage msg(GUI_MSG_ITEM_SELECTED, GetID(), iControl);
+          OnMessage(msg);
+          int start = msg.GetParam1();
+          if (start >= 0 && start < static_cast<int>(m_item->GetAddonInfo()->Screenshots().size()))
+            CGUIWindowSlideShow::RunSlideShow(m_item->GetAddonInfo()->Screenshots(), start);
+        }
       }
     }
     break;
@@ -172,29 +164,39 @@ void CGUIDialogAddonInfo::OnInitWindow()
 {
   UpdateControls();
   CGUIDialog::OnInitWindow();
-  m_changelog = false;
 }
 
 void CGUIDialogAddonInfo::UpdateControls()
 {
-  bool isInstalled = NULL != m_localAddon.get();
-  m_addonEnabled = m_localAddon && !CAddonMgr::GetInstance().IsAddonDisabled(m_localAddon->ID());
-  bool canDisable = isInstalled && CAddonMgr::GetInstance().CanAddonBeDisabled(m_localAddon->ID());
-  bool canInstall = !isInstalled && m_addon && m_addon->Broken().empty();
-  bool isRepo = (isInstalled && m_localAddon->Type() == ADDON_REPOSITORY) || (m_addon && m_addon->Type() == ADDON_REPOSITORY);
+  if (!m_item)
+    return;
 
-  CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_INSTALL, canDisable || canInstall);
+  bool isInstalled = NULL != m_localAddon.get();
+  m_addonEnabled = m_localAddon && !CServiceBroker::GetAddonMgr().IsAddonDisabled(m_localAddon->ID());
+  bool canDisable = isInstalled && CServiceBroker::GetAddonMgr().CanAddonBeDisabled(m_localAddon->ID());
+  bool canInstall = !isInstalled && m_item->GetAddonInfo()->Broken().empty();
+  bool canUninstall = m_localAddon && CServiceBroker::GetAddonMgr().CanUninstall(m_localAddon);
+
+  CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_INSTALL, canInstall || canUninstall);
   SET_CONTROL_LABEL(CONTROL_BTN_INSTALL, isInstalled ? 24037 : 24038);
 
-  CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_ENABLE, canDisable);
-  SET_CONTROL_LABEL(CONTROL_BTN_ENABLE, m_addonEnabled ? 24021 : 24022);
+  if (m_addonEnabled)
+  {
+    SET_CONTROL_LABEL(CONTROL_BTN_ENABLE, 24021);
+    CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_ENABLE, canDisable);
+  }
+  else
+  {
+    SET_CONTROL_LABEL(CONTROL_BTN_ENABLE, 24022);
+    CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_ENABLE, isInstalled);
+  }
 
   CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_UPDATE, isInstalled);
 
-  bool autoUpdatesOn = CSettings::GetInstance().GetInt(CSettings::SETTING_ADDONS_AUTOUPDATES) == AUTO_UPDATES_ON;
+  bool autoUpdatesOn = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_ADDONS_AUTOUPDATES) == AUTO_UPDATES_ON;
   CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_AUTOUPDATE, isInstalled && autoUpdatesOn);
   SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_AUTOUPDATE, isInstalled && autoUpdatesOn &&
-      !CAddonMgr::GetInstance().IsBlacklisted(m_localAddon->ID()));
+      !CServiceBroker::GetAddonMgr().IsBlacklisted(m_localAddon->ID()));
   SET_CONTROL_LABEL(CONTROL_BTN_AUTOUPDATE, 21340);
 
   CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_SELECT, m_addonEnabled && (CanOpen() ||
@@ -202,28 +204,69 @@ void CGUIDialogAddonInfo::UpdateControls()
   SET_CONTROL_LABEL(CONTROL_BTN_SELECT, CanUse() ? 21480 : (CanOpen() ? 21478 : 21479));
 
   CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_SETTINGS, isInstalled && m_localAddon->HasSettings());
-  CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_CHANGELOG, !isRepo);
+
+  ADDONDEPS deps = CServiceBroker::GetAddonMgr().GetDepsRecursive(m_item->GetAddonInfo()->ID());
+  CONTROL_ENABLE_ON_CONDITION(CONTROL_BTN_DEPENDENCIES, !deps.empty());
+
+  CFileItemList items;
+  for (const auto& screenshot : m_item->GetAddonInfo()->Screenshots())
+  {
+    auto item = std::make_shared<CFileItem>("");
+    item->SetArt("thumb", screenshot);
+    items.Add(std::move(item));
+  }
+  CGUIMessage msg(GUI_MSG_LABEL_BIND, GetID(), CONTROL_LIST_SCREENSHOTS, 0, 0, &items);
+  OnMessage(msg);
 }
 
-static const std::string LOCAL_CACHE = "special_local_cache";
+static const std::string LOCAL_CACHE = "\\0_local_cache"; // \0 to give it the lowest priority when sorting
 
-static bool CompareVersion(const std::pair<AddonVersion, std::string>& lhs, const std::pair<AddonVersion, std::string>& rhs)
+
+int CGUIDialogAddonInfo::AskForVersion(std::vector<std::pair<AddonVersion, std::string>>& versions)
 {
-  return lhs.first > rhs.first;
-};
+  auto dialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
+  dialog->Reset();
+  dialog->SetHeading(CVariant{21338});
+  dialog->SetUseDetails(true);
+
+  std::sort(versions.begin(), versions.end(), std::greater<std::pair<AddonVersion, std::string>>());
+
+  for (const auto& versionInfo : versions)
+  {
+    CFileItem item(StringUtils::Format(g_localizeStrings.Get(21339).c_str(), versionInfo.first.asString().c_str()));
+    if (m_localAddon && m_localAddon->Version() == versionInfo.first
+        && m_item->GetAddonInfo()->Origin() == versionInfo.second)
+      item.Select(true);
+
+    AddonPtr repo;
+    if (versionInfo.second == LOCAL_CACHE)
+    {
+      item.SetLabel2(g_localizeStrings.Get(24095));
+      item.SetIconImage("DefaultAddonRepository.png");
+      dialog->Add(item);
+    }
+    else if (CServiceBroker::GetAddonMgr().GetAddon(versionInfo.second, repo, ADDON_REPOSITORY))
+    {
+      item.SetLabel2(repo->Name());
+      item.SetIconImage(repo->Icon());
+      dialog->Add(item);
+    }
+  }
+
+  dialog->Open();
+  return dialog->IsConfirmed() ? dialog->GetSelectedItem() : -1;
+}
 
 void CGUIDialogAddonInfo::OnUpdate()
 {
   if (!m_localAddon)
     return;
 
-  CAddonDatabase database;
-  if (!database.Open())
-    return;
-
   std::vector<std::pair<AddonVersion, std::string>> versions;
-  if (!database.GetAvailableVersions(m_localAddon->ID(), versions))
-    return;
+
+  CAddonDatabase database;
+  database.Open();
+  database.GetAvailableVersions(m_localAddon->ID(), versions);
 
   CFileItemList items;
   if (XFILE::CDirectory::GetDirectory("special://home/addons/packages/", items, ".zip", DIR_FLAG_NO_FILE_DIRS))
@@ -250,55 +293,24 @@ void CGUIDialogAddonInfo::OnUpdate()
   }
 
   if (versions.empty())
+    HELPERS::ShowOKDialogText(CVariant{21341}, CVariant{21342});
+  else
   {
-    CGUIDialogOK::ShowAndGetInput(CVariant{21341}, CVariant{21342});
-    return;
-  }
-
-  auto* dialog = static_cast<CGUIDialogSelect*>(g_windowManager.GetWindow(WINDOW_DIALOG_SELECT));
-  dialog->Reset();
-  dialog->SetHeading(CVariant{21338});
-  dialog->SetUseDetails(true);
-
-  std::stable_sort(versions.begin(), versions.end(), CompareVersion);
-
-  for (const auto& versionInfo : versions)
-  {
-    CFileItem item(StringUtils::Format(g_localizeStrings.Get(21339).c_str(), versionInfo.first.asString().c_str()));
-    if (versionInfo.first == m_localAddon->Version())
-      item.Select(true);
-
-    AddonPtr repo;
-    if (versionInfo.second == LOCAL_CACHE)
+    int i = AskForVersion(versions);
+    if (i != -1)
     {
-      item.SetProperty("Addon.Summary", g_localizeStrings.Get(24095));
-      item.SetIconImage("DefaultAddonRepository.png");
-      dialog->Add(item);
+      Close();
+      //turn auto updating off if downgrading
+      if (m_localAddon->Version() > versions[i].first)
+        CServiceBroker::GetAddonMgr().AddToUpdateBlacklist(m_localAddon->ID());
+
+      if (versions[i].second == LOCAL_CACHE)
+        CAddonInstaller::GetInstance().InstallFromZip(StringUtils::Format(
+            "special://home/addons/packages/%s-%s.zip", m_localAddon->ID().c_str(),
+            versions[i].first.asString().c_str()));
+      else
+        CAddonInstaller::GetInstance().Install(m_localAddon->ID(), versions[i].first, versions[i].second);
     }
-    else if (CAddonMgr::GetInstance().GetAddon(versionInfo.second, repo, ADDON_REPOSITORY))
-    {
-      item.SetProperty("Addon.Summary", repo->Name());
-      item.SetIconImage(repo->Icon());
-      dialog->Add(item);
-    }
-  }
-
-  dialog->Open();
-  if (dialog->IsConfirmed())
-  {
-    Close();
-
-    auto selected = versions.at(dialog->GetSelectedItem());
-
-    //turn auto updating off if downgrading
-    if (selected.first < m_localAddon->Version())
-      CAddonMgr::GetInstance().AddToUpdateBlacklist(m_localAddon->ID());
-
-    if (selected.second == LOCAL_CACHE)
-      CAddonInstaller::GetInstance().InstallFromZip(StringUtils::Format("special://home/addons/packages/%s-%s.zip",
-          m_localAddon->ID().c_str(), selected.first.asString().c_str()));
-    else
-      CAddonInstaller::GetInstance().Install(m_addon->ID(), selected.first, selected.second);
   }
 }
 
@@ -309,9 +321,9 @@ void CGUIDialogAddonInfo::OnToggleAutoUpdates()
   {
     bool selected = msg.GetParam1() == 1;
     if (selected)
-      CAddonMgr::GetInstance().RemoveFromUpdateBlacklist(m_localAddon->ID());
+      CServiceBroker::GetAddonMgr().RemoveFromUpdateBlacklist(m_localAddon->ID());
     else
-      CAddonMgr::GetInstance().AddToUpdateBlacklist(m_localAddon->ID());
+      CServiceBroker::GetAddonMgr().AddToUpdateBlacklist(m_localAddon->ID());
   }
 }
 
@@ -320,11 +332,29 @@ void CGUIDialogAddonInfo::OnInstall()
   if (!g_passwordManager.CheckMenuLock(WINDOW_ADDON_BROWSER))
     return;
 
-  if (!m_addon)
+  if (m_localAddon || !m_item->HasAddonInfo())
     return;
 
-  CAddonInstaller::GetInstance().InstallOrUpdate(m_addon->ID());
-  Close();
+  std::string addonId = m_item->GetAddonInfo()->ID();
+  std::vector<std::pair<AddonVersion, std::string>> versions;
+
+  CAddonDatabase database;
+  if (!database.Open() || !database.GetAvailableVersions(addonId, versions) || versions.empty())
+  {
+    CLog::Log(LOGERROR, "ADDON: no available versions of %s", addonId.c_str());
+    return;
+  }
+
+  int i = versions.size() == 1 ? 0 : AskForVersion(versions);
+  if (i != -1)
+  {
+    Close();
+    ADDONDEPS deps = CServiceBroker::GetAddonMgr().GetDepsRecursive(m_item->GetAddonInfo()->ID());
+    if (!deps.empty() && !ShowDependencyList(deps, false))
+      return;
+
+    CAddonInstaller::GetInstance().Install(addonId, versions[i].first, versions[i].second);
+  }
 }
 
 void CGUIDialogAddonInfo::OnSelect()
@@ -337,7 +367,7 @@ void CGUIDialogAddonInfo::OnSelect()
   if (CanOpen() || CanRun())
     CBuiltins::GetInstance().Execute("RunAddon(" + m_localAddon->ID() + ")");
   else if (CanUse())
-    CAddonMgr::GetInstance().SetDefault(m_localAddon->Type(), m_localAddon->ID());
+    CAddonSystemSettings::GetInstance().SetActive(m_localAddon->Type(), m_localAddon->ID());
 }
 
 bool CGUIDialogAddonInfo::CanOpen() const
@@ -347,7 +377,16 @@ bool CGUIDialogAddonInfo::CanOpen() const
 
 bool CGUIDialogAddonInfo::CanRun() const
 {
-  return m_localAddon && m_localAddon->Type() == ADDON_SCRIPT;
+  if (m_localAddon)
+  {
+    if (m_localAddon->Type() == ADDON_SCRIPT)
+      return true;
+
+    if (GAME::CGameUtils::IsStandaloneGame(m_localAddon))
+      return true;
+  }
+
+  return false;
 }
 
 bool CGUIDialogAddonInfo::CanUse() const
@@ -368,7 +407,7 @@ bool CGUIDialogAddonInfo::PromptIfDependency(int heading, int line2)
 
   VECADDONS addons;
   std::vector<std::string> deps;
-  CAddonMgr::GetInstance().GetAddons(addons);
+  CServiceBroker::GetAddonMgr().GetAddons(addons);
   for (VECADDONS::const_iterator it  = addons.begin();
        it != addons.end();++it)
   {
@@ -381,7 +420,7 @@ bool CGUIDialogAddonInfo::PromptIfDependency(int heading, int line2)
   {
     std::string line0 = StringUtils::Format(g_localizeStrings.Get(24046).c_str(), m_localAddon->Name().c_str());
     std::string line1 = StringUtils::Join(deps, ", ");
-    CGUIDialogOK::ShowAndGetInput(CVariant{heading}, CVariant{std::move(line0)}, CVariant{std::move(line1)}, CVariant{line2});
+    HELPERS::ShowOKDialogLines(CVariant{heading}, CVariant{std::move(line0)}, CVariant{std::move(line1)}, CVariant{line2});
     return true;
   }
   return false;
@@ -403,7 +442,11 @@ void CGUIDialogAddonInfo::OnUninstall()
   if (!CGUIDialogYesNo::ShowAndGetInput(CVariant{24037}, CVariant{750}))
     return;
 
-  CJobManager::GetInstance().AddJob(new CAddonUnInstallJob(m_localAddon),
+  bool removeData = false;
+  if (CDirectory::Exists("special://profile/addon_data/"+m_localAddon->ID()))
+    removeData = CGUIDialogYesNo::ShowAndGetInput(CVariant{24037}, CVariant{39014});
+
+  CJobManager::GetInstance().AddJob(new CAddonUnInstallJob(m_localAddon, removeData),
                                     &CAddonInstaller::GetInstance());
   Close();
 }
@@ -421,55 +464,97 @@ void CGUIDialogAddonInfo::OnEnableDisable()
     if (PromptIfDependency(24075, 24091))
       return; //required. can't disable
 
-    CAddonMgr::GetInstance().DisableAddon(m_localAddon->ID());
+    CServiceBroker::GetAddonMgr().DisableAddon(m_localAddon->ID());
   }
   else
-    CAddonMgr::GetInstance().EnableAddon(m_localAddon->ID());
+    CServiceBroker::GetAddonMgr().EnableAddon(m_localAddon->ID());
 
   UpdateControls();
-  g_windowManager.SendMessage(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_UPDATE);
 }
 
 void CGUIDialogAddonInfo::OnSettings()
 {
-  CGUIDialogAddonSettings::ShowAndGetInput(m_localAddon);
+  CGUIDialogAddonSettings::ShowForAddon(m_localAddon);
 }
 
-void CGUIDialogAddonInfo::OnChangeLog()
+bool CGUIDialogAddonInfo::ShowDependencyList(const ADDONDEPS& deps, bool reactivate)
 {
-  CGUIDialogTextViewer* pDlgInfo = (CGUIDialogTextViewer*)g_windowManager.GetWindow(WINDOW_DIALOG_TEXT_VIEWER);
-  std::string name;
-  if (m_addon)
-    name = m_addon->Name();
-  else if (m_localAddon)
-    name = m_localAddon->Name();
-  pDlgInfo->SetHeading(g_localizeStrings.Get(24054)+" - "+name);
-  if (m_item->GetProperty("Addon.Changelog").empty())
+  auto pDialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
+  CFileItemList items;
+  for (auto& it : deps)
   {
-    pDlgInfo->SetText(g_localizeStrings.Get(13413));
-    CFileItemList items;
-    if (m_localAddon && !m_item->GetProperty("Addon.HasUpdate").asBoolean())
+    AddonPtr dep_addon, local_addon;
+    CServiceBroker::GetAddonMgr().FindInstallableById(it.first, dep_addon);
+    CServiceBroker::GetAddonMgr().GetAddon(it.first, local_addon);
+    if (dep_addon)
     {
-      items.Add(CFileItemPtr(new CFileItem(m_localAddon->ChangeLog(),false)));
+      CFileItemPtr item(new CFileItem(dep_addon->Name()));
+      std::stringstream str;
+      str << it.first << " " << it.second.first.asString();
+      if ((it.second.second && !local_addon) || (!it.second.second && local_addon))
+        str << " " << StringUtils::Format(g_localizeStrings.Get(39022).c_str(),
+                                          local_addon ? g_localizeStrings.Get(39019).c_str()
+                                                      : g_localizeStrings.Get(39018).c_str());
+      else if (it.second.second && local_addon)
+        str << " " << StringUtils::Format(g_localizeStrings.Get(39023).c_str(),
+                                          g_localizeStrings.Get(39019).c_str(),
+                                          g_localizeStrings.Get(39018).c_str());
+
+      item->SetLabel2(str.str());
+      item->SetIconImage(dep_addon->Icon());
+      item->SetProperty("addon_id", it.first);
+      items.Add(item);
     }
     else
-      items.Add(CFileItemPtr(new CFileItem(m_addon->ChangeLog(),false)));
-    items[0]->Select(true);
-    m_jobid = CJobManager::GetInstance().AddJob(
-      new CFileOperationJob(CFileOperationJob::ActionCopy,items,
-                            "special://temp/"),this);
+    {
+      CFileItemPtr item(new CFileItem(it.first));
+      item->SetLabel2(g_localizeStrings.Get(161));
+      items.Add(item);
+    }
   }
-  else
-    pDlgInfo->SetText(m_item->GetProperty("Addon.Changelog").asString());
 
-  m_changelog = true;
-  pDlgInfo->Open();
-  m_changelog = false;
+  CFileItemPtr backup_item = GetCurrentListItem();
+  while (true)
+  {
+    pDialog->Reset();
+    pDialog->SetHeading(reactivate ? 39024 : 39020);
+    pDialog->SetUseDetails(true);
+    for (auto& it : items)
+      pDialog->Add(*it);
+    pDialog->EnableButton(!reactivate, 186);
+    pDialog->Open();
+
+    if (pDialog->IsButtonPressed())
+      return true;
+
+    if (pDialog->IsConfirmed())
+    {
+
+      const CFileItemPtr& item = pDialog->GetSelectedFileItem();
+      std::string addon_id = item->GetProperty("addon_id").asString();
+      AddonPtr dep_addon;
+      if (CServiceBroker::GetAddonMgr().FindInstallableById(addon_id, dep_addon))
+      {
+        Close();
+        ShowForItem(CFileItemPtr(new CFileItem(dep_addon)));
+      }
+    }
+    else
+      break;
+  }
+  SetItem(backup_item);
+  if (reactivate)
+    Open();
+
+  return false;
 }
 
 bool CGUIDialogAddonInfo::ShowForItem(const CFileItemPtr& item)
 {
-  CGUIDialogAddonInfo* dialog = (CGUIDialogAddonInfo*)g_windowManager.GetWindow(WINDOW_DIALOG_ADDON_INFO);
+  if (!item)
+    return false;
+
+  CGUIDialogAddonInfo* dialog = g_windowManager.GetWindow<CGUIDialogAddonInfo>(WINDOW_DIALOG_ADDON_INFO);
   if (!dialog)
     return false;
   if (!dialog->SetItem(item))
@@ -481,43 +566,11 @@ bool CGUIDialogAddonInfo::ShowForItem(const CFileItemPtr& item)
 
 bool CGUIDialogAddonInfo::SetItem(const CFileItemPtr& item)
 {
-  *m_item = *item;
+  if (!item || !item->HasAddonInfo())
+    return false;
+
+  m_item = std::make_shared<CFileItem>(*item);
   m_localAddon.reset();
-  m_addon.reset();
-
-  CAddonMgr::GetInstance().GetAddon(item->GetProperty("Addon.ID").asString(), m_localAddon, ADDON_UNKNOWN, false);
-
-  CAddonDatabase database;
-  database.Open();
-  database.GetAddon(item->GetProperty("Addon.ID").asString(), m_addon);
+  CServiceBroker::GetAddonMgr().GetAddon(item->GetAddonInfo()->ID(), m_localAddon, ADDON_UNKNOWN, false);
   return true;
-}
-
-void CGUIDialogAddonInfo::OnJobComplete(unsigned int jobID, bool success,
-                                        CJob* job)
-{
-  if (!m_changelog)
-    return;
-
-  CGUIDialogTextViewer* pDlgInfo = (CGUIDialogTextViewer*)g_windowManager.GetWindow(WINDOW_DIALOG_TEXT_VIEWER);
-
-  m_jobid = 0;
-  if (!success)
-  {
-    pDlgInfo->SetText(g_localizeStrings.Get(195));
-  }
-  else
-  {
-    CFile file;
-    XFILE::auto_buffer buf;
-    if (file.LoadFile("special://temp/" +
-      URIUtils::GetFileName(((CFileOperationJob*)job)->GetItems()[0]->GetPath()), buf) > 0)
-    {
-      std::string str(buf.get(), buf.length());
-      m_item->SetProperty("Addon.Changelog", str);
-      pDlgInfo->SetText(str);
-    }
-  }
-  CGUIMessage msg(GUI_MSG_NOTIFY_ALL, WINDOW_DIALOG_TEXT_VIEWER, 0, GUI_MSG_UPDATE);
-  g_windowManager.SendThreadMessage(msg);
 }

@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +20,10 @@
  *
  */
 
+#include <memory>
 #include <string>
+#include <vector>
+
 #include "FileItem.h"
 
 class CDVDInputStream;
@@ -29,5 +32,6 @@ class IVideoPlayer;
 class CDVDFactoryInputStream
 {
 public:
-  static CDVDInputStream* CreateInputStream(IVideoPlayer* pPlayer, CFileItem fileitem);
+  static std::shared_ptr<CDVDInputStream> CreateInputStream(IVideoPlayer* pPlayer, const CFileItem &fileitem, bool scanforextaudio = false);
+  static std::shared_ptr<CDVDInputStream> CreateInputStream(IVideoPlayer* pPlayer, const CFileItem &fileitem, const std::vector<std::string>& filenames);
 };

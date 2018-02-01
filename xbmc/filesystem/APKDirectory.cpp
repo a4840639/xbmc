@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -96,7 +96,7 @@ bool CAPKDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 
 bool CAPKDirectory::ContainsFiles(const CURL& url)
 {
-  // TODO: why might we need this ?
+  //! @todo why might we need this ?
   return false;
 }
 

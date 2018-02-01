@@ -3,7 +3,7 @@ DEPS= ../../Makefile.include Makefile
 
 # lib name, version
 LIBNAME=gmp
-VERSION=5.1.2
+VERSION=6.1.2
 SOURCE=$(LIBNAME)-$(VERSION)
 ARCHIVE=$(SOURCE).tar.bz2
 
@@ -22,6 +22,9 @@ ifeq ($(OS),ios)
 CONFIGURE_FLAGS=CC_FOR_BUILD=llvm-gcc CPP_FOR_BUILD="llvm-gcc -E" --disable-assembly
 endif
 ifeq ($(OS),osx)
+CONFIGURE_FLAGS=--with-pic
+endif
+ifeq ($(OS), android)
 CONFIGURE_FLAGS=--with-pic
 endif
 

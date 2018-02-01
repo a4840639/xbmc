@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -117,9 +117,7 @@ CGUITextureBase::CGUITextureBase(const CGUITextureBase &right) :
   m_invalid = true;
 }
 
-CGUITextureBase::~CGUITextureBase(void)
-{
-}
+CGUITextureBase::~CGUITextureBase(void) = default;
 
 bool CGUITextureBase::AllocateOnDemand()
 {
@@ -150,6 +148,9 @@ bool CGUITextureBase::Process(unsigned int currentTime)
 
   if (m_invalid)
     changed |= CalculateSize();
+
+  if (m_isAllocated)
+    changed |= !ReadyToRender();
 
   return changed;
 }
@@ -198,9 +199,9 @@ void CGUITextureBase::Render()
     v3 *= m_texCoordsScaleV;
   }
 
-  // TODO: The diffuse coloring applies to all vertices, which will
-  //       look weird for stuff with borders, as will the -ve height/width
-  //       for flipping
+  //! @todo The diffuse coloring applies to all vertices, which will
+  //!      look weird for stuff with borders, as will the -ve height/width
+  //!       for flipping
 
   // left segment (0,0,u1,v3)
   if (m_info.border.x1)
@@ -274,8 +275,10 @@ void CGUITextureBase::Render(float left, float top, float right, float bottom, f
   y[3] = ROUND_TO_PIXEL(g_graphicsContext.ScaleFinalYCoord(vertex.x1, vertex.y2));
   z[3] = ROUND_TO_PIXEL(g_graphicsContext.ScaleFinalZCoord(vertex.x1, vertex.y2));
 
-  if (y[2] == y[0]) y[2] += 1.0f; if (x[2] == x[0]) x[2] += 1.0f;
-  if (y[3] == y[1]) y[3] += 1.0f; if (x[3] == x[1]) x[3] += 1.0f;
+  if (y[2] == y[0]) y[2] += 1.0f;
+  if (x[2] == x[0]) x[2] += 1.0f;
+  if (y[3] == y[1]) y[3] += 1.0f;
+  if (x[3] == x[1]) x[3] += 1.0f;
 
   Draw(x, y, z, texture, diffuse, orientation);
 }
@@ -432,7 +435,7 @@ bool CGUITextureBase::CalculateSize()
       m_diffuseScaleV = m_diffuseV;
       m_diffuseOffset = CPoint(0,0);
     }
-    else // stretch'ing diffuse
+    else // stretching diffuse
     { // scale diffuse up or down to match output rect size, rather than image size
       //(m_fX, mfY) -> (m_fX + m_fNW, m_fY + m_fNH)
       //(0,0) -> (m_fU*m_diffuseScaleU, m_fV*m_diffuseScaleV)

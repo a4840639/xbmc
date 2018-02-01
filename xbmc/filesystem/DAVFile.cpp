@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -38,9 +38,7 @@ CDAVFile::CDAVFile(void)
 {
 }
 
-CDAVFile::~CDAVFile(void)
-{
-}
+CDAVFile::~CDAVFile(void) = default;
 
 bool CDAVFile::Execute(const CURL& url)
 {
@@ -51,7 +49,7 @@ bool CDAVFile::Execute(const CURL& url)
 
   assert(!(!m_state->m_easyHandle ^ !m_state->m_multiHandle));
   if( m_state->m_easyHandle == NULL )
-    g_curlInterface.easy_aquire(url2.GetProtocol().c_str(),
+    g_curlInterface.easy_acquire(url2.GetProtocol().c_str(),
                                 url2.GetHostName().c_str(),
                                 &m_state->m_easyHandle,
                                 &m_state->m_multiHandle);

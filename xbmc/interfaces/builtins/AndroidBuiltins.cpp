@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,6 +36,30 @@ static int LaunchAndroidActivity(const std::vector<std::string>& params)
 
   return 0;
 }
+
+// Note: For new Texts with comma add a "\" before!!! Is used for table text.
+//
+/// \page page_List_of_built_in_functions
+/// \section built_in_functions_2 Android built-in's
+///
+/// -----------------------------------------------------------------------------
+///
+/// \table_start
+///   \table_h2_l{
+///     Function,
+///     Description }
+///   \table_row2_l{
+///     <b>`StartAndroidActivity(package\,[intent\,dataType\,dataURI])`</b>
+///     ,
+///     Launch an Android native app with the given package name. Optional parms
+///     (in order): intent\, dataType\, dataURI.
+///     @param[in] package
+///     @param[in] intent (optional)
+///     @param[in] datatype (optional)
+///     @param[in] dataURI (optional)
+///   }
+/// \table_end
+///
 
 CBuiltins::CommandMap CAndroidBuiltins::GetOperations() const
 {

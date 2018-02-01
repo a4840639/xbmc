@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,15 +18,18 @@
  *  <http://www.gnu.org/licenses/>.
  *
  */
+
+#include <string>
+#include <vector>
+
 #include "storage/IStorageProvider.h"
-#ifdef HAS_DBUS
 #include "DBusUtil.h"
 
 class CUDiskDevice
 {
 public:
   CUDiskDevice(const char *DeviceKitUDI);
-  ~CUDiskDevice() { }
+  ~CUDiskDevice() = default;
 
   void Update();
 
@@ -48,19 +51,19 @@ class CUDisksProvider : public IStorageProvider
 {
 public:
   CUDisksProvider();
-  virtual ~CUDisksProvider();
+  ~CUDisksProvider() override;
 
-  virtual void Initialize();
-  virtual void Stop() { }
+  void Initialize() override;
+  void Stop() override { }
 
-  virtual void GetLocalDrives(VECSOURCES &localDrives) { GetDisks(localDrives, false); }
-  virtual void GetRemovableDrives(VECSOURCES &removableDrives) { GetDisks(removableDrives, true); }
+  void GetLocalDrives(VECSOURCES &localDrives) override { GetDisks(localDrives, false); }
+  void GetRemovableDrives(VECSOURCES &removableDrives) override { GetDisks(removableDrives, true); }
 
-  virtual bool Eject(const std::string& mountpath);
+  bool Eject(const std::string& mountpath) override;
 
-  virtual std::vector<std::string> GetDiskUsage();
+  std::vector<std::string> GetDiskUsage() override;
 
-  virtual bool PumpDriveChangeEvents(IStorageEventsCallback *callback);
+  bool PumpDriveChangeEvents(IStorageEventsCallback *callback) override;
 
   static bool HasUDisks();
 private:
@@ -79,7 +82,5 @@ private:
 
   DeviceMap m_AvailableDevices;
 
-  DBusConnection *m_connection;
-  DBusError m_error;
+  CDBusConnection m_connection;
 };
-#endif

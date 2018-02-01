@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -73,23 +73,24 @@ class CSMBFile : public IFile
 public:
   CSMBFile();
   int OpenFile(const CURL &url, std::string& strAuth);
-  virtual ~CSMBFile();
-  virtual void Close();
-  virtual int64_t Seek(int64_t iFilePosition, int iWhence = SEEK_SET);
-  virtual ssize_t Read(void* lpBuf, size_t uiBufSize);
-  virtual bool Open(const CURL& url);
-  virtual bool Exists(const CURL& url);
-  virtual int Stat(const CURL& url, struct __stat64* buffer);
-  virtual int Stat(struct __stat64* buffer);
-  virtual int Truncate(int64_t size);
-  virtual int64_t GetLength();
-  virtual int64_t GetPosition();
-  virtual ssize_t Write(const void* lpBuf, size_t uiBufSize);
+  ~CSMBFile() override;
+  void Close() override;
+  int64_t Seek(int64_t iFilePosition, int iWhence = SEEK_SET) override;
+  ssize_t Read(void* lpBuf, size_t uiBufSize) override;
+  bool Open(const CURL& url) override;
+  bool Exists(const CURL& url) override;
+  int Stat(const CURL& url, struct __stat64* buffer) override;
+  int Stat(struct __stat64* buffer) override;
+  int Truncate(int64_t size) override;
+  int64_t GetLength() override;
+  int64_t GetPosition() override;
+  ssize_t Write(const void* lpBuf, size_t uiBufSize) override;
 
-  virtual bool OpenForWrite(const CURL& url, bool bOverWrite = false);
-  virtual bool Delete(const CURL& url);
-  virtual bool Rename(const CURL& url, const CURL& urlnew);
-  virtual int  GetChunkSize() {return 1;}
+  bool OpenForWrite(const CURL& url, bool bOverWrite = false) override;
+  bool Delete(const CURL& url) override;
+  bool Rename(const CURL& url, const CURL& urlnew) override;
+  int GetChunkSize() override { return 2048*1024; }
+  int IoControl(EIoControl request, void* param) override;
 
 protected:
   CURL m_url;
@@ -97,6 +98,6 @@ protected:
   std::string GetAuthenticatedPath(const CURL &url);
   int64_t m_fileSize;
   int m_fd;
+  bool m_allowRetry;
 };
 }
-

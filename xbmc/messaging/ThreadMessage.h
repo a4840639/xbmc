@@ -1,7 +1,7 @@
 #pragma once
 /*
 *      Copyright (C) 2005-2015 Team XBMC
-*      http://xbmc.org
+*      http://kodi.tv
 *
 *  This Program is free software; you can redistribute it and/or modify
 *  it under the terms of the GNU General Public License as published by
@@ -125,10 +125,15 @@ public:
   std::string strParam;
   std::vector<std::string> params;
 
-  void SetResult(int res)
+  /*!
+   * \brief set the message return value, will only be returned when
+   *        the message is sent using SendMsg
+   * \param [in] res the return value or a result status code that is returned to the caller
+   */
+  void SetResult(int res) const
   {
     //On posted messages result will be zero, since they can't
-    //retreive the response we silently ignore this to let message
+    //retrieve the response we silently ignore this to let message
     //handlers not have to worry about it
     if (result)
       *result = res;

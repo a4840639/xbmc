@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,32 +26,34 @@
 #include "ContextMenuManager.h"
 #include "FileItem.h"
 #include "GUIPassword.h"
+#include "ServiceBroker.h"
 #include "addons/AddonManager.h"
 #include "addons/Skin.h"
-#include "cores/AudioEngine/DSPAddons/ActiveAEDSP.h"
+#include "cores/AudioEngine/Engines/ActiveAE/AudioDSPAddons/ActiveAEDSP.h"
 #include "dialogs/GUIDialogContextMenu.h"
-#include "dialogs/GUIDialogOK.h"
+#include "favourites/FavouritesService.h"
 #include "guilib/GUIMessage.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "guilib/StereoscopicsManager.h"
 #include "input/Key.h"
 #include "interfaces/builtins/Builtins.h"
-#ifdef HAS_JSONRPC
 #include "interfaces/json-rpc/JSONRPC.h"
-#endif
 #include "messaging/ApplicationMessenger.h"
+#include "messaging/helpers/DialogOKHelper.h"
 #include "network/Network.h"
+#include "PlayListPlayer.h"
 #include "profiles/Profile.h"
 #include "profiles/ProfilesManager.h"
 #include "profiles/dialogs/GUIDialogProfileSettings.h"
+#include "pvr/PVRGUIActions.h"
 #include "pvr/PVRManager.h"
 #include "settings/Settings.h"
 #include "utils/log.h"
 #include "utils/StringUtils.h"
-#include "utils/Weather.h"
 #include "utils/Variant.h"
 #include "view/ViewState.h"
+#include "weather/WeatherManager.h"
 
 using namespace KODI::MESSAGING;
 
@@ -118,7 +120,7 @@ bool CGUIWindowLoginScreen::OnMessage(CGUIMessage& message)
           else
           {
             if (!bCanceled && iItem != 0)
-              CGUIDialogOK::ShowAndGetInput(CVariant{20068}, CVariant{20117});
+              HELPERS::ShowOKDialogText(CVariant{20068}, CVariant{20117});
           }
         }
       }
@@ -149,7 +151,7 @@ bool CGUIWindowLoginScreen::OnAction(const CAction &action)
     std::string actionName = action.GetName();
     StringUtils::ToLower(actionName);
     if ((actionName.find("shutdown") != std::string::npos) &&
-        PVR::g_PVRManager.CanSystemPowerdown())
+        CServiceBroker::GetPVRManager().GUIActions()->CanSystemPowerdown())
       CBuiltins::GetInstance().Execute(action.GetName());
     return true;
   }
@@ -164,7 +166,7 @@ bool CGUIWindowLoginScreen::OnBack(int actionID)
 
 void CGUIWindowLoginScreen::FrameMove()
 {
-  if (GetFocusedControlID() == CONTROL_BIG_LIST && g_windowManager.GetTopMostModalDialogID() == WINDOW_INVALID)
+  if (GetFocusedControlID() == CONTROL_BIG_LIST && !g_windowManager.HasModalDialog())
     if (m_viewControl.HasControl(CONTROL_BIG_LIST))
       m_iSelectedItem = m_viewControl.GetSelectedItem();
   std::string strLabel = StringUtils::Format(g_localizeStrings.Get(20114).c_str(), m_iSelectedItem+1, CProfilesManager::GetInstance().GetNumberOfProfiles());
@@ -213,9 +215,9 @@ void CGUIWindowLoginScreen::Update()
       strLabel = StringUtils::Format(g_localizeStrings.Get(20112).c_str(), profile->getDate().c_str());
     item->SetLabel2(strLabel);
     item->SetArt("thumb", profile->getThumb());
-    if (profile->getThumb().empty() || profile->getThumb() == "-")
-      item->SetArt("thumb", "unknown-user.png");
-    item->SetLabelPreformated(true);
+    if (profile->getThumb().empty())
+      item->SetArt("thumb", "DefaultUser.png");
+    item->SetLabelPreformatted(true);
     m_vecItems->Add(item);
   }
   m_viewControl.SetItems(*m_vecItems);
@@ -237,13 +239,11 @@ bool CGUIWindowLoginScreen::OnPopupMenu(int iItem)
   if (iItem == 0 && g_passwordManager.iMasterLockRetriesLeft == 0)
     choices.Add(2, 12334);
 
-  CContextMenuManager::GetInstance().AddVisibleItems(pItem, choices);
-
   int choice = CGUIDialogContextMenu::ShowAndGetChoice(choices);
   if (choice == 2)
   {
     if (g_passwordManager.CheckLock(CProfilesManager::GetInstance().GetMasterProfile().getLockMode(),CProfilesManager::GetInstance().GetMasterProfile().getLockCode(),20075))
-      g_passwordManager.iMasterLockRetriesLeft = CSettings::GetInstance().GetInt(CSettings::SETTING_MASTERLOCK_MAXRETRIES);
+      g_passwordManager.iMasterLockRetriesLeft = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_MASTERLOCK_MAXRETRIES);
     else // be inconvenient
       CApplicationMessenger::GetInstance().PostMsg(TMSG_SHUTDOWN);
 
@@ -258,8 +258,6 @@ bool CGUIWindowLoginScreen::OnPopupMenu(int iItem)
   if (iItem < (int)CProfilesManager::GetInstance().GetNumberOfProfiles())
     m_vecItems->Get(iItem)->Select(bSelect);
 
-  if (choice >= CONTEXT_BUTTON_FIRST_ADDON)
-    return CContextMenuManager::GetInstance().OnClick(choice, pItem);
   return false;
 }
 
@@ -275,18 +273,16 @@ CFileItemPtr CGUIWindowLoginScreen::GetCurrentListItem(int offset)
 
 void CGUIWindowLoginScreen::LoadProfile(unsigned int profile)
 {
-  // stop service addons and give it some time before we start it again
-  ADDON::CAddonMgr::GetInstance().StopServices(true);
+  CServiceBroker::GetContextMenuManager().Deinit();
+
+  CServiceBroker::GetServiceAddons().Stop();
 
   // stop PVR related services
-  g_application.StopPVRManager();
-
-  // stop audio DSP services with a blocking message
-  CApplicationMessenger::GetInstance().SendMsg(TMSG_SETAUDIODSPSTATE, ACTIVE_AE_DSP_STATE_OFF);
+  CServiceBroker::GetPVRManager().Stop();
 
   if (profile != 0 || !CProfilesManager::GetInstance().IsMasterProfile())
   {
-    g_application.getNetwork().NetworkMessage(CNetwork::SERVICES_DOWN,1);
+    CServiceBroker::GetNetwork().NetworkMessage(CNetwork::SERVICES_DOWN, 1);
     CProfilesManager::GetInstance().LoadProfile(profile);
   }
   else
@@ -295,20 +291,20 @@ void CGUIWindowLoginScreen::LoadProfile(unsigned int profile)
     if (pWindow)
       pWindow->ResetControlStates();
   }
-  g_application.getNetwork().NetworkMessage(CNetwork::SERVICES_UP,1);
+  CServiceBroker::GetNetwork().NetworkMessage(CNetwork::SERVICES_UP, 1);
 
   CProfilesManager::GetInstance().UpdateCurrentProfileDate();
   CProfilesManager::GetInstance().Save();
 
   if (CProfilesManager::GetInstance().GetLastUsedProfileIndex() != profile)
   {
-    g_playlistPlayer.ClearPlaylist(PLAYLIST_VIDEO);
-    g_playlistPlayer.ClearPlaylist(PLAYLIST_MUSIC);
-    g_playlistPlayer.SetCurrentPlaylist(PLAYLIST_NONE);
+    CServiceBroker::GetPlaylistPlayer().ClearPlaylist(PLAYLIST_VIDEO);
+    CServiceBroker::GetPlaylistPlayer().ClearPlaylist(PLAYLIST_MUSIC);
+    CServiceBroker::GetPlaylistPlayer().SetCurrentPlaylist(PLAYLIST_NONE);
   }
 
   // reload the add-ons, or we will first load all add-ons from the master account without checking disabled status
-  ADDON::CAddonMgr::GetInstance().ReInit();
+  CServiceBroker::GetAddonMgr().ReInit();
 
   // let CApplication know that we are logging into a new profile
   g_application.SetLoggingIn(true);
@@ -319,17 +315,19 @@ void CGUIWindowLoginScreen::LoadProfile(unsigned int profile)
     return;
   }
 
-  g_weatherManager.Refresh();
+  CServiceBroker::GetWeatherManager().Refresh();
 
-#ifdef HAS_JSONRPC
   JSONRPC::CJSONRPC::Initialize();
-#endif
 
-  // start services which should run on login
-  ADDON::CAddonMgr::GetInstance().StartServices(false);
+  // Restart context menu manager
+  CServiceBroker::GetContextMenuManager().Init();
 
-  // start PVR related services
-  g_application.StartPVRManager();
+  // restart PVR services
+  CServiceBroker::GetPVRManager().Init();
+
+  CServiceBroker::GetFavouritesService().ReInit(CProfilesManager::GetInstance().GetProfileUserDataFolder());
+
+  CServiceBroker::GetServiceAddons().Start();
 
   int firstWindow = g_SkinInfo->GetFirstWindow();
   // the startup window is considered part of the initialization as it most likely switches to the final window
@@ -339,9 +337,6 @@ void CGUIWindowLoginScreen::LoadProfile(unsigned int profile)
 
   g_application.UpdateLibraries();
   CStereoscopicsManager::GetInstance().Initialize();
-
-  // start audio DSP related services with a blocking message
-  CApplicationMessenger::GetInstance().SendMsg(TMSG_SETAUDIODSPSTATE, ACTIVE_AE_DSP_STATE_ON, ACTIVE_AE_DSP_SYNC_ACTIVATE);
 
   // if the user interfaces has been fully initialized let everyone know
   if (uiInitializationFinished)

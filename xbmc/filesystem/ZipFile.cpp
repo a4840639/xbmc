@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,9 @@
 
 #include <sys/stat.h>
 
+#if defined (TARGET_WINDOWS)
+#pragma comment(lib, "zlib.lib")
+#endif
 #define ZIP_CACHE_LIMIT 4*1024*1024
 
 using namespace XFILE;

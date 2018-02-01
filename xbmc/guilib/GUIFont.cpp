@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -131,7 +131,7 @@ bool CGUIFont::UpdateScrollInfo(const vecText &text, CScrollInfo &scrollInfo)
   if (scrollInfo.waitTime)
   {
     scrollInfo.waitTime--;
-    return false;
+    return true;
   }
 
   if (text.empty())
@@ -153,6 +153,9 @@ bool CGUIFont::UpdateScrollInfo(const vecText &text, CScrollInfo &scrollInfo)
   assert(scrollInfo.m_totalWidth != 0);
   while (scrollInfo.pixelPos >= scrollInfo.m_totalWidth)
     scrollInfo.pixelPos -= scrollInfo.m_totalWidth;
+
+  if (scrollInfo.pixelPos < old.pixelPos)
+    ++scrollInfo.m_loopCount;
 
   if (scrollInfo.pixelPos != old.pixelPos)
     return true;

@@ -4,7 +4,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,9 +27,9 @@
 class IAudioCallback
 {
 public:
-  IAudioCallback() {};
-  virtual ~IAudioCallback() {};
+  IAudioCallback() = default;
+  virtual ~IAudioCallback() = default;
   virtual void OnInitialize(int iChannels, int iSamplesPerSec, int iBitsPerSample) = 0;
-  virtual void OnAudioData(const float* pAudioData, int iAudioDataLength) = 0;
+  virtual void OnAudioData(const float* pAudioData, unsigned int iAudioDataLength) = 0;
 };
 

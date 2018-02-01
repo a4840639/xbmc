@@ -1,6 +1,6 @@
  /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,7 +22,6 @@
 #include "WindowInterceptor.h"
 #include "guilib/GUIButtonControl.h"
 #include "guilib/GUIEditControl.h"
-#include "guilib/GUICheckMarkControl.h"
 #include "guilib/GUIRadioButtonControl.h"
 #include "guilib/GUIWindowManager.h"
 #include "Application.h"
@@ -50,7 +49,7 @@ namespace XBMCAddon
     {
       CCriticalSection* lock;
     public:
-      inline MaybeLock(CCriticalSection* p_lock) : lock(p_lock) { if (lock) lock->lock(); }
+      inline explicit MaybeLock(CCriticalSection* p_lock) : lock(p_lock) { if (lock) lock->lock(); }
       inline ~MaybeLock() { if (lock) lock->unlock(); }
     };
 
@@ -82,7 +81,7 @@ namespace XBMCAddon
       inline ProxyExistingWindowInterceptor(CGUIWindow* window) :
         cguiwindow(window) { XBMC_TRACE; }
 
-      virtual CGUIWindow* get();
+      CGUIWindow* get() override;
     };
 
     CGUIWindow* ProxyExistingWindowInterceptor::get() { XBMC_TRACE; return cguiwindow; }
@@ -144,8 +143,14 @@ namespace XBMCAddon
     {
       XBMC_TRACE;
 
-      // this is called from non-scripting-language callstacks. Don't use the delayed call guard.
-      CSingleLock lock(g_graphicsContext);
+      //! @todo rework locking
+      // Python GIL and g_graphicsContext are deadlock happy
+      // dispose is called from GUIWindowManager and in this case DelayGuard must not be used.
+      if (!g_application.IsCurrentThread())
+      {
+        SingleLockWithDelayGuard gslock(g_graphicsContext, languageHook);
+      }
+
       if (!isDisposed)
       {
         isDisposed = true;
@@ -169,13 +174,13 @@ namespace XBMCAddon
         }
         else
         {
-          // BUG:
-          // This is an existing window, so no resources are free'd.  Note that
-          // THIS WILL FAIL for any controls newly created by python - they will
-          // remain after the script ends.  Ideally this would be remedied by
-          // a flag in Control that specifies that it was python created - any python
-          // created controls could then be removed + free'd from the window.
-          // how this works with controlgroups though could be a bit tricky.
+          //! @bug
+          //! This is an existing window, so no resources are free'd.  Note that
+          //! THIS WILL FAIL for any controls newly created by python - they will
+          //! remain after the script ends.  Ideally this would be remedied by
+          //! a flag in Control that specifies that it was python created - any python
+          //! created controls could then be removed + free'd from the window.
+          //! how this works with controlgroups though could be a bit tricky.
         }
 
         // and free our list of controls
@@ -277,7 +282,7 @@ namespace XBMCAddon
 
       Control* pControl = NULL;
 
-      // TODO: Yuck! Should probably be done with a Factory pattern
+      //! @todo Yuck! Should probably be done with a Factory pattern
       switch(pGUIControl->GetControlType())
       {
       case CGUIControl::GUICONTROL_BUTTON:
@@ -293,18 +298,6 @@ namespace XBMCAddon
         if (li.font) ((ControlButton*)pControl)->strFont = li.font->GetFontName();
         ((ControlButton*)pControl)->align = li.align;
         break;
-      case CGUIControl::GUICONTROL_CHECKMARK:
-        pControl = new ControlCheckMark();
-
-        li = ((CGUICheckMarkControl *)pGUIControl)->GetLabelInfo();
-
-        // note: conversion to plain colors from infocolors.
-        ((ControlCheckMark*)pControl)->disabledColor = li.disabledColor;
-        //((ControlCheckMark*)pControl)->shadowColor = li.shadowColor;
-        ((ControlCheckMark*)pControl)->textColor  = li.textColor;
-        if (li.font) ((ControlCheckMark*)pControl)->strFont = li.font->GetFontName();
-        ((ControlCheckMark*)pControl)->align = li.align;
-        break;
       case CGUIControl::GUICONTROL_LABEL:
         pControl = new ControlLabel();
         break;
@@ -318,6 +311,7 @@ namespace XBMCAddon
         pControl = new ControlTextBox();
         break;
       case CGUIControl::GUICONTROL_IMAGE:
+      case CGUIControl::GUICONTROL_BORDEREDIMAGE:
         pControl = new ControlImage();
         break;
       case CGUIControl::GUICONTROL_PROGRESS:
@@ -325,7 +319,7 @@ namespace XBMCAddon
         break;
       case CGUIControl::GUICONTROL_SLIDER:
         pControl = new ControlSlider();
-        break;			
+        break;
       case CGUIControl::GUICONTAINER_LIST:
       case CGUIControl::GUICONTAINER_WRAPLIST:
       case CGUIControl::GUICONTAINER_FIXEDLIST:
@@ -366,7 +360,7 @@ namespace XBMCAddon
       }
 
       if (!pControl)
-        // throw an exeption
+        // throw an exception
         throw WindowException("Unknown control type for python");
 
       // we have a valid control here, fill in all the 'Control' data
@@ -600,13 +594,17 @@ namespace XBMCAddon
     long Window::getHeight()
     {
       XBMC_TRACE;
-      return g_graphicsContext.GetHeight();
+      SingleLockWithDelayGuard gslock(g_graphicsContext, languageHook);
+      RESOLUTION_INFO resInfo = ref(window)->GetCoordsRes();
+      return resInfo.iHeight;
     }
 
     long Window::getWidth()
     {
       XBMC_TRACE;
-      return g_graphicsContext.GetWidth();
+      SingleLockWithDelayGuard gslock(g_graphicsContext, languageHook);
+      RESOLUTION_INFO resInfo = ref(window)->GetCoordsRes();
+      return resInfo.iWidth;
     }
 
     long Window::getResolution()
@@ -673,7 +671,7 @@ namespace XBMCAddon
 
       {
         DelayedCallGuard dcguard(languageHook);
-        CApplicationMessenger::GetInstance().SendMsg(TMSG_GUI_ACTIVATE_WINDOW, iOldWindowId, 0);
+        CApplicationMessenger::GetInstance().SendMsg(TMSG_GUI_PREVIOUS_WINDOW, iOldWindowId, 0);
       }
 
       iOldWindowId = 0;
@@ -691,9 +689,9 @@ namespace XBMCAddon
 
         while (bModal && !g_application.m_bStop)
         {
-// TODO: garbear added this code to the pythin window.cpp class and
-//  commented in XBPyThread.cpp. I'm not sure how to handle this 
-//  in this native implementation.
+//! @todo garbear added this code to the python window.cpp class and
+//!  commented in XBPyThread.cpp. I'm not sure how to handle this 
+//! in this native implementation.
 //          // Check if XBPyThread::stop() raised a SystemExit exception
 //          if (PyThreadState_Get()->async_exc == PyExc_SystemExit)
 //          {
@@ -750,12 +748,12 @@ namespace XBMCAddon
       pControl->iControlLeft = pControl->iControlId;
       pControl->iControlRight = pControl->iControlId;
 
-      pControl->pGUIControl->SetAction(ACTION_MOVE_UP,    pControl->iControlUp);
-      pControl->pGUIControl->SetAction(ACTION_MOVE_DOWN,  pControl->iControlDown);
-      pControl->pGUIControl->SetAction(ACTION_MOVE_LEFT,  pControl->iControlLeft);
-      pControl->pGUIControl->SetAction(ACTION_MOVE_RIGHT, pControl->iControlRight);
+      pControl->pGUIControl->SetAction(ACTION_MOVE_UP,    CGUIAction(pControl->iControlUp));
+      pControl->pGUIControl->SetAction(ACTION_MOVE_DOWN,  CGUIAction(pControl->iControlDown));
+      pControl->pGUIControl->SetAction(ACTION_MOVE_LEFT,  CGUIAction(pControl->iControlLeft));
+      pControl->pGUIControl->SetAction(ACTION_MOVE_RIGHT, CGUIAction(pControl->iControlRight));
 
-      // add control to list and allocate recources for the control
+      // add control to list and allocate resources for the control
       vecControls.push_back(AddonClass::Ref<Control>(pControl));
       pControl->pGUIControl->AllocResources();
 

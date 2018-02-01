@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,13 +18,14 @@
  *
  */
 
+#include <math.h>
+
 #include "GUIDialogSeekBar.h"
 #include "Application.h"
 #include "GUIInfoManager.h"
-#include "utils/SeekHandler.h"
+#include "SeekHandler.h"
 
 #define POPUP_SEEK_PROGRESS     401
-#define POPUP_SEEK_LABEL        402
 
 CGUIDialogSeekBar::CGUIDialogSeekBar(void)
   : CGUIDialog(WINDOW_DIALOG_SEEK_BAR, "DialogSeekBar.xml", DialogModalityType::MODELESS)
@@ -32,9 +33,7 @@ CGUIDialogSeekBar::CGUIDialogSeekBar(void)
   m_loadType = LOAD_ON_GUI_INIT;    // the application class handles our resources
 }
 
-CGUIDialogSeekBar::~CGUIDialogSeekBar(void)
-{
-}
+CGUIDialogSeekBar::~CGUIDialogSeekBar(void) = default;
 
 bool CGUIDialogSeekBar::OnMessage(CGUIMessage& message)
 {
@@ -43,39 +42,30 @@ bool CGUIDialogSeekBar::OnMessage(CGUIMessage& message)
   case GUI_MSG_WINDOW_INIT:
   case GUI_MSG_WINDOW_DEINIT:
     return CGUIDialog::OnMessage(message);
-
-  case GUI_MSG_LABEL_SET:
-    if (message.GetSenderId() == GetID() && message.GetControlId() == POPUP_SEEK_LABEL)
-      return CGUIDialog::OnMessage(message);
-    break;
-
   case GUI_MSG_ITEM_SELECT:
     if (message.GetSenderId() == GetID() && message.GetControlId() == POPUP_SEEK_PROGRESS)
       return CGUIDialog::OnMessage(message);
     break;
+  case GUI_MSG_REFRESH_TIMER:
+    return CGUIDialog::OnMessage(message);
   }
   return false; // don't process anything other than what we need!
 }
 
 void CGUIDialogSeekBar::FrameMove()
 {
-  if (!g_application.m_pPlayer->HasPlayer())
+  if (!g_application.GetAppPlayer().HasPlayer())
   {
     Close(true);
     return;
   }
 
-  // update controls
-  if (!CSeekHandler::GetInstance().InProgress() && g_infoManager.GetTotalPlayTime())
-  { // position the bar at our current time
-    CONTROL_SELECT_ITEM(POPUP_SEEK_PROGRESS, (unsigned int)(static_cast<float>(g_infoManager.GetPlayTime()) / g_infoManager.GetTotalPlayTime() * 0.1f));
-    SET_CONTROL_LABEL(POPUP_SEEK_LABEL, g_infoManager.GetCurrentPlayTime());
-  }
-  else
-  {
-    CONTROL_SELECT_ITEM(POPUP_SEEK_PROGRESS, (unsigned int)g_infoManager.GetSeekPercent());
-    SET_CONTROL_LABEL(POPUP_SEEK_LABEL, g_infoManager.GetCurrentSeekTime());
-  }
+  unsigned int percent = g_application.GetAppPlayer().GetSeekHandler().InProgress()
+    ? lrintf(g_infoManager.GetSeekPercent())
+    : lrintf(g_application.GetPercentage());
+
+  if (percent != m_lastPercent)
+    CONTROL_SELECT_ITEM(POPUP_SEEK_PROGRESS, m_lastPercent = percent);
 
   CGUIDialog::FrameMove();
 }

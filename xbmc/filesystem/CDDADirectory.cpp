@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,8 +20,6 @@
 
 #include "system.h"
 
-#ifdef HAS_DVD_DRIVE
-
 #include "CDDADirectory.h"
 #include "music/MusicDatabase.h"
 #include "FileItem.h"
@@ -32,13 +30,9 @@
 using namespace XFILE;
 using namespace MEDIA_DETECT;
 
-CCDDADirectory::CCDDADirectory(void)
-{
-}
+CCDDADirectory::CCDDADirectory(void) = default;
 
-CCDDADirectory::~CCDDADirectory(void)
-{
-}
+CCDDADirectory::~CCDDADirectory(void) = default;
 
 
 bool CCDDADirectory::GetDirectory(const CURL& url, CFileItemList &items)
@@ -87,5 +81,3 @@ bool CCDDADirectory::GetDirectory(const CURL& url, CFileItemList &items)
   }
   return true;
 }
-
-#endif

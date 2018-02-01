@@ -26,6 +26,7 @@
 #include "threads/CriticalSection.h"
 #include "threads/SingleLock.h"
 
+#include <atomic>
 #include <map>
 #include <queue>
 #include <vector>
@@ -41,10 +42,10 @@ namespace EVENTSERVER
   public:
     static void RemoveInstance();
     static CEventServer* GetInstance();
-    virtual ~CEventServer() {}
+    ~CEventServer() override = default;
 
     // IRunnable entry point for thread
-    virtual void  Process();
+    void  Process() override;
 
     bool Running()
     {
@@ -62,7 +63,7 @@ namespace EVENTSERVER
     void StopServer(bool bWait);
 
     // get events
-    unsigned int GetButtonCode(std::string& strMapName, bool& isAxis, float& amount);
+    unsigned int GetButtonCode(std::string& strMapName, bool& isAxis, float& amount, bool &isJoystick);
     bool ExecuteNextAction();
     bool GetMousePos(float &x, float &y);
     int GetNumberOfClients();
@@ -82,7 +83,7 @@ namespace EVENTSERVER
     int              m_iListenTimeout;
     int              m_iMaxClients;
     unsigned char*   m_pPacketBuffer;
-    bool             m_bRunning;
+    std::atomic<bool>  m_bRunning;
     CCriticalSection m_critSection;
     bool             m_bRefreshSettings;
   };

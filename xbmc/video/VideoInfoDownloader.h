@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include "Episode.h"
 #include "filesystem/CurlFile.h"
 #include <string>
+#include <vector>
 
 // forward declarations
 class CXBMCTinyXML;
@@ -41,8 +42,8 @@ typedef std::vector<CScraperUrl> MOVIELIST;
 class CVideoInfoDownloader : public CThread
 {
 public:
-  CVideoInfoDownloader(const ADDON::ScraperPtr &scraper);
-  virtual ~CVideoInfoDownloader();
+  explicit CVideoInfoDownloader(const ADDON::ScraperPtr &scraper);
+  ~CVideoInfoDownloader() override;
 
   // threaded lookup functions
 
@@ -84,7 +85,7 @@ protected:
   ADDON::ScraperPtr   m_info;
 
   // threaded stuff
-  void Process();
+  void Process() override;
   void CloseThread();
 
   int InternalFindMovie(const std::string& strMovie, MOVIELIST& movielist, bool cleanChars = true);

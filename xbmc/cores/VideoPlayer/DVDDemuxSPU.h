@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,8 +20,10 @@
  *
  */
 
-#include "DVDCodecs/Overlay/DVDOverlaySpu.h"
-struct AVPicture;
+#include <stdint.h>
+
+struct AVFrame;
+class CDVDOverlaySpu;
 
 typedef struct SPUData
 {
@@ -36,11 +38,11 @@ SPUData;
 // upto 32 streams can exist
 #define DVD_MAX_SPUSTREAMS 32
 
-class CDVDDemuxSPU
+class CDVDDemuxSPU final
 {
 public:
   CDVDDemuxSPU();
-  virtual ~CDVDDemuxSPU();
+  ~CDVDDemuxSPU();
 
   CDVDOverlaySpu* AddData(uint8_t* data, int iSize, double pts); // returns a packet from ParsePacket if possible
 
@@ -52,7 +54,7 @@ public:
   void FlushCurrentPacket(); // flushes current unparsed data
 
   // m_clut set by libdvdnav once in a time
-  // color lokup table is representing 16 different yuv colors
+  // color lookup table is representing 16 different yuv colors
   // [][0] = Y, [][1] = Cr, [][2] = Cb
   uint8_t m_clut[16][3];
   bool m_bHasClut;

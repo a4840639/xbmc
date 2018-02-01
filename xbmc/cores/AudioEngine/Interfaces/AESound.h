@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,8 +26,8 @@ class IAESound
 {
 protected:
   friend class IAE;
-  IAESound(const std::string &filename) {}
-  virtual ~IAESound() {}
+  explicit IAESound(const std::string &filename) {}
+  virtual ~IAESound() = default;
 
 public:
   /* play the sound this object represents */

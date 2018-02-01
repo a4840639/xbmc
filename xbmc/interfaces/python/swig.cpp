@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ namespace PythonBindings
   {
     PyObject* obj;
   public:
-    inline PyObjectDecrementor(PyObject* pyobj) : obj(pyobj) {}
+    inline explicit PyObjectDecrementor(PyObject* pyobj) : obj(pyobj) {}
     inline ~PyObjectDecrementor() { Py_XDECREF(obj); }
 
     inline PyObject* get() { return obj; }
@@ -55,9 +55,9 @@ namespace PythonBindings
       return;
     }
 
-    // TODO: UTF-8: Does python use UTF-16?
-    //              Do we need to convert from the string charset to UTF-8
-    //              for non-unicode data?
+    //! @todo UTF-8: Does python use UTF-16?
+    //!              Do we need to convert from the string charset to UTF-8
+    //!              for non-unicode data?
     if (PyUnicode_Check(pObject))
     {
       // Python unicode objects are UCS2 or UCS4 depending on compilation
@@ -269,7 +269,7 @@ namespace PythonBindings
         throw XBMCAddon::WrongTypeException("Incorrect type passed to \"%s\", was expecting a \"%s\" but received a \"%s\"",
                                  methodNameForErrorString,expectedType,typeInfo->swigType);
     }
-    return ((PyHolder*)pythonObj)->pSelf;
+    return const_cast<XBMCAddon::AddonClass*>(reinterpret_cast<const PyHolder*>(pythonObj)->pSelf);
   }
 
   /**
@@ -363,7 +363,7 @@ namespace PythonBindings
     const TypeInfo* typeInfo = getTypeInfoForInstance(api);
     PyTypeObject* typeObj = pytype == NULL ? (PyTypeObject*)(&(typeInfo->pythonType)) : pytype;
 
-    PyHolder* self = (PyHolder*)typeObj->tp_alloc(typeObj,0);
+    PyHolder* self = reinterpret_cast<PyHolder*>(typeObj->tp_alloc(typeObj,0));
     if (!self) return NULL;
     self->magicNumber = XBMC_PYTHON_TYPE_MAGIC_NUMBER;
     self->typeInfo = typeInfo;

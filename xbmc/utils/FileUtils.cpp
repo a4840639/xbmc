@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
  *
  */
 #include "FileUtils.h"
+#include "ServiceBroker.h"
 #include "guilib/GUIWindowManager.h"
 #include "dialogs/GUIDialogYesNo.h"
 #include "guilib/GUIKeyboardFactory.h"
@@ -52,7 +53,7 @@ bool CFileUtils::DeleteItem(const CFileItemPtr &item, bool force)
   if (!item || item->IsParentFolder())
     return false;
 
-  CGUIDialogYesNo* pDialog = (CGUIDialogYesNo*)g_windowManager.GetWindow(WINDOW_DIALOG_YES_NO);
+  CGUIDialogYesNo* pDialog = g_windowManager.GetWindow<CGUIDialogYesNo>(WINDOW_DIALOG_YES_NO);
   if (!force && pDialog)
   {
     pDialog->SetHeading(CVariant{122});
@@ -148,7 +149,7 @@ bool CFileUtils::RemoteAccessAllowed(const std::string &strPath)
     return true;
   else
   {
-    std::string strPlaylistsPath = CSettings::GetInstance().GetString(CSettings::SETTING_SYSTEM_PLAYLISTSPATH);
+    std::string strPlaylistsPath = CServiceBroker::GetSettings().GetString(CSettings::SETTING_SYSTEM_PLAYLISTSPATH);
     URIUtils::RemoveSlashAtEnd(strPlaylistsPath);
     if (StringUtils::StartsWithNoCase(realPath, strPlaylistsPath)) 
       return true;

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -110,11 +110,6 @@ public:
   uint32_t      GetNativeBuffer();
 
 private:
-  uint32_t      m_width;
-  uint32_t      m_height;
-  gfxImageUsage m_usage;
-  uint32_t      m_format;
-
   uint32_t      GetAndroidFormat(uint32_t format);
 
   void          *m_handle;

@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 2005-2013 Team XBMC
- *  http://xbmc.org
+ *  http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -37,19 +37,22 @@ class CDVDOverlayText;
 
 namespace OVERLAY {
 
-class COverlayText
-: public COverlay
+class COverlayText : public COverlay
 {
 public:
-  COverlayText() {}
-  COverlayText(CDVDOverlayText* src);
-  virtual ~COverlayText();
-  virtual void Render(SRenderState& state);
-  virtual void PrepareRender();
+  COverlayText() = default;
+  explicit COverlayText(CDVDOverlayText* src);
+  ~COverlayText() override;
+  void Render(SRenderState& state) override;
+  using COverlay::PrepareRender;
+  void PrepareRender(const std::string &font, int color, int height, int style,
+                     const std::string &fontcache, const std::string &fontbordercache);
+  virtual CGUITextLayout* GetFontLayout(const std::string &font, int color, int height, int style,
+                                        const std::string &fontcache, const std::string &fontbordercache);
 
   CGUITextLayout* m_layout;
-  std::string     m_text;
-  int             m_subalign;
+  std::string m_text;
+  int m_subalign;
 };
 
 }

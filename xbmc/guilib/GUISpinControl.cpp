@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -56,8 +56,7 @@ CGUISpinControl::CGUISpinControl(int parentID, int controlID, float posX, float 
   m_showOnePage = true;
 }
 
-CGUISpinControl::~CGUISpinControl(void)
-{}
+CGUISpinControl::~CGUISpinControl(void) = default;
 
 bool CGUISpinControl::OnAction(const CAction &action)
 {

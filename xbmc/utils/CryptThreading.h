@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,8 +36,8 @@ public:
   CCriticalSection* get_lock(int index);
 
 private:
-    CryptThreadingInitializer(const CryptThreadingInitializer &rhs);
-    CryptThreadingInitializer& operator=(const CryptThreadingInitializer&);
+    CryptThreadingInitializer(const CryptThreadingInitializer &rhs) = delete;
+    CryptThreadingInitializer& operator=(const CryptThreadingInitializer&) = delete;
 };
 
 XBMC_GLOBAL_REF(CryptThreadingInitializer,g_cryptThreadingInitializer);

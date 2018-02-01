@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -69,7 +69,7 @@ bool CProgressJob::DoModal()
   // get a progress dialog if we don't already have one
   if (m_progressDialog == NULL)
   {
-    m_progressDialog = (CGUIDialogProgress *)g_windowManager.GetWindow(WINDOW_DIALOG_PROGRESS);
+    m_progressDialog = g_windowManager.GetWindow<CGUIDialogProgress>(WINDOW_DIALOG_PROGRESS);
 
     if (m_progressDialog == NULL)
       return false;

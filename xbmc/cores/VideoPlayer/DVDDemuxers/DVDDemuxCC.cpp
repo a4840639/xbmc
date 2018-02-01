@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
  */
 
 #include "DVDDemuxUtils.h"
-#include "DVDClock.h"
+#include "cores/VideoPlayer/Interface/Addon/TimingConstants.h"
 #include "DVDDemuxCC.h"
 #include "cores/VideoPlayer/DVDCodecs/Overlay/contrib/cc_decoder708.h"
 
@@ -74,8 +74,10 @@ private:
 
 class CCaptionBlock
 {
+  CCaptionBlock(const CCaptionBlock&) = delete;
+  CCaptionBlock& operator=(const CCaptionBlock&) = delete;
 public:
-  CCaptionBlock(int size)
+  explicit CCaptionBlock(int size)
   {
     m_data = (uint8_t*)malloc(size);
     m_size = size;
@@ -108,12 +110,30 @@ CDVDDemuxCC::~CDVDDemuxCC()
   Dispose();
 }
 
-CDemuxStream* CDVDDemuxCC::GetStream(int iStreamId)
+CDemuxStream* CDVDDemuxCC::GetStream(int iStreamId) const
 {
-  return &m_streams[iStreamId];
+  for (int i=0; i<GetNrOfStreams(); i++)
+  {
+    if (m_streams[i].uniqueId == iStreamId)
+      return const_cast<CDemuxStreamSubtitle*>(&m_streams[i]);
+  }
+  return nullptr;
 }
 
-int CDVDDemuxCC::GetNrOfStreams()
+std::vector<CDemuxStream*> CDVDDemuxCC::GetStreams() const
+{
+  std::vector<CDemuxStream*> streams;
+
+  int num = GetNrOfStreams();
+  for (int i = 0; i < num; ++i)
+  {
+    streams.push_back(const_cast<CDemuxStreamSubtitle*>(&m_streams[i]));
+  }
+
+  return streams;
+}
+
+int CDVDDemuxCC::GetNrOfStreams() const
 {
   return m_streams.size();
 }
@@ -276,7 +296,7 @@ DemuxPacket* CDVDDemuxCC::Read(DemuxPacket *pSrcPacket)
 
 void CDVDDemuxCC::Handler(int service, void *userdata)
 {
-  CDVDDemuxCC *ctx = (CDVDDemuxCC*)userdata;
+  CDVDDemuxCC *ctx = static_cast<CDVDDemuxCC*>(userdata);
 
   unsigned int idx;
 
@@ -306,9 +326,9 @@ void CDVDDemuxCC::Handler(int service, void *userdata)
   {
     CDemuxStreamSubtitle stream;
     strcpy(stream.language, "cc");
+    stream.flags = FLAG_HEARING_IMPAIRED;
     stream.codec = AV_CODEC_ID_TEXT;
-    stream.iPhysicalId = service;
-    stream.iId = idx;
+    stream.uniqueId = service;
     ctx->m_streams.push_back(stream);
 
     streamdata data;
@@ -391,7 +411,7 @@ DemuxPacket* CDVDDemuxCC::Decode()
         pPacket->iSize = len;
         memcpy(pPacket->pData, data, pPacket->iSize);
 
-        pPacket->iStreamId = i;
+        pPacket->iStreamId = service;
         pPacket->pts = m_streamdata[i].pts;
         pPacket->duration = 0;
         m_streamdata[i].hasData = false;

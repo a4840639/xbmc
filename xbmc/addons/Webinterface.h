@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -34,22 +34,19 @@ namespace ADDON
   class CWebinterface : public CAddon
   {
   public:
-    static std::unique_ptr<CWebinterface> FromExtension(AddonProps props, const cp_extension_t* ext);
+    static std::unique_ptr<CWebinterface> FromExtension(CAddonInfo addonInfo, const cp_extension_t* ext);
 
-    explicit CWebinterface(AddonProps props)
-        : CAddon(std::move(props)),
+    explicit CWebinterface(CAddonInfo addonInfo)
+        : CAddon(std::move(addonInfo)),
           m_type(WebinterfaceTypeStatic),
           m_entryPoint(WEBINTERFACE_DEFAULT_ENTRY_POINT) {}
-    CWebinterface(ADDON::AddonProps props, WebinterfaceType type, const std::string &entryPoint);
+    CWebinterface(ADDON::CAddonInfo addonInfo, WebinterfaceType type, const std::string &entryPoint);
 
     WebinterfaceType GetType() const { return m_type; }
     const std::string& EntryPoint() const { return m_entryPoint; }
 
     std::string GetEntryPoint(const std::string &path) const;
     std::string GetBaseLocation() const;
-
-    // specializations of CAddon
-    virtual AddonPtr Clone() const;
 
   private:
     WebinterfaceType m_type;

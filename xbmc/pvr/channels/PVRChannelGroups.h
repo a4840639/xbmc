@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,12 +19,16 @@
  *
  */
 
-#include "FileItem.h"
-#include "threads/CriticalSection.h"
-
-#include "PVRChannelGroup.h"
-
 #include <vector>
+
+#include "threads/CriticalSection.h"
+#include "threads/SingleLock.h"
+
+#include "pvr/channels/PVRChannelGroup.h"
+
+class CFileItem;
+typedef std::shared_ptr<CFileItem> CFileItemPtr;
+class CFileItemList;
 
 namespace PVR
 {
@@ -37,7 +41,7 @@ namespace PVR
      * @brief Create a new group container.
      * @param bRadio True if this is a container for radio channels, false if it is for tv channels.
      */
-    CPVRChannelGroups(bool bRadio);
+    explicit CPVRChannelGroups(bool bRadio);
     virtual ~CPVRChannelGroups(void);
 
     /*!
@@ -91,12 +95,12 @@ namespace PVR
      * @param bExcludeHidden Whenever to exclude hidden channel groups.
      * @return A list of groups the channel is a member.
      */
-    std::vector<CPVRChannelGroupPtr> GetGroupsByChannel(const CPVRChannelPtr channel, bool bExcludeHidden = false) const;
+    std::vector<CPVRChannelGroupPtr> GetGroupsByChannel(const CPVRChannelPtr &channel, bool bExcludeHidden = false) const;
 
     /*!
      * @brief Get a group given it's name.
      * @param strName The name.
-     * @return The group or NULL if it wan't found.
+     * @return The group or NULL if it wasn't found.
      */
     CPVRChannelGroupPtr GetByName(const std::string &strName) const;
 
@@ -163,7 +167,7 @@ namespace PVR
      * @brief Change the selected group.
      * @param group The group to select.
      */
-    void SetSelectedGroup(CPVRChannelGroupPtr group);
+    void SetSelectedGroup(const CPVRChannelGroupPtr &group);
 
     /*!
      * @brief Add a group to this container.
@@ -210,7 +214,6 @@ namespace PVR
     bool Update(bool bChannelsOnly = false);
 
   private:
-    bool UpdateGroupsEntries(const CPVRChannelGroups &groups);
     bool LoadUserDefinedChannelGroups(void);
     bool GetGroupsFromClients(void);
     void SortGroups(void);
@@ -219,5 +222,6 @@ namespace PVR
     CPVRChannelGroupPtr              m_selectedGroup;  /*!< the group that's currently selected in the UI */
     std::vector<CPVRChannelGroupPtr> m_groups;         /*!< the groups in this container */
     CCriticalSection m_critSection;
+    std::vector<int> m_failedClientsForChannelGroups;
   };
 }

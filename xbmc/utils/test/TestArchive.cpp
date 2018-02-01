@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,6 +18,13 @@
  *
  */
 
+#if defined(TARGET_WINDOWS)
+#  if !defined(WIN32_LEAN_AND_MEAN)
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
+#endif
+
 #include "utils/Archive.h"
 #include "utils/Variant.h"
 #include "filesystem/File.h"
@@ -33,7 +40,7 @@ protected:
   {
     file = XBMC_CREATETEMPFILE(".ar");
   }
-  ~TestArchive()
+  ~TestArchive() override
   {
     EXPECT_TRUE(XBMC_DELETETEMPFILE(file));
   }

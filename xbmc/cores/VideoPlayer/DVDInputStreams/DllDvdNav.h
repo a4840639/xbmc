@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -47,8 +47,9 @@ extern "C" {
 class DllDvdNavInterface
 {
 public:
-  virtual ~DllDvdNavInterface() {}
+  virtual ~DllDvdNavInterface() = default;
   virtual dvdnav_status_t dvdnav_open(dvdnav_t **dest, const char *path)=0;
+  virtual dvdnav_status_t dvdnav_open_stream(dvdnav_t **dest, void *stream, dvdnav_stream_cb *stream_cb) = 0;
   virtual dvdnav_status_t dvdnav_close(dvdnav_t *self)=0;
   virtual dvdnav_status_t dvdnav_reset(dvdnav_t *self)=0;
   virtual const char* dvdnav_err_to_string(dvdnav_t *self)=0;
@@ -98,6 +99,7 @@ public:
   virtual dvdnav_status_t dvdnav_get_audio_attr(dvdnav_t * self, int32_t streamid, audio_attr_t* audio_attributes)=0;
   virtual dvdnav_status_t dvdnav_get_spu_attr(dvdnav_t * self, int32_t streamid, subp_attr_t* stitle_attributes)=0;
   virtual dvdnav_status_t dvdnav_time_search(dvdnav_t * self, uint64_t timepos)=0;
+  virtual dvdnav_status_t dvdnav_jump_to_sector_by_time(dvdnav_t * slef, uint64_t offset, int32_t origin)=0;
   virtual int64_t dvdnav_convert_time(dvd_time_t *time)=0;
   virtual dvdnav_status_t dvdnav_get_state(dvdnav_t *self, dvd_state_t *save_state)=0;
   virtual dvdnav_status_t dvdnav_set_state(dvdnav_t *self, dvd_state_t *save_state)=0;
@@ -108,6 +110,7 @@ public:
   virtual dvdnav_status_t dvdnav_get_title_string(dvdnav_t *self, const char **title_str)=0;
   virtual dvdnav_status_t dvdnav_get_serial_string(dvdnav_t *self, const char **serial_str)=0;
   virtual uint32_t dvdnav_describe_title_chapters(dvdnav_t* self, uint32_t title, uint64_t** times, uint64_t* duration)=0;
+  virtual int64_t dvdnav_get_current_time(dvdnav_t* self) = 0;
   virtual void dvdnav_free(void* pdata) = 0;
   virtual int dvdnav_get_video_resolution(dvdnav_t* self, uint32_t* width, uint32_t* height)=0;
 };
@@ -121,6 +124,8 @@ public:
     virtual ~DllDvdNav() {}
     virtual dvdnav_status_t dvdnav_open(dvdnav_t **dest, const char *path)
         { return ::dvdnav_open(dest, path); }
+    virtual dvdnav_status_t dvdnav_open_stream(dvdnav_t **dest, void *stream, dvdnav_stream_cb *stream_cb)
+        { return ::dvdnav_open_stream(dest, stream, stream_cb); }
     virtual dvdnav_status_t dvdnav_close(dvdnav_t *self)
         { return ::dvdnav_close(self); }
     virtual dvdnav_status_t dvdnav_reset(dvdnav_t *self)
@@ -219,6 +224,8 @@ public:
         { return ::dvdnav_get_spu_attr(self, streamid, stitle_attributes); }
     virtual dvdnav_status_t dvdnav_time_search(dvdnav_t * self, uint64_t timepos)
         { return ::dvdnav_time_search(self, timepos); }
+    virtual dvdnav_status_t dvdnav_jump_to_sector_by_time(dvdnav_t * self, uint64_t offset, int32_t origin)
+        { return ::dvdnav_jump_to_sector_by_time(self, offset, origin); }
     virtual int64_t dvdnav_convert_time(dvd_time_t *time)
         { return ::dvdnav_convert_time(time); }
     virtual dvdnav_status_t dvdnav_get_state(dvdnav_t *self, dvd_state_t *save_state)
@@ -253,6 +260,7 @@ class DllDvdNav : public DllDynamic, DllDvdNavInterface
   DECLARE_DLL_WRAPPER(DllDvdNav, DLL_PATH_LIBDVDNAV)
 
   DEFINE_METHOD2(dvdnav_status_t, dvdnav_open, (dvdnav_t **p1, const char *p2))
+  DEFINE_METHOD3(dvdnav_status_t, dvdnav_open_stream, (dvdnav_t **p1, void *p2, dvdnav_stream_cb *p3))
   DEFINE_METHOD1(dvdnav_status_t, dvdnav_close, (dvdnav_t *p1))
   DEFINE_METHOD1(dvdnav_status_t, dvdnav_reset, (dvdnav_t *p1))
   DEFINE_METHOD1(const char*, dvdnav_err_to_string, (dvdnav_t *p1))
@@ -313,10 +321,12 @@ class DllDvdNav : public DllDynamic, DllDvdNavInterface
   DEFINE_METHOD2(dvdnav_status_t, dvdnav_get_title_string, (dvdnav_t *p1, const char **p2))
   DEFINE_METHOD2(dvdnav_status_t, dvdnav_get_serial_string, (dvdnav_t *p1, const char **p2))
   DEFINE_METHOD4(uint32_t, dvdnav_describe_title_chapters, (dvdnav_t* p1, uint32_t p2, uint64_t** p3, uint64_t* p4))
+  DEFINE_METHOD1(int64_t, dvdnav_get_current_time, (dvdnav_t* p1))
   DEFINE_METHOD1(void, dvdnav_free, (void *p1))
   DEFINE_METHOD3(int, dvdnav_get_video_resolution, (dvdnav_t* p1, uint32_t* p2, uint32_t* p3))
   BEGIN_METHOD_RESOLVE()
     RESOLVE_METHOD(dvdnav_open)
+    RESOLVE_METHOD(dvdnav_open_stream)
     RESOLVE_METHOD(dvdnav_close)
     RESOLVE_METHOD(dvdnav_reset)
     RESOLVE_METHOD(dvdnav_err_to_string)
@@ -377,6 +387,7 @@ class DllDvdNav : public DllDynamic, DllDvdNavInterface
     RESOLVE_METHOD(dvdnav_get_title_string)
     RESOLVE_METHOD(dvdnav_get_serial_string)
     RESOLVE_METHOD(dvdnav_describe_title_chapters)
+    RESOLVE_METHOD(dvdnav_get_current_time)
     RESOLVE_METHOD(dvdnav_free)
     RESOLVE_METHOD(dvdnav_get_video_resolution)
 END_METHOD_RESOLVE()

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 
 #include "GUIDialog.h"
 #include "GUIWindowManager.h"
+#include "GUIControlFactory.h"
 #include "GUILabelControl.h"
 #include "threads/SingleLock.h"
 #include "utils/TimeUtils.h"
@@ -42,8 +43,21 @@ CGUIDialog::CGUIDialog(int id, const std::string &xmlFile, DialogModalityType mo
   m_bAutoClosed = false;
 }
 
-CGUIDialog::~CGUIDialog(void)
-{}
+CGUIDialog::~CGUIDialog(void) = default;
+
+bool CGUIDialog::Load(TiXmlElement* pRootElement)
+{
+  bool retVal = CGUIWindow::Load(pRootElement);
+
+  if (retVal && IsCustom())
+  {
+    // custom dialog's modality type is modeless if visible condition is specified.
+    if (m_visibleCondition)
+      m_modalityType = DialogModalityType::MODELESS;
+  }
+
+  return retVal;
+}
 
 void CGUIDialog::OnWindowLoaded()
 {
@@ -121,7 +135,7 @@ void CGUIDialog::DoProcess(unsigned int currentTime, CDirtyRegionList &dirtyregi
 
   // if we were running but now we're not, mark us dirty
   if (!m_active && m_wasRunning)
-    dirtyregions.push_back(m_renderRegion);
+    dirtyregions.push_back(CDirtyRegion(m_renderRegion));
 
   if (m_active)
     CGUIWindow::DoProcess(currentTime, dirtyregions);
@@ -241,4 +255,9 @@ void CGUIDialog::ResetAutoClose(void)
 void CGUIDialog::CancelAutoClose(void)
 {
   m_autoClosing = false;
+}
+
+void CGUIDialog::ProcessRenderLoop(bool renderOnly)
+{
+  g_windowManager.ProcessRenderLoop(renderOnly);
 }

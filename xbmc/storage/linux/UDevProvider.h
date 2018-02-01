@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,9 +19,10 @@
  *
  */
 
-#include "storage/IStorageProvider.h"
+#include <string>
+#include <vector>
 
-#ifdef HAVE_LIBUDEV
+#include "storage/IStorageProvider.h"
 
 struct udev;
 struct udev_monitor;
@@ -30,19 +31,19 @@ class CUDevProvider : public IStorageProvider
 {
 public:
   CUDevProvider();
-  virtual ~CUDevProvider() { }
+  ~CUDevProvider() override = default;
 
-  virtual void Initialize();
-  virtual void Stop();
+  void Initialize() override;
+  void Stop() override;
 
-  virtual void GetLocalDrives(VECSOURCES &localDrives);
-  virtual void GetRemovableDrives(VECSOURCES &removableDrives);
+  void GetLocalDrives(VECSOURCES &localDrives) override;
+  void GetRemovableDrives(VECSOURCES &removableDrives) override;
 
-  virtual bool Eject(const std::string& mountpath);
+  bool Eject(const std::string& mountpath) override;
 
-  virtual std::vector<std::string> GetDiskUsage();
+  std::vector<std::string> GetDiskUsage() override;
 
-  virtual bool PumpDriveChangeEvents(IStorageEventsCallback *callback);
+  bool PumpDriveChangeEvents(IStorageEventsCallback *callback) override;
 
 private:
   void GetDisks(VECSOURCES& devices, bool removable);
@@ -50,5 +51,3 @@ private:
   struct udev         *m_udev;
   struct udev_monitor *m_udevMon;
 };
-
-#endif

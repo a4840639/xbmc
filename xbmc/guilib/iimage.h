@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ class IImage
 public:
 
   IImage():m_width(0), m_height(0), m_originalWidth(0), m_originalHeight(0), m_orientation(0), m_hasAlpha(false) {};
-  virtual ~IImage() {};
+  virtual ~IImage() = default;
 
   /*!
    \brief Load an image from memory with the format m_strMimeType to determine it's size and orientation

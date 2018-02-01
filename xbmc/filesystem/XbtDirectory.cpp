@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,11 +39,9 @@ static CFileItemPtr XBTFFileToFileItem(const CXBTFFile& entry, const std::string
   return item;
 }
 
-CXbtDirectory::CXbtDirectory()
-{ }
+CXbtDirectory::CXbtDirectory() = default;
 
-CXbtDirectory::~CXbtDirectory()
-{ }
+CXbtDirectory::~CXbtDirectory() = default;
 
 bool CXbtDirectory::GetDirectory(const CURL& urlOrig, CFileItemList& items)
 {

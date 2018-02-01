@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,8 +21,6 @@
 #include "PlatformDefs.h"
 #include "ZeroconfAvahi.h"
 
-#ifdef HAS_AVAHI
-
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -40,7 +38,7 @@
 ///helper RAII-struct to block event loop for modifications
 struct ScopedEventLoopBlock
 {
-  ScopedEventLoopBlock(AvahiThreadedPoll* fp_poll):mp_poll(fp_poll)
+  explicit ScopedEventLoopBlock(AvahiThreadedPoll* fp_poll):mp_poll(fp_poll)
   {
     avahi_threaded_poll_lock(mp_poll);
   }
@@ -74,7 +72,7 @@ CZeroconfAvahi::CZeroconfAvahi(): mp_client(0), mp_poll (0), m_shutdown(false),m
     if (! (mp_poll = avahi_threaded_poll_new()))
     {
       CLog::Log(LOGERROR, "CZeroconfAvahi::CZeroconfAvahi(): Could not create threaded poll object");
-      //TODO: throw exception?
+      //! @todo throw exception?
       return;
     }
 
@@ -102,7 +100,7 @@ CZeroconfAvahi::~CZeroconfAvahi()
     //so instead of calling
     //avahi_threaded_poll_stop(mp_poll);
     //we set m_shutdown=true, post an event and wait for it to stop itself
-    struct timeval tv = { 0, 0 }; //TODO: does tv survive the thread?
+    struct timeval tv = { 0, 0 }; //! @todo does tv survive the thread?
     AvahiTimeout* lp_timeout;
     {
       ScopedEventLoopBlock l_block(mp_poll);
@@ -428,9 +426,6 @@ void CZeroconfAvahi::addService(tServiceMap::mapped_type fp_service_info, AvahiC
   if ((ret = avahi_entry_group_commit(fp_service_info->mp_group)) < 0)
   {
     CLog::Log(LOGERROR, "CZeroconfAvahi::addService(): Failed to commit entry group! Error:%s",  avahi_strerror(ret));
-    // TODO what now? reset the group? free it?
+    //! @todo what now? reset the group? free it?
   }
 }
-
-#endif // HAS_AVAHI
-

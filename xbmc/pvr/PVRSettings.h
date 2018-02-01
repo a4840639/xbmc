@@ -19,24 +19,42 @@
  *
  */
 
+#include <map>
 #include <string>
 #include <utility>
-#include <vector>
 
-class CSetting;
+#include "settings/lib/ISettingCallback.h"
+#include "settings/lib/Setting.h"
 
 namespace PVR
 {
-  class CPVRSettings
+  class CPVRSettings : private ISettingCallback
   {
   public:
+    explicit CPVRSettings(const std::set<std::string> & settingNames);
+    ~CPVRSettings() override;
+
+    // ISettingCallback implementation
+    void OnSettingChanged(std::shared_ptr<const CSetting> setting) override;
+
+    bool GetBoolValue(const std::string &settingName) const;
+    int GetIntValue(const std::string &settingName) const;
+    std::string GetStringValue(const std::string &settingName) const;
+
     // settings value filler for start/end recording margin time for PVR timers.
     static void MarginTimeFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+
+    // Dynamically hide or show settings.
+    static bool IsSettingVisible(const std::string &condition, const std::string &value, std::shared_ptr<const CSetting> setting, void *data);
 
   private:
-    CPVRSettings() = delete;
     CPVRSettings(const CPVRSettings&) = delete;
     CPVRSettings& operator=(CPVRSettings const&) = delete;
+
+    void Init(const std::set<std::string> &settingNames);
+
+    CCriticalSection m_critSection;
+    std::map<std::string, std::shared_ptr<CSetting>> m_settings;
   };
 }

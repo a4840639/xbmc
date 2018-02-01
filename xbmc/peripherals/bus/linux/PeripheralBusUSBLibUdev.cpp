@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -76,7 +76,7 @@ extern "C" {
 
 using namespace PERIPHERALS;
 
-CPeripheralBusUSB::CPeripheralBusUSB(CPeripherals *manager) :
+CPeripheralBusUSB::CPeripheralBusUSB(CPeripherals& manager) :
     CPeripheralBus("PeripBusUSBUdev", manager, PERIPHERAL_BUS_USB)
 {
   /* the Process() method in this class overrides the one in CPeripheralBus, so leave this set to true */
@@ -147,8 +147,8 @@ bool CPeripheralBusUSB::PerformDeviceScan(PeripheralScanResults &results)
       int iClass = PeripheralTypeTranslator::HexStringToInt(strClass.c_str());
       if (iClass == USB_CLASS_PER_INTERFACE)
       {
-        //TODO just assume this is a HID device for now, since the only devices that we're currently
-        //     interested in are HID devices
+        //! @todo just assume this is a HID device for now, since the only devices that we're currently
+        //!     interested in are HID devices
         iClass = USB_CLASS_HID;
       }
 
@@ -208,8 +208,6 @@ void CPeripheralBusUSB::Process(void)
     if (bUpdated && !m_bStop)
       ScanForDevices();
   }
-
-  m_bIsStarted = false;
 }
 
 void CPeripheralBusUSB::Clear(void)

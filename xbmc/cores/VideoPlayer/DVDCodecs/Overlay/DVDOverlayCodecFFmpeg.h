@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -34,17 +34,15 @@ class CDVDOverlayCodecFFmpeg : public CDVDOverlayCodec
 {
 public:
   CDVDOverlayCodecFFmpeg();
-  virtual ~CDVDOverlayCodecFFmpeg();
-  virtual bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options);
-  virtual void Dispose();
-  virtual int Decode(DemuxPacket *pPacket);
-  virtual void Reset();
-  virtual void Flush();
-  virtual CDVDOverlay* GetOverlay();
+  ~CDVDOverlayCodecFFmpeg() override;
+  bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options) override;
+  void Dispose() override;
+  int Decode(DemuxPacket *pPacket) override;
+  void Reset() override;
+  void Flush() override;
+  CDVDOverlay* GetOverlay() override;
 
 private:
-  void FreeSubtitle(AVSubtitle &sub);
-
   AVCodecContext* m_pCodecContext;
   AVSubtitle      m_Subtitle;
   int             m_SubtitleIndex;

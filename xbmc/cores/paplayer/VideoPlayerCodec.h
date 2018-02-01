@@ -3,7 +3,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,32 +36,32 @@ class VideoPlayerCodec : public ICodec
 {
 public:
   VideoPlayerCodec();
-  virtual ~VideoPlayerCodec();
+  ~VideoPlayerCodec() override;
 
-  virtual bool Init(const std::string &strFile, unsigned int filecache);
-  virtual void DeInit();
-  virtual int64_t Seek(int64_t iSeekTime);
-  virtual int ReadPCM(BYTE *pBuffer, int size, int *actualsize);
-  virtual int ReadRaw(uint8_t **pBuffer, int *bufferSize);
-  virtual bool CanInit();
-  virtual bool CanSeek();
-  virtual CAEChannelInfo GetChannelInfo() {return m_srcFormat.m_channelLayout;}
+  bool Init(const CFileItem &file, unsigned int filecache) override;
+  bool Seek(int64_t iSeekTime) override;
+  int ReadPCM(BYTE *pBuffer, int size, int *actualsize) override;
+  int ReadRaw(uint8_t **pBuffer, int *bufferSize) override;
+  bool CanInit() override;
+  bool CanSeek() override;
 
+  void DeInit();
   AEAudioFormat GetFormat();
   void SetContentType(const std::string &strContent);
 
   bool NeedConvert(AEDataFormat fmt);
+  void SetPassthroughStreamType(CAEStreamInfo::DataType streamType);
 
 private:
+  CAEStreamInfo::DataType GetPassthroughStreamType(AVCodecID codecId, int samplerate);
+
   CDVDDemux* m_pDemuxer;
-  CDVDInputStream* m_pInputStream;
+  std::shared_ptr<CDVDInputStream> m_pInputStream;
   CDVDAudioCodec* m_pAudioCodec;
 
   std::string m_strContentType;
   std::string m_strFileName;
   int m_nAudioStream;
-  int m_audioPos;
-  DemuxPacket* m_pPacket;
   int  m_nDecodedLen;
 
   bool m_bInited;
@@ -73,6 +73,8 @@ private:
   bool m_needConvert;
   AEAudioFormat m_srcFormat;
   int m_channels;
+
+  std::unique_ptr<CProcessInfo> m_processInfo;
 };
 
 #endif

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #include "system.h"
 #include "SMBFile.h"
 #include "PasswordManager.h"
+#include "ServiceBroker.h"
 #include "SMBDirectory.h"
 #include <libsmbclient.h>
 #include "filesystem/SpecialProtocol.h"
@@ -64,7 +65,6 @@ bool CSMB::IsFirstInit = true;
 
 CSMB::CSMB()
 {
-  m_IdleTimeout = 0;
   m_context = NULL;
 #ifdef TARGET_POSIX
   m_OpenConnections = 0;
@@ -93,40 +93,61 @@ void CSMB::Deinit()
 void CSMB::Init()
 {
   CSingleLock lock(*this);
+
   if (!m_context)
   {
-    // Create ~/.smb/smb.conf. This file is used by libsmbclient.
+    // force libsmbclient to use our own smb.conf by overriding HOME
+    std::string truehome(getenv("HOME"));
+    setenv("HOME", CSpecialProtocol::TranslatePath("special://home").c_str(), 1);
+
+    // Create ~/.kodi/.smb/smb.conf. This file is used by libsmbclient.
     // http://us1.samba.org/samba/docs/man/manpages-3/libsmbclient.7.html
     // http://us1.samba.org/samba/docs/man/manpages-3/smb.conf.5.html
-    char smb_conf[MAX_PATH];
-    std::string home = CSpecialProtocol::TranslatePath("special://home");
+    std::string smb_conf;
+    std::string home(getenv("HOME"));
     URIUtils::RemoveSlashAtEnd(home);
-    snprintf(smb_conf, sizeof(smb_conf), "%s/.smb", home.c_str());
-    if (mkdir(smb_conf, 0755) == 0)
+    smb_conf = home + "/.smb";
+    int result = mkdir(smb_conf.c_str(), 0755);
+    if (result == 0 || (errno == EEXIST && IsFirstInit))
     {
-      snprintf(smb_conf, sizeof(smb_conf), "%s/.smb/smb.conf", home.c_str());
-      FILE* f = fopen(smb_conf, "w");
+      smb_conf += "/smb.conf";
+      FILE* f = fopen(smb_conf.c_str(), "w");
       if (f != NULL)
       {
         fprintf(f, "[global]\n");
 
-        // make sure we're not acting like a server
-        fprintf(f, "\tpreferred master = no\n");
-        fprintf(f, "\tlocal master = no\n");
-        fprintf(f, "\tdomain master = no\n");
-
-        // use the weaker LANMAN password hash in order to be compatible with older servers
-        fprintf(f, "\tclient lanman auth = yes\n");
-        fprintf(f, "\tlanman auth = yes\n");
-
-        fprintf(f, "\tsocket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=65536 SO_SNDBUF=65536\n");      
         fprintf(f, "\tlock directory = %s/.smb/\n", home.c_str());
+
+        // set minimum smbclient protocol version
+        if (CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SMB_MINPROTOCOL) > 0)
+        {
+          if (CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SMB_MINPROTOCOL) == 1)
+            fprintf(f, "\tclient min protocol = NT1\n");
+          else
+            fprintf(f, "\tclient min protocol = SMB%d\n", CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SMB_MINPROTOCOL));
+        }
+
+        // set maximum smbclient protocol version
+        if (CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SMB_MAXPROTOCOL) > 0)
+        {
+          if (CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SMB_MAXPROTOCOL) == 1)
+            fprintf(f, "\tclient max protocol = NT1\n");
+          else
+            fprintf(f, "\tclient max protocol = SMB%d\n", CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SMB_MAXPROTOCOL));
+        }
+
+        // set legacy security options
+        if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_SMB_LEGACYSECURITY) && (CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SMB_MAXPROTOCOL) == 1))
+        {
+          fprintf(f, "\tclient NTLMv2 auth = no\n");
+          fprintf(f, "\tclient use spnego = no\n");
+        }
 
         // set wins server if there's one. name resolve order defaults to 'lmhosts host wins bcast'.
         // if no WINS server has been specified the wins method will be ignored.
-        if (CSettings::GetInstance().GetString(CSettings::SETTING_SMB_WINSSERVER).length() > 0 && !StringUtils::EqualsNoCase(CSettings::GetInstance().GetString(CSettings::SETTING_SMB_WINSSERVER), "0.0.0.0") )
+        if (CServiceBroker::GetSettings().GetString(CSettings::SETTING_SMB_WINSSERVER).length() > 0 && !StringUtils::EqualsNoCase(CServiceBroker::GetSettings().GetString(CSettings::SETTING_SMB_WINSSERVER), "0.0.0.0") )
         {
-          fprintf(f, "\twins server = %s\n", CSettings::GetInstance().GetString(CSettings::SETTING_SMB_WINSSERVER).c_str());
+          fprintf(f, "\twins server = %s\n", CServiceBroker::GetSettings().GetString(CSettings::SETTING_SMB_WINSSERVER).c_str());
           fprintf(f, "\tname resolve order = bcast wins host\n");
         }
         else
@@ -137,13 +158,16 @@ void CSMB::Init()
         if (g_advancedSettings.m_sambadoscodepage.length() > 0)
           fprintf(f, "\tdos charset = %s\n", g_advancedSettings.m_sambadoscodepage.c_str());
 
+        // include users configuration if available
+        fprintf(f, "\tinclude = %s/.smb/user.conf\n", home.c_str());
+
         fclose(f);
       }
     }
 
     // reads smb.conf so this MUST be after we create smb.conf
     // multiple smbc_init calls are ignored by libsmbclient.
-    // note: this is important as it initilizes the smb old
+    // note: this is important as it initializes the smb old
     // interface compatibility. Samba 3.4.0 or higher has the new interface.
     // note: we leak the following here once, not sure why yet.
     // 48 bytes -> smb_xmalloc_array
@@ -153,6 +177,10 @@ void CSMB::Init()
 
     // setup our context
     m_context = smbc_new_context();
+
+    // restore HOME
+    setenv("HOME", truehome.c_str(), 1);
+
 #ifdef DEPRECATED_SMBC_INTERFACE
     smbc_setDebug(m_context, g_advancedSettings.CanLogComponent(LOGSAMBA) ? 10 : 0);
     smbc_setFunctionAuthData(m_context, xb_smbc_auth);
@@ -162,8 +190,8 @@ void CSMB::Init()
     smbc_setOptionBrowseMaxLmbCount(m_context, 0);
     smbc_setTimeout(m_context, g_advancedSettings.m_sambaclienttimeout * 1000);
     // we do not need to strdup these, smbc_setXXX below will make their own copies
-    if (CSettings::GetInstance().GetString(CSettings::SETTING_SMB_WORKGROUP).length() > 0)
-      smbc_setWorkgroup(m_context, (char*)CSettings::GetInstance().GetString(CSettings::SETTING_SMB_WORKGROUP).c_str());
+    if (CServiceBroker::GetSettings().GetString(CSettings::SETTING_SMB_WORKGROUP).length() > 0)
+      smbc_setWorkgroup(m_context, (char*)CServiceBroker::GetSettings().GetString(CSettings::SETTING_SMB_WORKGROUP).c_str());
     std::string guest = "guest";
     smbc_setUser(m_context, (char*)guest.c_str());
 #else
@@ -174,9 +202,9 @@ void CSMB::Init()
     m_context->options.one_share_per_server = false;
     m_context->options.browse_max_lmb_count = 0;
     m_context->timeout = g_advancedSettings.m_sambaclienttimeout * 1000;
-    // we need to strdup these, they will get free'ed on smbc_free_context
-    if (CSettings::GetInstance().GetString(CSettings::SETTING_SMB_WORKGROUP).length() > 0)
-      m_context->workgroup = strdup(CSettings::GetInstance().GetString(CSettings::SETTING_SMB_WORKGROUP).c_str());
+    // we need to strdup these, they will get free'd on smbc_free_context
+    if (CServiceBroker::GetSettings().GetString(CSettings::SETTING_SMB_WORKGROUP).length() > 0)
+      m_context->workgroup = strdup(CServiceBroker::GetSettings().GetString(CSettings::SETTING_SMB_WORKGROUP).c_str());
     m_context->user = strdup("guest");
 #endif
 
@@ -232,6 +260,11 @@ std::string CSMB::URLEncode(const CURL &url)
   }
   flat += URLEncode(url.GetHostName());
 
+  if (url.HasPort())
+  {
+    flat += StringUtils::Format(":%i", url.GetPort());
+  }
+
   /* okey sadly since a slash is an invalid name we have to tokenize */
   std::vector<std::string> parts;
   std::vector<std::string>::iterator it;
@@ -258,7 +291,7 @@ void CSMB::CheckIfIdle()
 /* We check if there are open connections. This is done without a lock to not halt the mainthread. It should be thread safe as
    worst case scenario is that m_OpenConnections could read 0 and then changed to 1 if this happens it will enter the if wich will lead to another check, wich is locked.  */
   if (m_OpenConnections == 0)
-  { /* I've set the the maxiumum IDLE time to be 1 min and 30 sec. */
+  { /* I've set the the maximum IDLE time to be 1 min and 30 sec. */
     CSingleLock lock(*this);
     if (m_OpenConnections == 0 /* check again - when locked */ && m_context != NULL)
     {
@@ -305,6 +338,7 @@ CSMBFile::CSMBFile()
   smb.Init();
   m_fd = -1;
   smb.AddActiveConnection();
+  m_allowRetry = true;
 }
 
 CSMBFile::~CSMBFile()
@@ -390,13 +424,13 @@ int CSMBFile::OpenFile(std::string& strAuth)
   std::string strPath = g_passwordManager.GetSMBAuthFilename(strAuth);
 
   fd = smbc_open(strPath.c_str(), O_RDONLY, 0);
-  // TODO: Run a loop here that prompts for our username/password as appropriate?
-  // We have the ability to run a file (eg from a button action) without browsing to
-  // the directory first.  In the case of a password protected share that we do
-  // not have the authentication information for, the above smbc_open() will have
-  // returned negative, and the file will not be opened.  While this is not a particular
-  // likely scenario, we might want to implement prompting for the password in this case.
-  // The code from SMBDirectory can be used for this.
+  //! @todo Run a loop here that prompts for our username/password as appropriate?
+  //! We have the ability to run a file (eg from a button action) without browsing to
+  //! the directory first.  In the case of a password protected share that we do
+  //! not have the authentication information for, the above smbc_open() will have
+  //! returned negative, and the file will not be opened.  While this is not a particular
+  //! likely scenario, we might want to implement prompting for the password in this case.
+  //! The code from SMBDirectory can be used for this.
   if(fd >= 0)
     strAuth = strPath;
 
@@ -503,19 +537,10 @@ ssize_t CSMBFile::Read(void *lpBuf, size_t uiBufSize)
 
   CSingleLock lock(smb); // Init not called since it has to be "inited" by now
   smb.SetActivityTime();
-  /* work around stupid bug in samba */
-  /* some samba servers has a bug in it where the */
-  /* 17th bit will be ignored in a request of data */
-  /* this can lead to a very small return of data */
-  /* also worse, a request of exactly 64k will return */
-  /* as if eof, client has a workaround for windows */
-  /* thou it seems other servers are affected too */
-  if( uiBufSize >= 64*1024-2 )
-    uiBufSize = 64*1024-2;
 
   ssize_t bytesRead = smbc_read(m_fd, lpBuf, (int)uiBufSize);
 
-  if ( bytesRead < 0 && errno == EINVAL )
+  if (m_allowRetry && bytesRead < 0 && errno == EINVAL )
   {
     CLog::Log(LOGERROR, "%s - Error( %" PRIdS ", %d, %s ) - Retrying", __FUNCTION__, bytesRead, errno, strerror(errno));
     bytesRead = smbc_read(m_fd, lpBuf, (int)uiBufSize);
@@ -643,3 +668,18 @@ std::string CSMBFile::GetAuthenticatedPath(const CURL &url)
   CPasswordManager::GetInstance().AuthenticateURL(authURL);
   return smb.URLEncode(authURL);
 }
+
+int CSMBFile::IoControl(EIoControl request, void* param)
+{
+  if (request == IOCTRL_SEEK_POSSIBLE)
+    return 1;
+
+  if (request == IOCTRL_SET_RETRY)
+  {
+    m_allowRetry = *(bool*) param;
+    return 0;
+  }
+
+  return -1;
+}
+

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ namespace XbmcThreads
       pthread_mutexattr_t* getRecursiveAttr();
       pthread_mutex_t mutex;
 
-      // needs acces to 'mutex'
+      // needs access to 'mutex'
       friend class XbmcThreads::ConditionVariable;
     public:
       inline RecursiveMutex() { pthread_mutex_init(&mutex,getRecursiveAttr()); }

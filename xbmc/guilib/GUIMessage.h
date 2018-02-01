@@ -80,7 +80,7 @@
 
 #define GUI_MSG_PAGE_UP      30 // page up
 #define GUI_MSG_PAGE_DOWN    31 // page down
-#define GUI_MSG_MOVE_OFFSET  32 // Instruct the contorl to MoveUp or MoveDown by offset amount
+#define GUI_MSG_MOVE_OFFSET  32 // Instruct the control to MoveUp or MoveDown by offset amount
 
 #define GUI_MSG_SET_TYPE     33 ///< Instruct a control to set it's type appropriately
 
@@ -160,6 +160,17 @@
  \brief The user interface is ready for usage
  */
 #define GUI_MSG_UI_READY       49
+
+ /*!
+ \brief Called every 500ms to allow time dependent updates
+ */
+#define GUI_MSG_REFRESH_TIMER  50
+
+ /*!
+ \brief Called if state has changed wich could lead to GUI changes
+ */
+#define GUI_MSG_STATE_CHANGED  51
+
 
 #define GUI_MSG_USER         1000
 
@@ -368,7 +379,7 @@ public:
   void SetParam2(int param2);
   void SetPointer(void* pointer);
   void SetLabel(const std::string& strLabel);
-  void SetLabel(int iString);               // for convience - looks up in strings.xml
+  void SetLabel(int iString);               // for convenience - looks up in strings.xml
   const std::string& GetLabel() const;
   void SetStringParam(const std::string &strParam);
   void SetStringParams(const std::vector<std::string> &params);

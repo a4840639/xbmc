@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
  */
 
 #include "GUIMultiImage.h"
+#include "ServiceBroker.h"
 #include "TextureManager.h"
 #include "filesystem/Directory.h"
 #include "utils/URIUtils.h"
@@ -28,6 +29,8 @@
 #include "input/Key.h"
 #include "TextureCache.h"
 #include "WindowIDs.h"
+#include "utils/FileExtensionProvider.h"
+#include "utils/Random.h"
 #include "utils/StringUtils.h"
 
 using namespace XFILE;
@@ -103,7 +106,7 @@ void CGUIMultiImage::UpdateInfo(const CGUIListItem *item)
       texturePath = m_texturePath.GetItemLabel(item, true);
     else
       texturePath = m_texturePath.GetLabel(m_parentID);
-    if (texturePath != m_currentPath && !texturePath.empty())
+    if (texturePath != m_currentPath)
     {
       // a new path - set our current path and tell ourselves to load our directory
       m_currentPath = texturePath;
@@ -138,6 +141,8 @@ void CGUIMultiImage::Process(unsigned int currentTime, CDirtyRegionList &dirtyre
       }
     }
   }
+  else if (m_directoryStatus != LOADING)
+    m_image.SetFileName("");
 
   if (g_graphicsContext.SetClipRegion(m_posX, m_posY, m_width, m_height))
   {
@@ -247,7 +252,7 @@ void CGUIMultiImage::OnDirectoryLoaded()
 {
   // Randomize or sort our images if necessary
   if (m_randomized)
-    random_shuffle(m_files.begin(), m_files.end());
+    KODI::UTILS::RandomShuffle(m_files.begin(), m_files.end());
   else
     sort(m_files.begin(), m_files.end());
 
@@ -312,7 +317,7 @@ bool CGUIMultiImage::CMultiImageJob::DoWork()
 
     URIUtils::AddSlashAtEnd(realPath);
     CFileItemList items;
-    CDirectory::GetDirectory(realPath, items, g_advancedSettings.m_pictureExtensions + "|.tbn|.dds", DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_NO_FILE_INFO);
+    CDirectory::GetDirectory(realPath, items, CServiceBroker::GetFileExtensionProvider().GetPictureExtensions()+ "|.tbn|.dds", DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_NO_FILE_INFO);
     for (int i=0; i < items.Size(); i++)
     {
       CFileItem* pItem = items[i].get();

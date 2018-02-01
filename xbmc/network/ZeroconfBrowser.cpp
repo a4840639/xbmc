@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@
 #elif defined(TARGET_DARWIN)
 //on osx use the native implementation
 #include "osx/ZeroconfBrowserOSX.h"
+#elif defined(TARGET_ANDROID)
+#include "android/ZeroconfBrowserAndroid.h"
 #elif defined(HAS_MDNS)
 #include "mdns/ZeroconfBrowserMDNS.h"
 #endif
@@ -48,7 +50,7 @@ class CZeroconfBrowserDummy : public CZeroconfBrowser
 };
 #endif
 
-long CZeroconfBrowser::sm_singleton_guard = 0;
+std::atomic_flag CZeroconfBrowser::sm_singleton_guard = ATOMIC_FLAG_INIT;
 CZeroconfBrowser* CZeroconfBrowser::smp_instance = 0;
 
 CZeroconfBrowser::CZeroconfBrowser():mp_crit_sec(new CCriticalSection),m_started(false)
@@ -154,6 +156,9 @@ CZeroconfBrowser*  CZeroconfBrowser::GetInstance()
       smp_instance = new CZeroconfBrowserOSX;
 #elif defined(HAS_AVAHI)
       smp_instance  = new CZeroconfBrowserAvahi;
+#elif defined(TARGET_ANDROID)
+      // WIP
+      smp_instance  = new CZeroconfBrowserAndroid;
 #elif defined(HAS_MDNS)
       smp_instance  = new CZeroconfBrowserMDNS;
 #endif

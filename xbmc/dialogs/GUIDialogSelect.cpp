@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -31,8 +31,10 @@
 #define CONTROL_EXTRA_BUTTON    5
 #define CONTROL_CANCEL_BUTTON   7
 
-CGUIDialogSelect::CGUIDialogSelect(void)
-    : CGUIDialogBoxBase(WINDOW_DIALOG_SELECT, "DialogSelect.xml"),
+CGUIDialogSelect::CGUIDialogSelect() : CGUIDialogSelect(WINDOW_DIALOG_SELECT) {}
+
+CGUIDialogSelect::CGUIDialogSelect(int windowId)
+    : CGUIDialogBoxBase(windowId, "DialogSelect.xml"),
     m_bButtonEnabled(false),
     m_bButtonPressed(false),
     m_buttonLabel(-1),
@@ -46,9 +48,7 @@ CGUIDialogSelect::CGUIDialogSelect(void)
   m_loadType = KEEP_IN_MEMORY;
 }
 
-CGUIDialogSelect::~CGUIDialogSelect(void)
-{
-}
+CGUIDialogSelect::~CGUIDialogSelect(void) = default;
 
 bool CGUIDialogSelect::OnMessage(CGUIMessage& message)
 {
@@ -109,8 +109,7 @@ bool CGUIDialogSelect::OnMessage(CGUIMessage& message)
               for (int i = 0 ; i < m_vecList->Size() ; i++)
                 m_vecList->Get(i)->Select(false);
               item->Select(true);
-              m_bConfirmed = true;
-              Close();
+              OnSelect(iSelected);
             }
           }
         }
@@ -126,6 +125,8 @@ bool CGUIDialogSelect::OnMessage(CGUIMessage& message)
       else if (iControl == CONTROL_CANCEL_BUTTON)
       {
         m_selectedItem = nullptr;
+        m_vecList->Clear();
+        m_selectedItems.clear();
         m_bConfirmed = false;
         Close();
       }
@@ -156,9 +157,16 @@ bool CGUIDialogSelect::OnMessage(CGUIMessage& message)
   return CGUIDialogBoxBase::OnMessage(message);
 }
 
+void CGUIDialogSelect::OnSelect(int idx)
+{
+  m_bConfirmed = true;
+  Close();
+}
+
 bool CGUIDialogSelect::OnBack(int actionID)
 {
   m_selectedItem = nullptr;
+  m_vecList->Clear();
   m_selectedItems.clear();
   m_bConfirmed = false;
   return CGUIDialogBoxBase::OnBack(actionID);
@@ -193,6 +201,8 @@ void CGUIDialogSelect::SetItems(const CFileItemList& pList)
   // need to make internal copy of list to be sure dialog is owner of it
   m_vecList->Clear();
   m_vecList->Copy(pList);
+
+  m_viewControl.SetItems(*m_vecList);
 }
 
 int CGUIDialogSelect::GetSelectedItem() const
@@ -326,7 +336,6 @@ void CGUIDialogSelect::OnInitWindow()
     SET_CONTROL_HIDDEN(CONTROL_EXTRA_BUTTON);
 
   SET_CONTROL_LABEL(CONTROL_CANCEL_BUTTON, g_localizeStrings.Get(222));
-  SET_CONTROL_VISIBLE(CONTROL_CANCEL_BUTTON);
 
   CGUIDialogBoxBase::OnInitWindow();
 

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -34,10 +34,7 @@ CGUIDialogProgress::CGUIDialogProgress(void)
   Reset();
 }
 
-CGUIDialogProgress::~CGUIDialogProgress(void)
-{
-
-}
+CGUIDialogProgress::~CGUIDialogProgress(void) = default;
 
 void CGUIDialogProgress::Reset()
 {
@@ -46,7 +43,7 @@ void CGUIDialogProgress::Reset()
   m_iCurrent = 0;
   m_iMax = 0;
   m_percentage = 0;
-  m_showProgress = false;
+  m_showProgress = true;
   m_bCanCancel = true;
   SetInvalid();
 }
@@ -64,7 +61,7 @@ void CGUIDialogProgress::Open(const std::string &param /* = "" */)
 
   {
     CSingleLock lock(g_graphicsContext);
-    ShowProgressBar(false);
+    ShowProgressBar(true);
   }
   
   CGUIDialog::Open_Internal(false, param);
@@ -85,15 +82,7 @@ void CGUIDialogProgress::Progress()
 {
   if (m_active)
   {
-    g_windowManager.ProcessRenderLoop();
-  }
-}
-
-void CGUIDialogProgress::ProgressKeys()
-{
-  if (m_active)
-  {
-    g_application.FrameMove(true);
+    ProcessRenderLoop();
   }
 }
 
@@ -137,11 +126,11 @@ bool CGUIDialogProgress::OnBack(int actionID)
 void CGUIDialogProgress::OnWindowLoaded()
 {
   CGUIDialog::OnWindowLoaded();
-  const CGUIControl *control = GetControl(CONTROL_PROGRESS_BAR);
+  CGUIControl *control = GetControl(CONTROL_PROGRESS_BAR);
   if (control && control->GetControlType() == CGUIControl::GUICONTROL_PROGRESS)
   {
     // make sure we have the appropriate info set
-    CGUIProgressControl *progress = (CGUIProgressControl *)control;
+    CGUIProgressControl *progress = static_cast<CGUIProgressControl*>(control);
     if (!progress->GetInfo())
       progress->SetInfo(SYSTEM_PROGRESS_BAR);
   }
@@ -168,7 +157,8 @@ void CGUIDialogProgress::SetProgressAdvance(int nSteps/*=1*/)
   if (m_iCurrent>m_iMax)
     m_iCurrent=0;
 
-  SetPercentage((m_iCurrent*100)/m_iMax);
+  if (m_iMax > 0)
+    SetPercentage((m_iCurrent*100)/m_iMax);
 }
 
 bool CGUIDialogProgress::Abort()
@@ -181,6 +171,15 @@ void CGUIDialogProgress::ShowProgressBar(bool bOnOff)
   CSingleLock lock(m_section);
   m_showProgress = bOnOff;
   SetInvalid();
+}
+
+bool CGUIDialogProgress::Wait(int progresstime /*= 10*/)
+{
+  CEvent m_done;
+  while (!m_done.WaitMSec(progresstime) && m_active && !m_bCanceled)
+    Progress();
+
+  return !m_bCanceled;
 }
 
 void CGUIDialogProgress::Process(unsigned int currentTime, CDirtyRegionList &dirtyregions)
@@ -207,11 +206,11 @@ void CGUIDialogProgress::Process(unsigned int currentTime, CDirtyRegionList &dir
 
 void CGUIDialogProgress::OnInitWindow()
 {
-  CGUIDialogBoxBase::OnInitWindow();
-
-  SET_CONTROL_VISIBLE(CONTROL_NO_BUTTON);
-  SET_CONTROL_VISIBLE(CONTROL_PROGRESS_BAR);
+  SET_CONTROL_HIDDEN(CONTROL_YES_BUTTON);
+  SET_CONTROL_HIDDEN(CONTROL_CUSTOM_BUTTON);
   SET_CONTROL_FOCUS(CONTROL_NO_BUTTON, 0);
+
+  CGUIDialogBoxBase::OnInitWindow();
 }
 
 int CGUIDialogProgress::GetDefaultLabelID(int controlId) const

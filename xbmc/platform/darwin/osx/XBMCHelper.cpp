@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 
 #include "XBMCHelper.h"
 #include "PlatformDefs.h"
+#include "ServiceBroker.h"
 #include "Util.h"
 #include "CompileInfo.h"
 
@@ -36,10 +37,14 @@
 #include "settings/lib/Setting.h"
 #include "settings/Settings.h"
 #include "utils/SystemInfo.h"
+#include "utils/TimeUtils.h"
+#include "filesystem/Directory.h"
+#include "filesystem/File.h"
+#include "URL.h"
 
 #include "threads/Atomics.h"
 
-static long sg_singleton_lock_variable = 0;
+static std::atomic_flag sg_singleton_lock_variable = ATOMIC_FLAG_INIT;
 XBMCHelper* XBMCHelper::smp_instance = 0;
 
 #define XBMC_HELPER_PROGRAM "XBMCHelper"
@@ -69,7 +74,7 @@ XBMCHelper::XBMCHelper()
 {
   // Compute the KODI_HOME path.
   std::string homePath;
-  CUtil::GetHomePath(homePath);
+  homePath = CUtil::GetHomePath();
   m_homepath = homePath;
 
   // Compute the helper filename.
@@ -92,7 +97,7 @@ XBMCHelper::XBMCHelper()
 }
 
 /////////////////////////////////////////////////////////////////////////////
-bool XBMCHelper::OnSettingChanging(const CSetting *setting)
+bool XBMCHelper::OnSettingChanging(std::shared_ptr<const CSetting> setting)
 {
   if (setting == NULL)
     return false;
@@ -100,13 +105,13 @@ bool XBMCHelper::OnSettingChanging(const CSetting *setting)
   const std::string &settingId = setting->GetId();
   if (settingId == CSettings::SETTING_INPUT_APPLEREMOTEMODE)
   {
-    int remoteMode = ((CSettingInt*)setting)->GetValue();
+    int remoteMode = std::static_pointer_cast<const CSettingInt>(setting)->GetValue();
 
     // if it's not disabled, start the event server or else apple remote won't work
     if (remoteMode != APPLE_REMOTE_DISABLED)
     {
       // if starting the event server fails, we have to revert the change
-      if (!CSettings::GetInstance().SetBool("services.esenabled", true))
+      if (!CServiceBroker::GetSettings().SetBool("services.esenabled", true))
         return false;
     }
 
@@ -144,12 +149,16 @@ bool XBMCHelper::OnSettingChanging(const CSetting *setting)
 void XBMCHelper::Start()
 {
   int pid = GetProcessPid(XBMC_HELPER_PROGRAM);
-  if (pid == -1)
+  // try multiple times in case startup failed for some reason
+  int retries = 5;
+  while(pid == -1 && retries-- > 0)
   {
     //printf("Asking helper to start.\n");
     // use -x to have XBMCHelper read its configure file
     std::string cmd = "\"" + m_helperFile + "\" -x &";
     system(cmd.c_str());
+    usleep(500);
+    pid = GetProcessPid(XBMC_HELPER_PROGRAM);
   }
 }
 
@@ -161,7 +170,7 @@ void XBMCHelper::Stop()
   int pid = GetProcessPid(XBMC_HELPER_PROGRAM);
   if (pid != -1)
   {
-    printf("Asked to stop\n");
+    CLog::Log(LOGDEBUG,"XBMCHelper: Sending SIGKILL to %s\n", XBMC_HELPER_PROGRAM);
     kill(pid, SIGKILL);
   }
 }
@@ -175,9 +184,9 @@ void XBMCHelper::Configure()
 
   // Read the new configuration.
   m_errorStarting = false;
-  m_mode = CSettings::GetInstance().GetInt(CSettings::SETTING_INPUT_APPLEREMOTEMODE);
-  m_sequenceDelay = CSettings::GetInstance().GetInt(CSettings::SETTING_INPUT_APPLEREMOTESEQUENCETIME);
-  m_port = CSettings::GetInstance().GetInt(CSettings::SETTING_SERVICES_ESPORT);
+  m_mode = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_INPUT_APPLEREMOTEMODE);
+  m_sequenceDelay = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_INPUT_APPLEREMOTESEQUENCETIME);
+  m_port = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SERVICES_ESPORT);
 
 
   // Don't let it enable if sofa control or remote buddy is around.
@@ -188,7 +197,7 @@ void XBMCHelper::Configure()
       m_errorStarting = true;
 
     m_mode = APPLE_REMOTE_DISABLED;
-    CSettings::GetInstance().SetInt(CSettings::SETTING_INPUT_APPLEREMOTEMODE, APPLE_REMOTE_DISABLED);
+    CServiceBroker::GetSettings().SetInt(CSettings::SETTING_INPUT_APPLEREMOTEMODE, APPLE_REMOTE_DISABLED);
   }
 
   // New configuration.
@@ -263,7 +272,7 @@ void XBMCHelper::Configure()
 void XBMCHelper::HandleLaunchAgent()
 {
   bool oldAlwaysOn = m_alwaysOn;
-  m_alwaysOn = CSettings::GetInstance().GetBool(CSettings::SETTING_INPUT_APPLEREMOTEALWAYSON);
+  m_alwaysOn = CServiceBroker::GetSettings().GetBool(CSettings::SETTING_INPUT_APPLEREMOTEALWAYSON);
 
   // Installation/uninstallation.
   if (oldAlwaysOn == false && m_alwaysOn == true)
@@ -278,7 +287,8 @@ void XBMCHelper::Install()
   // Make sure directory exists.
   std::string strDir = getenv("HOME");
   strDir += "/Library/LaunchAgents";
-  CreateDirectory(strDir.c_str(), NULL);
+  CURL url = CURL(strDir);
+  XFILE::CDirectory::Create(url);
 
   // Load template.
   std::string plistData = ReadFile(m_launchAgentLocalFile.c_str());
@@ -324,7 +334,8 @@ void XBMCHelper::Uninstall()
     Start();
 
   // Remove the plist file.
-  DeleteFile(m_launchAgentInstallFile.c_str());
+  CURL url = CURL(m_launchAgentInstallFile);
+  XFILE::CFile::Delete(url);
 }
 
 /////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -406,11 +406,13 @@ void CGUIListItem::SetProperty(const std::string &strKey, const CVariant &value)
   }
 }
 
-CVariant CGUIListItem::GetProperty(const std::string &strKey) const
+const CVariant &CGUIListItem::GetProperty(const std::string &strKey) const
 {
   PropertyMap::const_iterator iter = m_mapProperties.find(strKey);
+  static CVariant nullVariant = CVariant(CVariant::VariantTypeNull);
+  
   if (iter == m_mapProperties.end())
-    return CVariant(CVariant::VariantTypeNull);
+    return nullVariant;
 
   return iter->second;
 }

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -35,12 +35,11 @@ CGUIViewControl::CGUIViewControl(void)
 {
   m_viewAsControl = -1;
   m_parentWindow = WINDOW_INVALID;
-  m_fileItems = NULL;
+  m_fileItems = nullptr;
   Reset();
 }
 
-CGUIViewControl::~CGUIViewControl(void)
-{ }
+CGUIViewControl::~CGUIViewControl(void) = default;
 
 void CGUIViewControl::Reset()
 {
@@ -52,7 +51,7 @@ void CGUIViewControl::Reset()
 void CGUIViewControl::AddView(const CGUIControl *control)
 {
   if (!control || !control->IsContainer()) return;
-  m_allViews.push_back((CGUIControl *)control);
+  m_allViews.push_back(const_cast<CGUIControl*>(control));
 }
 
 void CGUIViewControl::SetViewControlID(int control)
@@ -68,7 +67,7 @@ void CGUIViewControl::SetParentWindow(int window)
 void CGUIViewControl::SetCurrentView(int viewMode, bool bRefresh /* = false */)
 {
   // grab the previous control
-  CGUIControl *previousView = NULL;
+  CGUIControl *previousView = nullptr;
   if (m_currentView >= 0 && m_currentView < (int)m_visibleViews.size())
     previousView = m_visibleViews[m_currentView];
 
@@ -127,7 +126,7 @@ void CGUIViewControl::SetCurrentView(int viewMode, bool bRefresh /* = false */)
     g_windowManager.SendMessage(msg, m_parentWindow);
   }
 
-  UpdateViewAsControl(((IGUIContainer *)pNewView)->GetLabel());
+  UpdateViewAsControl(static_cast<IGUIContainer*>(pNewView)->GetLabel());
 }
 
 void CGUIViewControl::SetItems(CFileItemList &items)
@@ -138,7 +137,7 @@ void CGUIViewControl::SetItems(CFileItemList &items)
   UpdateView();
 }
 
-void CGUIViewControl::UpdateContents(const CGUIControl *control, int currentItem)
+void CGUIViewControl::UpdateContents(const CGUIControl *control, int currentItem) const
 {
   if (!control || !m_fileItems) return;
   CGUIMessage msg(GUI_MSG_LABEL_BIND, m_parentWindow, control->GetID(), currentItem, 0, m_fileItems);
@@ -261,21 +260,27 @@ int CGUIViewControl::GetCurrentControl() const
 // returns the number-th view's viewmode (type and id)
 int CGUIViewControl::GetViewModeNumber(int number) const
 {
-  IGUIContainer *nextView = NULL;
+  IGUIContainer *nextView = nullptr;
   if (number >= 0 && number < (int)m_visibleViews.size())
-    nextView = (IGUIContainer *)m_visibleViews[number];
+    nextView = static_cast<IGUIContainer*>(m_visibleViews[number]);
   else if (m_visibleViews.size())
-    nextView = (IGUIContainer *)m_visibleViews[0];
+    nextView = static_cast<IGUIContainer*>(m_visibleViews[0]);
   if (nextView)
     return (nextView->GetType() << 16) | nextView->GetID();
   return 0;  // no view modes :(
+}
+
+// returns the amount of visible views
+int CGUIViewControl::GetViewModeCount() const
+{
+  return static_cast<int>(m_visibleViews.size());
 }
 
 int CGUIViewControl::GetViewModeByID(int id) const
 {
   for (unsigned int i = 0; i < m_visibleViews.size(); ++i)
   {
-    IGUIContainer *view = (IGUIContainer *)m_visibleViews[i];
+    IGUIContainer *view = static_cast<IGUIContainer*>(m_visibleViews[i]);
     if (view->GetID() == id)
       return (view->GetType() << 16) | view->GetID();
   }
@@ -290,7 +295,7 @@ int CGUIViewControl::GetNextViewMode(int direction) const
 
   int viewNumber = (m_currentView + direction) % (int)m_visibleViews.size();
   if (viewNumber < 0) viewNumber += m_visibleViews.size();
-  IGUIContainer *nextView = (IGUIContainer *)m_visibleViews[viewNumber];
+  IGUIContainer *nextView = static_cast<IGUIContainer*>(m_visibleViews[viewNumber]);
   return (nextView->GetType() << 16) | nextView->GetID();
 }
 
@@ -307,7 +312,7 @@ int CGUIViewControl::GetView(VIEW_TYPE type, int id) const
 {
   for (int i = 0; i < (int)m_visibleViews.size(); i++)
   {
-    IGUIContainer *view = (IGUIContainer *)m_visibleViews[i];
+    IGUIContainer *view = static_cast<IGUIContainer*>(m_visibleViews[i]);
     if ((type == VIEW_TYPE_NONE || type == view->GetType()) && (!id || view->GetID() == id))
       return i;
   }
@@ -320,9 +325,9 @@ void CGUIViewControl::UpdateViewAsControl(const std::string &viewLabel)
   std::vector< std::pair<std::string, int> > labels;
   for (unsigned int i = 0; i < m_visibleViews.size(); i++)
   {
-    IGUIContainer *view = (IGUIContainer *)m_visibleViews[i];
+    IGUIContainer *view = static_cast<IGUIContainer*>(m_visibleViews[i]);
     std::string label = StringUtils::Format(g_localizeStrings.Get(534).c_str(), view->GetLabel().c_str()); // View: %s
-    labels.push_back(make_pair(label, i));
+    labels.emplace_back(std::move(label), i);
   }
   CGUIMessage msg(GUI_MSG_SET_LABELS, m_parentWindow, m_viewAsControl, m_currentView);
   msg.SetPointer(&labels);
@@ -346,7 +351,7 @@ void CGUIViewControl::UpdateViewVisibility()
     CGUIControl *view = m_allViews[i];
     if (view->HasVisibleCondition())
     {
-      view->UpdateVisibility();
+      view->UpdateVisibility(nullptr);
       if (view->IsVisibleFromSkin())
         m_visibleViews.push_back(view);
     }

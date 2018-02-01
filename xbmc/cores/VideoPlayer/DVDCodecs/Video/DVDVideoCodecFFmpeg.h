@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #include "cores/VideoPlayer/DVDStreamInfo.h"
 #include "DVDVideoCodec.h"
 #include "DVDResource.h"
+#include "DVDVideoPPFFmpeg.h"
 #include <string>
 #include <vector>
 
@@ -36,97 +37,94 @@ extern "C" {
 #include "libpostproc/postprocess.h"
 }
 
-class CCriticalSection;
+class CVideoBufferPoolFFmpeg;
 
-class CDVDVideoCodecFFmpeg : public CDVDVideoCodec
+class CDVDVideoCodecFFmpeg : public CDVDVideoCodec, public ICallbackHWAccel
 {
 public:
-  class IHardwareDecoder : public IDVDResourceCounted<IHardwareDecoder>
-  {
-    public:
-    IHardwareDecoder() {}
-    virtual ~IHardwareDecoder() {};
-    virtual bool Open(AVCodecContext* avctx, AVCodecContext* mainctx, const enum AVPixelFormat, unsigned int surfaces) = 0;
-    virtual int  Decode(AVCodecContext* avctx, AVFrame* frame) = 0;
-    virtual bool GetPicture(AVCodecContext* avctx, AVFrame* frame, DVDVideoPicture* picture) = 0;
-    virtual int  Check(AVCodecContext* avctx) = 0;
-    virtual void Reset() {}
-    virtual unsigned GetAllowedReferences() { return 0; }
-    virtual bool CanSkipDeint() {return false; }
-    virtual const std::string Name() = 0;
-    virtual void SetCodecControl(int flags) {};
-  };
+  explicit CDVDVideoCodecFFmpeg(CProcessInfo &processInfo);
+  ~CDVDVideoCodecFFmpeg() override;
+  bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options) override;
+  bool AddData(const DemuxPacket &packet) override;
+  void Reset() override;
+  void Reopen() override;
+  CDVDVideoCodec::VCReturn GetPicture(VideoPicture* pVideoPicture) override;
+  const char* GetName() override { return m_name.c_str(); }; // m_name is never changed after open
+  unsigned GetConvergeCount() override;
+  unsigned GetAllowedReferences() override;
+  bool GetCodecStats(double &pts, int &droppedFrames, int &skippedPics) override;
+  void SetCodecControl(int flags) override;
 
-  CDVDVideoCodecFFmpeg();
-  virtual ~CDVDVideoCodecFFmpeg();
-  virtual bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options);
-  virtual void Dispose();
-  virtual int Decode(uint8_t* pData, int iSize, double dts, double pts);
-  virtual void Reset();
-  virtual void Reopen();
-  bool GetPictureCommon(DVDVideoPicture* pDvdVideoPicture);
-  virtual bool GetPicture(DVDVideoPicture* pDvdVideoPicture);
-  virtual void SetDropState(bool bDrop);
-  virtual const char* GetName() { return m_name.c_str(); }; // m_name is never changed after open
-  virtual unsigned GetConvergeCount();
-  virtual unsigned GetAllowedReferences();
-  virtual bool GetCodecStats(double &pts, int &droppedPics);
-  virtual void SetCodecControl(int flags);
-
-  IHardwareDecoder * GetHardware()                           { return m_pHardware; };
-  void               SetHardware(IHardwareDecoder* hardware);
+  IHardwareDecoder* GetHWAccel() override;
+  bool GetPictureCommon(VideoPicture* pVideoPicture) override;
 
 protected:
+  void Dispose();
   static enum AVPixelFormat GetFormat(struct AVCodecContext * avctx, const AVPixelFormat * fmt);
 
   int  FilterOpen(const std::string& filters, bool scale);
   void FilterClose();
-  int  FilterProcess(AVFrame* frame);
+  CDVDVideoCodec::VCReturn FilterProcess(AVFrame* frame);
   void SetFilters();
+  void UpdateName();
+  bool SetPictureParams(VideoPicture* pVideoPicture);
 
-  void UpdateName()
-  {
-    if(m_pCodecContext->codec->name)
-      m_name = std::string("ff-") + m_pCodecContext->codec->name;
-    else
-      m_name = "ffmpeg";
-
-    if(m_pHardware)
-      m_name += "-" + m_pHardware->Name();
-  }
+  bool HasHardware() { return m_pHardware != nullptr; };
+  void SetHardware(IHardwareDecoder *hardware);
 
   AVFrame* m_pFrame;
   AVFrame* m_pDecodedFrame;
   AVCodecContext* m_pCodecContext;
+  std::shared_ptr<CVideoBufferPoolFFmpeg> m_videoBufferPool;
 
-  std::string       m_filters;
-  std::string       m_filters_next;
-  AVFilterGraph*   m_pFilterGraph;
+  std::string m_filters;
+  std::string m_filters_next;
+  AVFilterGraph* m_pFilterGraph;
   AVFilterContext* m_pFilterIn;
   AVFilterContext* m_pFilterOut;
-  AVFrame*         m_pFilterFrame;
-  bool m_filterEof;
+  AVFrame* m_pFilterFrame;
+  bool m_filterEof = false;
+  bool m_eof;
+
+  CDVDVideoPPFFmpeg m_postProc;
 
   int m_iPictureWidth;
   int m_iPictureHeight;
 
   int m_iScreenWidth;
   int m_iScreenHeight;
-  int m_iOrientation;// orientation of the video in degress counter clockwise
-
-  unsigned int m_uSurfacesCount;
+  int m_iOrientation;// orientation of the video in degrees counter clockwise
 
   std::string m_name;
   int m_decoderState;
   IHardwareDecoder *m_pHardware;
   int m_iLastKeyframe;
   double m_dts;
-  bool   m_started;
+  bool m_started = false;
   std::vector<AVPixelFormat> m_formats;
   double m_decoderPts;
   int    m_skippedDeint;
+  int    m_droppedFrames;
   bool   m_requestSkipDeint;
   int    m_codecControlFlags;
+  bool m_interlaced;
+  double m_DAR;
   CDVDStreamInfo m_hints;
   CDVDCodecOptions m_options;
+
+  struct CDropControl
+  {
+    CDropControl();
+    void Reset(bool init);
+    void Process(int64_t pts, bool drop);
+
+    int64_t m_lastPTS;
+    int64_t m_diffPTS;
+    int m_count;
+    enum
+    {
+      INIT,
+      VALID
+    } m_state;
+  } m_dropCtrl;
 };

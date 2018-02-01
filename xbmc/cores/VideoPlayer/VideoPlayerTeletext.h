@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,28 +30,28 @@ class CDVDStreamInfo;
 class CDVDTeletextData : public CThread, public IDVDStreamPlayer
 {
 public:
-  CDVDTeletextData();
-  ~CDVDTeletextData();
+  explicit CDVDTeletextData(CProcessInfo &processInfo);
+  ~CDVDTeletextData() override;
 
   bool CheckStream(CDVDStreamInfo &hints);
-  bool OpenStream(CDVDStreamInfo &hints);
-  void CloseStream(bool bWaitForBuffers);
+  bool OpenStream(CDVDStreamInfo hints) override;
+  void CloseStream(bool bWaitForBuffers) override;
   void Flush();
 
   // waits until all available data has been rendered
   void WaitForBuffers() { m_messageQueue.WaitUntilEmpty(); }
-  bool AcceptsData() const { return !m_messageQueue.IsFull(); }
-  void SendMessage(CDVDMsg* pMsg, int priority = 0) { if(m_messageQueue.IsInited()) m_messageQueue.Put(pMsg, priority); }
-  void FlushMessages() { m_messageQueue.Flush(); }
-  bool IsInited() const { return true; }
-  bool IsStalled() const { return true; }
+  bool AcceptsData() const override { return !m_messageQueue.IsFull(); }
+  void SendMessage(CDVDMsg* pMsg, int priority = 0) override { if(m_messageQueue.IsInited()) m_messageQueue.Put(pMsg, priority); }
+  void FlushMessages() override { m_messageQueue.Flush(); }
+  bool IsInited() const override { return true; }
+  bool IsStalled() const override { return true; }
 
   TextCacheStruct_t* GetTeletextCache() { return &m_TXTCache; }
   void LoadPage(int p, int sp, unsigned char* buffer);
 
 protected:
-  virtual void OnExit();
-  virtual void Process();
+  void OnExit() override;
+  void Process() override;
 
 private:
   void ResetTeletextCache();

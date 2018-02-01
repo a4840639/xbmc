@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <initializer_list>
+#include <memory>
 #include <vector>
 
 #include "threads/Condition.h"
@@ -48,7 +50,7 @@ class CEvent : public XbmcThreads::NonCopyable
   unsigned int numWaits;
 
   CCriticalSection groupListMutex; // lock for the groups list
-  std::vector<XbmcThreads::CEventGroup*> * groups;
+  std::unique_ptr<std::vector<XbmcThreads::CEventGroup*>> groups;
 
   /**
    * To satisfy the TightConditionVariable requirements and allow the 
@@ -69,7 +71,7 @@ class CEvent : public XbmcThreads::NonCopyable
 
 public:
   inline CEvent(bool manual = false, bool signaled_ = false) : 
-    manualReset(manual), signaled(signaled_), numWaits(0), groups(NULL), condVar(actualCv,signaled) {}
+    manualReset(manual), signaled(signaled_), numWaits(0), condVar(actualCv,signaled) {}
 
   inline void Reset() { CSingleLock lock(mutex); signaled = false; }
   void Set();
@@ -111,12 +113,12 @@ namespace XbmcThreads
   class CEventGroup : public NonCopyable
   {
     std::vector<CEvent*> events;
-    CEvent* signaled;
+    CEvent* signaled{};
     XbmcThreads::ConditionVariable actualCv;
-    XbmcThreads::TightConditionVariable<CEvent*&> condVar;
+    XbmcThreads::TightConditionVariable<CEvent*&> condVar{actualCv, signaled};
     CCriticalSection mutex;
 
-    unsigned int numWaits;
+    unsigned int numWaits{0};
 
     // This is ONLY called from CEvent::Set.
     inline void Set(CEvent* child) { CSingleLock l(mutex); signaled = child; condVar.notifyAll(); }
@@ -124,22 +126,11 @@ namespace XbmcThreads
     friend class ::CEvent;
 
   public:
-
     /**
-     * Create a CEventGroup from a number of CEvents. num is the number
-     *  of Events that follow. E.g.:
-     *
-     *  CEventGroup g(3, event1, event2, event3);
+     * Create a CEventGroup from a number of CEvents.
      */
-    CEventGroup(int num, CEvent* v1, ...);
+    CEventGroup(std::initializer_list<CEvent*> events);
 
-    /**
-     * Create a CEventGroup from a number of CEvents. The parameters
-     *  should form a NULL terminated list of CEvent*'s
-     *
-     *  CEventGroup g(event1, event2, event3, NULL);
-     */
-    CEventGroup(CEvent* v1, ...);
     ~CEventGroup();
 
     /**
@@ -151,7 +142,7 @@ namespace XbmcThreads
 
     /**
      * This will block until any one of the CEvents in the group are
-     * signaled or the timeout is reachec. If an event is signaled then
+     * signaled or the timeout is reached. If an event is signaled then
      * it will return a pointer to that CEvent, otherwise it will return
      * NULL.
      */

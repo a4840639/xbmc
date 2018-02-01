@@ -32,6 +32,7 @@ function usage {
        [-p | --prefix]    ... ffmepg install prefix
        [-d | --download]  ... no build, download tarfile only
        [-r | --release]   ... disable debugging symbols
+       [-s | --shared]    ... build shared libraries
        [-j]               ... make concurrency level
        [--cpu=CPU]        ... minimum required CPU
        [--arch=ARCH]      ... select architecture
@@ -60,6 +61,10 @@ do
       ;;
     -r | --release)
       FLAGS="$FLAGS --disable-debug" 
+      shift
+      ;;
+    -s | --shared)
+      FLAGS="$FLAGS --enable-shared"
       shift
       ;;
     --disable-optimizations)
@@ -111,8 +116,8 @@ then
 fi
 
 [ -f ${ARCHIVE} ] ||
-  curl -Ls --create-dirs -f -o ${ARCHIVE} ${BASE_URL}/${VERSION}.tar.gz ||
-  { echo "error fetching ${BASE_URL}/${VERSION}.tar.gz" ; exit 3; }
+  curl -Ls --create-dirs -f -o ${ARCHIVE} ${BASE_URL}/archive/${VERSION}.tar.gz ||
+  { echo "error fetching ${BASE_URL}/archive/${VERSION}.tar.gz" ; exit 3; }
 [ $downloadonly ] && exit 0
 
 [ -d ffmpeg-${VERSION} ] && rm -rf ffmpeg-${VERSION} && rm .ffmpeg-installed >/dev/null 2>&1
@@ -133,7 +138,6 @@ CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
 	--disable-devices \
 	--disable-ffplay \
 	--disable-ffmpeg \
-	--disable-sdl \
 	--disable-ffprobe \
 	--disable-ffserver \
 	--disable-doc \
@@ -152,18 +156,14 @@ CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
 	--enable-encoder=aac \
 	--enable-encoder=wmav2 \
 	--enable-protocol=http \
-	--enable-libvorbis \
-	--enable-muxer=ogg \
-	--enable-encoder=libvorbis \
 	--enable-encoder=png \
 	--enable-encoder=mjpeg \
 	--enable-nonfree \
 	--enable-pthreads \
+	--enable-pic \
 	--enable-zlib \
-	--disable-mips32r2 \
-	--disable-mipsdspr1 \
+	--disable-mipsdsp \
 	--disable-mipsdspr2 \
-	--enable-libdcadec \
         ${FLAGS}
 
 make -j ${BUILDTHREADS} 

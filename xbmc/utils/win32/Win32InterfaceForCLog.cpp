@@ -1,6 +1,6 @@
 /*
 *      Copyright (C) 2014 Team XBMC
-*      http://xbmc.org
+*      http://kodi.tv
 *
 *  This Program is free software; you can redistribute it and/or modify
 *  it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 #endif //!TARGET_WINDOWS
 
 #include "Win32InterfaceForCLog.h"
-#include "win32/WIN32Util.h"
+#include "platform/win32/WIN32Util.h"
 #include "utils/StringUtils.h"
 #include "utils/auto_buffer.h"
 
@@ -56,11 +56,21 @@ bool CWin32InterfaceForCLog::OpenLogFile(const std::string& logFilename, const s
   if (!strLogFileOldW.empty())
   {
     (void)DeleteFileW(strLogFileOldW.c_str()); // if it's failed, try to continue
+#ifdef TARGET_WINDOWS_STORE
+    (void)MoveFileEx(strLogFileW.c_str(), strLogFileOldW.c_str(), MOVEFILE_REPLACE_EXISTING); // if it's failed, try to continue
+#else
     (void)MoveFileW(strLogFileW.c_str(), strLogFileOldW.c_str()); // if it's failed, try to continue
+#endif
   }
 
+#ifdef TARGET_WINDOWS_STORE
+  m_hFile = CreateFile2(strLogFileW.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+                                  CREATE_ALWAYS, NULL);
+#else
   m_hFile = CreateFileW(strLogFileW.c_str(), GENERIC_WRITE, FILE_SHARE_READ, NULL,
-                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+#endif
+
   if (m_hFile == INVALID_HANDLE_VALUE)
     return false;
 
@@ -110,11 +120,12 @@ void CWin32InterfaceForCLog::PrintDebugString(const std::string& debugString)
 #endif // _DEBUG
 }
 
-void CWin32InterfaceForCLog::GetCurrentLocalTime(int& hour, int& minute, int& second)
+void CWin32InterfaceForCLog::GetCurrentLocalTime(int& hour, int& minute, int& second, double& millisecond)
 {
   SYSTEMTIME time;
   GetLocalTime(&time);
   hour = time.wHour;
   minute = time.wMinute;
   second = time.wSecond;
+  millisecond = static_cast<double>(time.wMilliseconds);
 }

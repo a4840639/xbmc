@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -59,6 +59,8 @@ class Protocol
 public:
   Protocol(std::string name, CEvent* inEvent, CEvent *outEvent)
     : portName(name), inDefered(false), outDefered(false) {containerInEvent = inEvent; containerOutEvent = outEvent;};
+  Protocol(std::string name)
+    : Protocol(name, nullptr, nullptr) {}
   virtual ~Protocol();
   Message *GetMessage();
   void ReturnMessage(Message *msg);

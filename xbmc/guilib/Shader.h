@@ -25,7 +25,6 @@
 #include <vector>
 #include <string>
 
-#if defined(HAS_GL) || defined(HAS_GLES)
 #include "system_gl.h"
 
 namespace Shaders {
@@ -36,8 +35,8 @@ namespace Shaders {
   class CShader
   {
   public:
-    CShader() { m_compiled = false; }
-    virtual ~CShader() {}
+    CShader() = default;
+    virtual ~CShader() = default;
     virtual bool Compile() = 0;
     virtual void Free() = 0;
     virtual GLuint Handle() = 0;
@@ -50,8 +49,7 @@ namespace Shaders {
     std::string m_source;
     std::string m_lastLog;
     std::vector<std::string> m_attr;
-    bool m_compiled;
-
+    bool m_compiled = false;
   };
 
 
@@ -61,30 +59,21 @@ namespace Shaders {
   class CVertexShader : public CShader
   {
   public:
-    CVertexShader() { m_vertexShader = 0; }
-    virtual ~CVertexShader() { Free(); }
-    virtual void Free() {}
-    virtual GLuint Handle() { return m_vertexShader; }
+    CVertexShader() = default;
+    ~CVertexShader() override { Free(); }
+    void Free() override {}
+    GLuint Handle() override { return m_vertexShader; }
 
   protected:
-    GLuint m_vertexShader;
+    GLuint m_vertexShader = 0;
   };
 
   class CGLSLVertexShader : public CVertexShader
   {
   public:
-    virtual void Free();
-    virtual bool Compile();
+    void Free() override;
+    bool Compile() override;
   };
-
-#ifndef HAS_GLES
-  class CARBVertexShader : public CVertexShader
-  {
-  public:
-    virtual void Free();
-    virtual bool Compile();
-  };
-#endif
 
 
   //////////////////////////////////////////////////////////////////////
@@ -93,31 +82,21 @@ namespace Shaders {
   class CPixelShader : public CShader
   {
   public:
-    CPixelShader() { m_pixelShader = 0; }
-    virtual ~CPixelShader() { Free(); }
-    virtual void Free() {}
-    virtual GLuint Handle() { return m_pixelShader; }
+    CPixelShader() = default;
+    ~CPixelShader() override { Free(); }
+    void Free() override {}
+    GLuint Handle() override { return m_pixelShader; }
 
   protected:
-    GLuint m_pixelShader;
+    GLuint m_pixelShader = 0;
   };
-
 
   class CGLSLPixelShader : public CPixelShader
   {
   public:
-    virtual void Free();
-    virtual bool Compile();
+    void Free() override;
+    bool Compile() override;
   };
-
-#ifndef HAS_GLES
-  class CARBPixelShader : public CPixelShader
-  {
-  public:
-    virtual void Free();
-    virtual bool Compile();
-  };
-#endif
 
   //////////////////////////////////////////////////////////////////////
   // CShaderProgram - the complete shader consisting of both the vertex
@@ -126,17 +105,10 @@ namespace Shaders {
   class CShaderProgram
   {
   public:
-    CShaderProgram()
-      {
-        m_ok = false;
-        m_shaderProgram = 0;
-        m_pFP = NULL;
-        m_pVP = NULL;
-      }
+    CShaderProgram() = default;
 
     virtual ~CShaderProgram()
       {
-        Free();
         delete m_pFP;
         delete m_pVP;
       }
@@ -150,9 +122,6 @@ namespace Shaders {
     // returns true if shader is compiled and linked
     bool OK() const { return m_ok; }
 
-    // free resources
-    virtual void Free() {}
-
     // return the vertex shader object
     CVertexShader* VertexShader() { return m_pVP; }
 
@@ -162,7 +131,7 @@ namespace Shaders {
     // compile and link the shaders
     virtual bool CompileAndLink() = 0;
 
-    // override to to perform custom tasks on successfull compilation
+    // override to to perform custom tasks on successful compilation
     // and linkage. E.g. obtaining handles to shader attributes.
     virtual void OnCompiledAndLinked() {}
 
@@ -176,88 +145,37 @@ namespace Shaders {
     virtual GLuint ProgramHandle() { return m_shaderProgram; }
 
   protected:
-    CVertexShader* m_pVP;
-    CPixelShader*  m_pFP;
-    GLuint         m_shaderProgram;
-    bool           m_ok;
+    CVertexShader* m_pVP = nullptr;
+    CPixelShader*  m_pFP = nullptr;
+    GLuint m_shaderProgram = 0;
+    bool m_ok = false;
   };
 
 
-  class CGLSLShaderProgram
-    : virtual public CShaderProgram
+  class CGLSLShaderProgram : virtual public CShaderProgram
   {
   public:
-    CGLSLShaderProgram() : 
-      m_validated(false)
-      {
-        m_pFP = new CGLSLPixelShader();
-        m_pVP = new CGLSLVertexShader();
-      }
+    CGLSLShaderProgram();
     CGLSLShaderProgram(const std::string& vert
-                     , const std::string& frag) :
-      m_validated(false)
-      {
-        m_pFP = new CGLSLPixelShader();
-        m_pFP->LoadSource(frag);
-        m_pVP = new CGLSLVertexShader();
-        m_pVP->LoadSource(vert);
-      }
+                       , const std::string& frag);
+    ~CGLSLShaderProgram() override;
 
     // enable the shader
-    virtual bool Enable();
+    bool Enable() override;
 
     // disable the shader
-    virtual void Disable();
-
-    // free resources
-    virtual void Free();
+    void Disable() override;
 
     // compile and link the shaders
-    virtual bool CompileAndLink();
+    bool CompileAndLink() override;
 
   protected:
-    GLint         m_lastProgram;
-    bool          m_validated;
+    void Free();
+
+    GLint m_lastProgram;
+    bool m_validated;
   };
 
-
-#ifndef HAS_GLES
-  class CARBShaderProgram
-    : virtual public CShaderProgram
-  {
-  public:
-    CARBShaderProgram()
-      {
-        m_pFP = new CARBPixelShader();
-        m_pVP = new CARBVertexShader();
-      }
-    CARBShaderProgram(const std::string& vert
-                    , const std::string& frag)
-      {
-        m_pFP = new CARBPixelShader();
-        m_pFP->LoadSource(vert);
-        m_pVP = new CARBVertexShader();
-        m_pVP->LoadSource(vert);
-      }
-
-    // enable the shader
-    virtual bool Enable();
-
-    // disable the shader
-    virtual void Disable();
-
-    // free resources
-    virtual void Free();
-
-    // compile and link the shaders
-    virtual bool CompileAndLink();
-
-  protected:
-
-  };
-#endif
 
 } // close namespace
-
-#endif
 

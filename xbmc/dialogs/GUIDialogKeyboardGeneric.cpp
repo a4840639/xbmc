@@ -29,15 +29,26 @@
 #include "guilib/LocalizeStrings.h"
 #include "GUIUserMessages.h"
 #include "GUIDialogNumeric.h"
-#include "GUIDialogOK.h"
 #include "GUIDialogKeyboardGeneric.h"
+#include "ServiceBroker.h"
 #include "settings/Settings.h"
 #include "utils/RegExp.h"
 #include "utils/Variant.h"
 #include "utils/StringUtils.h"
 #include "messaging/ApplicationMessenger.h"
 #include "utils/CharsetConverter.h"
-#include "windowing/WindowingFactory.h"
+#include "windowing/WinSystem.h"
+#include "utils/log.h"
+
+#ifdef TARGET_ANDROID
+#include <androidjni/Intent.h>
+#include <androidjni/RecognizerIntent.h>
+#include <androidjni/ArrayList.h>
+#include "platform/android/activity/XBMCApp.h"
+
+#define ACTION_RECOGNIZE_SPEECH_REQID 543
+
+#endif
 
 using namespace KODI::MESSAGING;
 
@@ -69,6 +80,8 @@ using namespace KODI::MESSAGING;
 CGUIDialogKeyboardGeneric::CGUIDialogKeyboardGeneric()
 : CGUIDialog(WINDOW_DIALOG_KEYBOARD, "DialogKeyboard.xml")
 , CGUIKeyboard()
+, m_num(0)
+, m_listfont(nullptr)
 , m_pCharCallback(NULL)
 {
   m_bIsConfirmed = false;
@@ -87,26 +100,25 @@ CGUIDialogKeyboardGeneric::CGUIDialogKeyboardGeneric()
 
 void CGUIDialogKeyboardGeneric::OnWindowLoaded()
 {
-  g_Windowing.EnableTextInput(false);
-  CGUIEditControl *edit = (CGUIEditControl *)GetControl(CTL_EDIT);
+  CGUIEditControl *edit = static_cast<CGUIEditControl*>(GetControl(CTL_EDIT));
   if (edit)
   {
     // add control CTL_LABEL_HZCODE and CTL_LABEL_HZLIST if not exist
-    CGUIControlGroup *ParentControl = (CGUIControlGroup *)edit->GetParentControl();
+    CGUIControlGroup *ParentControl = static_cast<CGUIControlGroup*>(edit->GetParentControl());
     CLabelInfo labelInfo = edit->GetLabelInfo();
     float px = edit->GetXPosition();
     float py = edit->GetYPosition();
     float pw = edit->GetWidth();
     float ph = edit->GetHeight();
 
-    CGUILabelControl* control = ((CGUILabelControl*)GetControl(CTL_LABEL_HZCODE));
+    CGUILabelControl* control = static_cast<CGUILabelControl*>(GetControl(CTL_LABEL_HZCODE));
     if (!control)
     {
       control = new CGUILabelControl(GetID(), CTL_LABEL_HZCODE, px, py + ph, 90, 30, labelInfo, false, false);
       ParentControl->AddControl(control);
     }
 
-    control = ((CGUILabelControl*)GetControl(CTL_LABEL_HZLIST));
+    control = static_cast<CGUILabelControl*>(GetControl(CTL_LABEL_HZLIST));
     if (!control)
     {
       labelInfo.align = XBFONT_CENTER_Y;
@@ -129,13 +141,18 @@ void CGUIDialogKeyboardGeneric::OnInitWindow()
   m_currentLayout = 0;
   m_layouts.clear();
   const KeyboardLayouts& keyboardLayouts = CKeyboardLayoutManager::GetInstance().GetLayouts();
-  std::vector<CVariant> layoutNames = CSettings::GetInstance().GetList(CSettings::SETTING_LOCALE_KEYBOARDLAYOUTS);
+  std::vector<CVariant> layoutNames = CServiceBroker::GetSettings().GetList(CSettings::SETTING_LOCALE_KEYBOARDLAYOUTS);
+  std::string activeLayout = CServiceBroker::GetSettings().GetString(CSettings::SETTING_LOCALE_ACTIVEKEYBOARDLAYOUT);
 
   for (std::vector<CVariant>::const_iterator layoutName = layoutNames.begin(); layoutName != layoutNames.end(); ++layoutName)
   {
     KeyboardLayouts::const_iterator keyboardLayout = keyboardLayouts.find(layoutName->asString());
     if (keyboardLayout != keyboardLayouts.end())
+    {
       m_layouts.push_back(keyboardLayout->second);
+      if (layoutName->asString() == activeLayout)
+        m_currentLayout = m_layouts.size() - 1;
+    }
   }
 
   // set alphabetic (capitals)
@@ -159,7 +176,7 @@ void CGUIDialogKeyboardGeneric::OnInitWindow()
   SetEditText(m_text);
 
   // get HZLIST label options
-  CGUILabelControl* pEdit = ((CGUILabelControl*)GetControl(CTL_LABEL_HZLIST));
+  CGUILabelControl* pEdit = static_cast<CGUILabelControl*>(GetControl(CTL_LABEL_HZLIST));
   CLabelInfo labelInfo = pEdit->GetLabelInfo();
   m_listfont = labelInfo.font;
   m_listwidth = pEdit->GetWidth();
@@ -177,21 +194,25 @@ void CGUIDialogKeyboardGeneric::OnInitWindow()
 
 bool CGUIDialogKeyboardGeneric::OnAction(const CAction &action)
 {
+  int actionId = action.GetID();
   bool handled = true;
-  if (action.GetID() == (KEY_VKEY | XBMCVK_BACK))
+  if (actionId == (KEY_VKEY | XBMCVK_BACK))
     Backspace();
-  else if (action.GetID() == ACTION_ENTER || (m_isKeyboardNavigationMode && action.GetID() == ACTION_SELECT_ITEM))
+  else if (actionId == ACTION_ENTER ||
+           (actionId == ACTION_SELECT_ITEM && (m_isKeyboardNavigationMode || GetFocusedControlID() == CTL_EDIT)))
     OnOK();
-  else if (action.GetID() == ACTION_SHIFT)
+  else if (actionId == ACTION_SHIFT)
     OnShift();
-  else if (action.GetID() == ACTION_SYMBOLS)
+  else if (actionId == ACTION_SYMBOLS)
     OnSymbols();
   // don't handle move left/right and select in the edit control
   else if (!m_isKeyboardNavigationMode &&
-           (action.GetID() == ACTION_MOVE_LEFT ||
-           action.GetID() == ACTION_MOVE_RIGHT ||
-           action.GetID() == ACTION_SELECT_ITEM))
+           (actionId == ACTION_MOVE_LEFT ||
+           actionId == ACTION_MOVE_RIGHT ||
+           actionId == ACTION_SELECT_ITEM))
     handled = false;
+  else if (actionId == ACTION_VOICE_RECOGNIZE)
+    OnVoiceRecognition();
   else
   {
     std::wstring wch = L"";
@@ -205,9 +226,9 @@ bool CGUIDialogKeyboardGeneric::OnAction(const CAction &action)
       CGUIControl *edit = GetControl(CTL_EDIT);
       if (edit)
         handled = edit->OnAction(action);
-      if (!handled && action.GetID() >= KEY_VKEY && action.GetID() < KEY_ASCII)
+      if (!handled && actionId >= KEY_VKEY && actionId < KEY_ASCII)
       {
-        BYTE b = action.GetID() & 0xFF;
+        BYTE b = actionId & 0xFF;
         if (b == XBMCVK_TAB)
         {
           // Toggle left/right key mode
@@ -295,9 +316,8 @@ bool CGUIDialogKeyboardGeneric::OnMessage(CGUIMessage& message)
     break;
 
   case GUI_MSG_SET_TEXT:
-  case GUI_MSG_INPUT_TEXT_EDIT:
     {
-      // the edit control only handles these messages if it is either focues
+      // the edit control only handles these messages if it is either focused
       // or its specific control ID is set in the message. As neither is the
       // case here (focus is on one of the keyboard buttons) we have to force
       // the control ID of the message to the control ID of the edit control
@@ -522,6 +542,8 @@ void CGUIDialogKeyboardGeneric::OnLayout()
   m_currentLayout++;
   if (m_currentLayout >= m_layouts.size())
     m_currentLayout = 0;
+  CKeyboardLayout layout = m_layouts.empty() ? CKeyboardLayout() : m_layouts[m_currentLayout];
+  CServiceBroker::GetSettings().SetString(CSettings::SETTING_LOCALE_ACTIVEKEYBOARDLAYOUT, layout.GetName());
   UpdateButtons();
 }
 
@@ -561,6 +583,21 @@ void CGUIDialogKeyboardGeneric::OnIPAddress()
     SetEditText(text.substr(0, start) + ip.c_str() + text.substr(start + length));
 }
 
+void CGUIDialogKeyboardGeneric::OnVoiceRecognition()
+{
+#ifdef TARGET_ANDROID
+  CJNIIntent intent = CJNIIntent(CJNIRecognizerIntent::ACTION_RECOGNIZE_SPEECH);
+  intent.putExtra(CJNIRecognizerIntent::EXTRA_LANGUAGE_MODEL, CJNIRecognizerIntent::LANGUAGE_MODEL_FREE_FORM);
+  CJNIIntent result;
+  if (CXBMCApp::WaitForActivityResult(intent, ACTION_RECOGNIZE_SPEECH_REQID, result) == CJNIBase::RESULT_OK)
+  {
+    CJNIArrayList<std::string> guesses = result.getStringArrayListExtra(CJNIRecognizerIntent::EXTRA_RESULTS);
+    if (guesses.size())
+      SetEditText(guesses.get(0));
+  }
+#endif
+}
+
 void CGUIDialogKeyboardGeneric::SetControlLabel(int id, const std::string &label)
 { // find all controls with this id, and set all their labels
   CGUIMessage message(GUI_MSG_LABEL_SET, GetID(), id);
@@ -596,7 +633,7 @@ void CGUIDialogKeyboardGeneric::Cancel()
 
 bool CGUIDialogKeyboardGeneric::ShowAndGetInput(char_callback_t pCallback, const std::string &initialString, std::string &typedString, const std::string &heading, bool bHiddenInput)
 {
-  CGUIDialogKeyboardGeneric *pKeyboard = (CGUIDialogKeyboardGeneric*)g_windowManager.GetWindow(WINDOW_DIALOG_KEYBOARD);
+  CGUIDialogKeyboardGeneric *pKeyboard = g_windowManager.GetWindow<CGUIDialogKeyboardGeneric>(WINDOW_DIALOG_KEYBOARD);
 
   if (!pKeyboard)
     return false;

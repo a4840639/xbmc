@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,9 @@
  *
  */
 
+#include <string>
+#include <vector>
+
 #include "GUIDialogBoxBase.h"
 #include "view/GUIViewControl.h"
 
@@ -29,10 +32,10 @@ class CFileItemList;
 class CGUIDialogSelect : public CGUIDialogBoxBase
 {
 public:
-  CGUIDialogSelect(void);
-  virtual ~CGUIDialogSelect(void);
-  virtual bool OnMessage(CGUIMessage& message) override;
-  virtual bool OnBack(int actionID) override;
+  CGUIDialogSelect();
+  ~CGUIDialogSelect(void) override;
+  bool OnMessage(CGUIMessage& message) override;
+  bool OnBack(int actionID) override;
 
   void Reset();
   int  Add(const std::string& strLabel);
@@ -52,11 +55,14 @@ public:
   void SetMultiSelection(bool multiSelection);
 
 protected:
-  virtual CGUIControl *GetFirstFocusableControl(int id) override;
-  virtual void OnWindowLoaded() override;
-  virtual void OnInitWindow() override;
-  virtual void OnDeinitWindow(int nextWindowID) override;
-  virtual void OnWindowUnload() override;
+  explicit CGUIDialogSelect(int windowid);
+  CGUIControl *GetFirstFocusableControl(int id) override;
+  void OnWindowLoaded() override;
+  void OnInitWindow() override;
+  void OnDeinitWindow(int nextWindowID) override;
+  void OnWindowUnload() override;
+
+  virtual void OnSelect(int idx);
 
 private:
   bool m_bButtonEnabled;

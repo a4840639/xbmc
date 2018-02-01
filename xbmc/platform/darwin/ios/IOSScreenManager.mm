@@ -18,20 +18,18 @@
  *
  */
 
-//hack around problem with xbmc's typedef int BOOL
-// and obj-c's typedef unsigned char BOOL
-#define BOOL XBMC_BOOL
 #include <sys/resource.h>
 #include <signal.h>
+#include "ServiceBroker.h"
 #include "utils/log.h"
 #include "settings/DisplaySettings.h"
 #include "threads/Event.h"
 #include "Application.h"
-#include "WindowingFactory.h"
+#include "windowing/WinSystem.h"
 #include "settings/DisplaySettings.h"
-#include "cores/AudioEngine/AEFactory.h"
+#include "ServiceBroker.h"
+#include "cores/AudioEngine/Interfaces/AE.h"
 #include "platform/darwin/DarwinUtils.h"
-#undef BOOL
 
 #import <Foundation/Foundation.h>
 #include <objc/runtime.h>
@@ -229,7 +227,7 @@ static CEvent screenChangeEvent;
 
   // re-enumerate audio devices in that case too
   // as we might gain passthrough capabilities via HDMI
-  CAEFactory::DeviceChange();
+  CServiceBroker::GetActiveAE().DeviceChange();
   return true;
 }
 //--------------------------------------------------------------
@@ -276,13 +274,13 @@ static CEvent screenChangeEvent;
   if([[UIScreen screens] count] == 1 && _screenIdx != 0)
   {
     RESOLUTION_INFO res = CDisplaySettings::GetInstance().GetResolutionInfo(RES_DESKTOP);//internal screen default res
-    g_Windowing.SetFullScreen(true, res, false);
+    CServiceBroker::GetWinSystem().SetFullScreen(true, res, false);
   }
 }
 //--------------------------------------------------------------
 + (void) updateResolutions
 {
-  g_Windowing.UpdateResolutions();
+  CServiceBroker::GetWinSystem().UpdateResolutions();
 }
 //--------------------------------------------------------------
 - (void) dealloc

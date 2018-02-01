@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ std::string CGUIString::GetAsString() const
 
 CGUITextLayout::CGUITextLayout(CGUIFont *font, bool wrap, float fHeight, CGUIFont *borderFont)
 {
-  m_font = font;
+  m_varFont = m_font = font;
   m_borderFont = borderFont;
   m_textColor = 0;
   m_wrap = wrap;
@@ -174,10 +174,10 @@ void CGUITextLayout::RenderOutline(float x, float y, color_t color, color_t outl
         align &= ~XBFONT_JUSTIFIED;
       // text centered horizontally must be computed using the original font, not the bordered
       // font, as the bordered font will be wider, and thus will end up uncentered.
-      // TODO: We should really have a better way to handle text extent - at the moment we assume
-      //       that text is rendered from a posx, posy, width, and height which isn't enough to
-      //       accurately position text. We need a vertical and horizontal offset of the baseline
-      //       and cursor as well.
+      //! @todo We should really have a better way to handle text extent - at the moment we assume
+      //!       that text is rendered from a posx, posy, width, and height which isn't enough to
+      //!       accurately position text. We need a vertical and horizontal offset of the baseline
+      //!       and cursor as well.
       float bx = x;
       if (align & XBFONT_CENTER_X)
       {
@@ -307,7 +307,7 @@ void CGUITextLayout::BidiTransform(std::vector<CGUIString> &lines, bool forceLTR
         flippedText.push_back(sectionStyle | sectionFlipped[j]);
     }
 
-    // replace the original line with the proccessed one
+    // replace the original line with the processed one
     lines[i] = CGUIString(flippedText.begin(), flippedText.end(), line.m_carriageReturn);
   }
 }

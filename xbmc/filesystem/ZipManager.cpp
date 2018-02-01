@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,22 +26,20 @@
 #include "File.h"
 #include "system.h"
 #include "URL.h"
-#include "linux/PlatformDefs.h"
+#include "platform/linux/PlatformDefs.h"
 #include "utils/CharsetConverter.h"
 #include "utils/EndianSwap.h"
 #include "utils/log.h"
+#include "utils/RegExp.h"
 #include "utils/URIUtils.h"
 
 using namespace XFILE;
 
-CZipManager::CZipManager()
-{
-}
+static const size_t ZC_FLAG_EFS = 1 << 11; // general purpose bit 11 - zip holds utf-8 filenames
 
-CZipManager::~CZipManager()
-{
+CZipManager::CZipManager() = default;
 
-}
+CZipManager::~CZipManager() = default;
 
 bool CZipManager::GetZipList(const CURL& url, std::vector<SZipEntry>& items)
 {
@@ -172,6 +170,9 @@ bool CZipManager::GetZipList(const CURL& url, std::vector<SZipEntry>& items)
   // Go to the start of central directory
   mFile.Seek(cdirOffset,SEEK_SET);
 
+  CRegExp pathTraversal;
+  pathTraversal.RegComp(PATH_TRAVERSAL);
+
   char temp[CHDR_SIZE];
   while (mFile.GetPosition() < cdirOffset + cdirSize)
   {
@@ -192,14 +193,19 @@ bool CZipManager::GetZipList(const CURL& url, std::vector<SZipEntry>& items)
       return false;
     std::string strName(bufName.get(), bufName.size());
     bufName.clear();
-    g_charsetConverter.unknownToUTF8(strName);
+    if ((ze.flags & ZC_FLAG_EFS) == 0)
+    {
+      std::string tmp(strName);
+      g_charsetConverter.ToUtf8("CP437", tmp, strName);
+    }
     ZeroMemory(ze.name, 255);
-    strncpy(ze.name, strName.c_str(), strName.size()>254 ? 254 : strName.size());
+    strncpy(ze.name, strName.c_str(), strName.size() > 254 ? 254 : strName.size());
 
     // Jump after central file header extra field and file comment
     mFile.Seek(ze.eclength + ze.clength,SEEK_CUR);
 
-    items.push_back(ze);
+    if (pathTraversal.RegFind(strName) < 0)
+      items.push_back(ze);
   }
 
   /* go through list and figure out file header lengths */

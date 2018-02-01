@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 
 #include "PictureThumbLoader.h"
 #include "Picture.h"
+#include "ServiceBroker.h"
 #include "filesystem/File.h"
 #include "FileItem.h"
 #include "TextureCache.h"
@@ -27,6 +28,7 @@
 #include "filesystem/MultiPathDirectory.h"
 #include "guilib/GUIWindowManager.h"
 #include "GUIUserMessages.h"
+#include "utils/FileExtensionProvider.h"
 #include "utils/URIUtils.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
@@ -91,7 +93,7 @@ bool CPictureThumbLoader::LoadItemCached(CFileItem* pItem)
       {
         thumb = thumbURL;
       }
-      else if (CSettings::GetInstance().GetBool(CSettings::SETTING_MYVIDEOS_EXTRACTTHUMB) && CSettings::GetInstance().GetBool(CSettings::SETTING_MYVIDEOS_EXTRACTFLAGS))
+      else if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_MYVIDEOS_EXTRACTTHUMB) && CServiceBroker::GetSettings().GetBool(CSettings::SETTING_MYVIDEOS_EXTRACTFLAGS))
       {
         CFileItem item(*pItem);
         CThumbExtractor* extract = new CThumbExtractor(item, pItem->GetPath(), true, thumbURL);
@@ -122,7 +124,7 @@ void CPictureThumbLoader::OnJobComplete(unsigned int jobID, bool success, CJob* 
 {
   if (success)
   {
-    CThumbExtractor* loader = (CThumbExtractor*)job;
+    CThumbExtractor* loader = static_cast<CThumbExtractor*>(job);
     loader->m_item.SetPath(loader->m_listpath);
     CFileItemPtr pItem(new CFileItem(loader->m_item));
     CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_UPDATE_ITEM, 0, pItem);
@@ -182,7 +184,7 @@ void CPictureThumbLoader::ProcessFoldersAndArchives(CFileItem *pItem)
 
       CFileItemList items;
 
-      CDirectory::GetDirectory(pathToUrl, items, g_advancedSettings.m_pictureExtensions, DIR_FLAG_NO_FILE_DIRS);
+      CDirectory::GetDirectory(pathToUrl, items, CServiceBroker::GetFileExtensionProvider().GetPictureExtensions(), DIR_FLAG_NO_FILE_DIRS);
       
       // create the folder thumb by choosing 4 random thumbs within the folder and putting
       // them into one thumb.
@@ -201,7 +203,7 @@ void CPictureThumbLoader::ProcessFoldersAndArchives(CFileItem *pItem)
       {
         if (pItem->IsCBZ() || pItem->IsCBR())
         {
-          CDirectory::GetDirectory(pathToUrl, items, g_advancedSettings.m_pictureExtensions, DIR_FLAG_NO_FILE_DIRS);
+          CDirectory::GetDirectory(pathToUrl, items, CServiceBroker::GetFileExtensionProvider().GetPictureExtensions(), DIR_FLAG_NO_FILE_DIRS);
           for (int i=0;i<items.Size();++i)
           {
             CFileItemPtr item = items[i];
@@ -241,8 +243,8 @@ void CPictureThumbLoader::ProcessFoldersAndArchives(CFileItem *pItem)
         {
           CTextureDetails details;
           details.file = relativeCacheFile;
-          details.width = g_advancedSettings.GetThumbSize();
-          details.height = g_advancedSettings.GetThumbSize();
+          details.width = g_advancedSettings.m_imageRes;
+          details.height = g_advancedSettings.m_imageRes;
           CTextureCache::GetInstance().AddCachedTexture(thumb, details);
           db.SetTextureForPath(pItem->GetPath(), "thumb", thumb);
           pItem->SetArt("thumb", CTextureCache::GetCachedPath(relativeCacheFile));

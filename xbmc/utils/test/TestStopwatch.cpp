@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -70,6 +70,7 @@ TEST(TestStopWatch, Reset)
   a.StartZero();
   thread.Sleep(2);
   EXPECT_GT(a.GetElapsedMilliseconds(), 1);
+  thread.Sleep(3);
   a.Reset();
-  EXPECT_LT(a.GetElapsedMilliseconds(), 1);
+  EXPECT_LT(a.GetElapsedMilliseconds(), 5);
 }

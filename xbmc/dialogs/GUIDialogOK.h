@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,20 +21,32 @@
  */
 
 #include "GUIDialogBoxBase.h"
+#include "messaging/helpers/DialogOKHelper.h"
 
 class CGUIMessage;
 class CVariant;
+
+using namespace KODI::MESSAGING;
 
 class CGUIDialogOK :
       public CGUIDialogBoxBase
 {
 public:
   CGUIDialogOK(void);
-  virtual ~CGUIDialogOK(void);
-  virtual bool OnMessage(CGUIMessage& message);
-  static void ShowAndGetInput(CVariant heading, CVariant text);
-  static void ShowAndGetInput(CVariant heading, CVariant line0, CVariant line1, CVariant line2);
+  ~CGUIDialogOK(void) override;
+  bool OnMessage(CGUIMessage& message) override;
+  static bool ShowAndGetInput(CVariant heading, CVariant text);
+  static bool ShowAndGetInput(CVariant heading, CVariant line0, CVariant line1, CVariant line2);
+  /*!
+  \brief Open a OK dialog and wait for input
+
+  \param[in] options  a struct of type DialogOKMessage containing
+  the options to set for this dialog.
+
+  \sa KODI::MESSAGING::HELPERS::DialogOKMessage
+  */
+  bool ShowAndGetInput(const HELPERS::DialogOKMessage& options);
 protected:
-  virtual void OnInitWindow();
-  virtual int GetDefaultLabelID(int controlId) const;
+  void OnInitWindow() override;
+  int GetDefaultLabelID(int controlId) const override;
 };

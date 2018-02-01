@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,20 +20,18 @@
 #pragma once
 #include "powermanagement/IPowerSyscall.h"
 #include "system.h"
-#if defined(TARGET_POSIX)
 
 class CFallbackPowerSyscall : public CPowerSyscallWithoutEvents
 {
 public:
-  virtual bool Powerdown() {return true; }
-  virtual bool Suspend() {return false; }
-  virtual bool Hibernate() {return false; }
-  virtual bool Reboot() {return true; }
+  bool Powerdown() override {return true; }
+  bool Suspend() override {return false; }
+  bool Hibernate() override {return false; }
+  bool Reboot() override {return true; }
 
-  virtual bool CanPowerdown() {return true; }
-  virtual bool CanSuspend() {return false; }
-  virtual bool CanHibernate() {return false; }
-  virtual bool CanReboot() {return true; }
-  virtual int  BatteryLevel() {return 0; }
+  bool CanPowerdown() override {return true; }
+  bool CanSuspend() override {return false; }
+  bool CanHibernate() override {return false; }
+  bool CanReboot() override {return true; }
+  int  BatteryLevel() override {return 0; }
 };
-#endif

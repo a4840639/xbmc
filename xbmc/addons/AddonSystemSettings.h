@@ -19,8 +19,10 @@
  *
  */
 
+#include "addons/IAddon.h"
 #include "settings/lib/ISettingCallback.h"
-
+#include <functional>
+#include <string>
 
 namespace ADDON
 {
@@ -33,15 +35,35 @@ class CAddonSystemSettings : public ISettingCallback
 {
 public:
   static CAddonSystemSettings& GetInstance();
-  void OnSettingAction(const CSetting* setting) override;
-  void OnSettingChanged(const CSetting* setting) override;
+  void OnSettingAction(std::shared_ptr<const CSetting> setting) override;
+  void OnSettingChanged(std::shared_ptr<const CSetting> setting) override;
+
+  bool GetActive(const TYPE& type, AddonPtr& addon);
+  bool SetActive(const TYPE& type, const std::string& addonID);
+  bool IsActive(const IAddon& addon);
+
+  /*!
+   * Attempt to unset addon as active. Returns true if addon is no longer active,
+   * false if it could not be unset (e.g. if the addon is the default)
+   */
+  bool UnsetActive(const AddonPtr& addon);
+
+  /*!
+   * Check compatibility of installed addons and attempt to migrate.
+   *
+   * @param onMigrate Called when a long running migration task takes place.
+   * @return list of addons that was modified.
+   */
+  std::vector<std::string> MigrateAddons(std::function<void(void)> onMigrate);
 
 private:
-  CAddonSystemSettings() = default;
+  CAddonSystemSettings();
   CAddonSystemSettings(const CAddonSystemSettings&) = default;
   CAddonSystemSettings& operator=(const CAddonSystemSettings&) = default;
   CAddonSystemSettings(CAddonSystemSettings&&);
   CAddonSystemSettings& operator=(CAddonSystemSettings&&);
-  virtual ~CAddonSystemSettings() = default;
+  ~CAddonSystemSettings() override = default;
+
+  const std::map<ADDON::TYPE, std::string> m_activeSettings;
 };
 };

@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,12 +30,12 @@ class Touch : public CVector
 {
 public:
   Touch() { reset(); }
-  virtual ~Touch() { }
+  ~Touch() override = default;
 
   /*!
    * \brief Resets the x/y coordinates and the time
    */
-  virtual void reset() { CVector::reset(); time = -1; }
+  void reset() override { CVector::reset(); time = -1; }
 
   /*!
    * \brief Checks if the touch is valid i.e. if the x/y coordinates and the

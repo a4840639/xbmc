@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,7 +21,10 @@
 #include "MouseStat.h"
 #include "input/Key.h"
 #include "utils/TimeUtils.h"
-#include "windowing/WindowingFactory.h"
+#include "ServiceBroker.h"
+#include "windowing/WinSystem.h"
+#include <cstring>
+#include <algorithm>
 
 CMouseStat::CMouseStat()
 {
@@ -33,9 +36,7 @@ CMouseStat::CMouseStat()
   m_Key = KEY_MOUSE_NOOP;
 }
 
-CMouseStat::~CMouseStat()
-{
-}
+CMouseStat::~CMouseStat() = default;
 
 void CMouseStat::Initialize()
 {
@@ -67,7 +68,7 @@ void CMouseStat::HandleEvent(XBMC_Event& newEvent)
   m_mouseState.y  = std::max(0, std::min(m_maxY, m_mouseState.y + dy));
 
   // Fill in the public members
-  if (newEvent.button.type == XBMC_MOUSEBUTTONDOWN)
+  if (newEvent.type == XBMC_MOUSEBUTTONDOWN)
   {
     if (newEvent.button.button == XBMC_BUTTON_LEFT) m_mouseState.button[MOUSE_LEFT_BUTTON] = true;
     if (newEvent.button.button == XBMC_BUTTON_RIGHT) m_mouseState.button[MOUSE_RIGHT_BUTTON] = true;
@@ -79,7 +80,7 @@ void CMouseStat::HandleEvent(XBMC_Event& newEvent)
     if (newEvent.button.button == XBMC_BUTTON_WHEELUP) m_mouseState.dz = 1;
     if (newEvent.button.button == XBMC_BUTTON_WHEELDOWN) m_mouseState.dz = -1;
   }
-  else if (newEvent.button.type == XBMC_MOUSEBUTTONUP)
+  else if (newEvent.type == XBMC_MOUSEBUTTONUP)
   {
     if (newEvent.button.button == XBMC_BUTTON_LEFT) m_mouseState.button[MOUSE_LEFT_BUTTON] = false;
     if (newEvent.button.button == XBMC_BUTTON_RIGHT) m_mouseState.button[MOUSE_RIGHT_BUTTON] = false;
@@ -233,7 +234,8 @@ void CMouseStat::SetActive(bool active /*=true*/)
   // 1. The mouse is active (it has been moved) AND
   // 2. The XBMC mouse is disabled in settings AND
   // 3. XBMC is not in fullscreen.
-  g_Windowing.ShowOSMouse(m_mouseState.active && !IsEnabled() && !g_Windowing.IsFullScreen());
+  CWinSystemBase &winSystem = CServiceBroker::GetWinSystem();
+  winSystem.ShowOSMouse(m_mouseState.active && !IsEnabled() && !CServiceBroker::GetWinSystem().IsFullScreen());
 }
 
 // IsActive - returns true if we have been active in the last MOUSE_ACTIVE_LENGTH period

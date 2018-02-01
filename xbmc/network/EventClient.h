@@ -20,6 +20,7 @@
  *
  */
 
+#include "ServiceBroker.h"
 #include "threads/Thread.h"
 #include "threads/CriticalSection.h"
 #include "Socket.h"
@@ -98,6 +99,7 @@ namespace EVENTCLIENT
     float Amount() const  { return m_fAmount; }
     void Load();
     const std::string& JoystickName() const { return m_joystickName; }
+    const std::string& CustomControllerName() const { return m_customControllerName; }
 
     // data
     unsigned int      m_iKeyCode;
@@ -105,6 +107,7 @@ namespace EVENTCLIENT
     std::string       m_buttonName;
     std::string       m_mapName;
     std::string       m_joystickName;
+    std::string       m_customControllerName;
     float             m_fAmount;
     bool              m_bUseAmount;
     bool              m_bRepeat;
@@ -127,7 +130,7 @@ namespace EVENTCLIENT
       Initialize();
     }
 
-    CEventClient(SOCKETS::CAddress& addr):
+    explicit CEventClient(SOCKETS::CAddress& addr):
       m_remoteAddr(addr)
     {
       Initialize();
@@ -154,8 +157,8 @@ namespace EVENTCLIENT
 
     void RefreshSettings()
     {
-      m_iRepeatDelay = CSettings::GetInstance().GetInt(CSettings::SETTING_SERVICES_ESINITIALDELAY);
-      m_iRepeatSpeed = CSettings::GetInstance().GetInt(CSettings::SETTING_SERVICES_ESCONTINUOUSDELAY);
+      m_iRepeatDelay = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SERVICES_ESINITIALDELAY);
+      m_iRepeatSpeed = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SERVICES_ESCONTINUOUSDELAY);
     }
 
     SOCKETS::CAddress& Address()
@@ -187,7 +190,7 @@ namespace EVENTCLIENT
     void FreePacketQueues();
 
     // return event states
-    unsigned int GetButtonCode(std::string& strMapName, bool& isAxis, float& amount);
+    unsigned int GetButtonCode(std::string& strMapName, bool& isAxis, float& amount, bool &isJoystick);
 
     // update mouse position
     bool GetMousePos(float& x, float& y);

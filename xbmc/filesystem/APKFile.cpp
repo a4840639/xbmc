@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -206,7 +206,7 @@ int CAPKFile::Stat(const CURL& url, struct __stat64* buffer)
 {
   memset(buffer, 0, sizeof(struct __stat64));
 
-  // do not use interal member vars here,
+  // do not use internal member vars here,
   //  we might be called without opening
   std::string path = url.GetFileName();
   std::string host = url.GetHostName();
@@ -251,7 +251,7 @@ int CAPKFile::Stat(const CURL& url, struct __stat64* buffer)
     for (int i = 0; i < numFiles; i++)
     {
       std::string name = zip_get_name(zip_archive, i, zip_flags);
-      if (!name.empty() && StringUtils::StartsWith(name, path))
+      if (!name.empty() && URIUtils::PathHasParent(name, path))
       {
         buffer->st_gid  = 0;
         buffer->st_mode = _S_IFDIR;

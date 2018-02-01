@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,13 +20,17 @@
 
 #include "GUIWindowVisualisation.h"
 #include "Application.h"
+#include "messaging/ApplicationMessenger.h"
 #include "FileItem.h"
+#include "ServiceBroker.h"
 #include "music/dialogs/GUIDialogMusicOSD.h"
 #include "GUIUserMessages.h"
 #include "GUIInfoManager.h"
 #include "guilib/GUIWindowManager.h"
-#include "input/ButtonTranslator.h"
+#include "input/InputManager.h"
 #include "input/Key.h"
+#include "pvr/PVRGUIActions.h"
+#include "pvr/PVRManager.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 
@@ -46,14 +50,15 @@ CGUIWindowVisualisation::CGUIWindowVisualisation(void)
 
 bool CGUIWindowVisualisation::OnAction(const CAction &action)
 {
-  if (CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_CONFIRMCHANNELSWITCH) &&
-      g_infoManager.IsPlayerChannelPreviewActive() &&
-      (action.GetID() == ACTION_SELECT_ITEM || CButtonTranslator::GetInstance().GetGlobalAction(action.GetButtonCode()).GetID() == ACTION_SELECT_ITEM))
+  if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_PVRPLAYBACK_CONFIRMCHANNELSWITCH) &&
+      CServiceBroker::GetPVRManager().GUIActions()->GetChannelNavigator().IsPreview() &&
+      (action.GetID() == ACTION_SELECT_ITEM ||
+       CServiceBroker::GetInputManager().GetGlobalAction(action.GetButtonCode()).GetID() == ACTION_SELECT_ITEM))
   {
     // If confirm channel switch is active, channel preview is currently shown
     // and the button that caused this action matches (global) action "Select" (OK)
     // switch to the channel currently displayed within the preview.
-    g_application.m_pPlayer->SwitchChannel(g_application.CurrentFileItem().GetPVRChannelInfoTag());
+    CServiceBroker::GetPVRManager().GUIActions()->GetChannelNavigator().SwitchToCurrentChannel();
     return true;
   }
 
@@ -71,7 +76,7 @@ bool CGUIWindowVisualisation::OnAction(const CAction &action)
   case ACTION_SHOW_INFO:
     {
       m_initTimer.Stop();
-      CSettings::GetInstance().SetBool(CSettings::SETTING_MYMUSIC_SONGTHUMBINVIS, g_infoManager.ToggleShowInfo());
+      CServiceBroker::GetSettings().SetBool(CSettings::SETTING_MYMUSIC_SONGTHUMBINVIS, g_infoManager.ToggleShowInfo());
       return true;
     }
     break;
@@ -82,7 +87,7 @@ bool CGUIWindowVisualisation::OnAction(const CAction &action)
 
   case ACTION_SHOW_GUI:
     // save the settings
-    CSettings::GetInstance().Save();
+    CServiceBroker::GetSettings().Save();
     g_windowManager.PreviousWindow();
     return true;
     break;
@@ -92,7 +97,6 @@ bool CGUIWindowVisualisation::OnAction(const CAction &action)
       if (!m_bShowPreset)
       {
         m_lockedTimer.StartZero();
-        g_infoManager.SetShowCodec(true);
       }
       passToVis = true;
     }
@@ -101,7 +105,6 @@ bool CGUIWindowVisualisation::OnAction(const CAction &action)
     {
       if (!m_lockedTimer.IsRunning() || m_bShowPreset)
         m_bShowPreset = !m_bShowPreset;
-      g_infoManager.SetShowCodec(m_bShowPreset);
       return true;
     }
     break;
@@ -114,8 +117,8 @@ bool CGUIWindowVisualisation::OnAction(const CAction &action)
       g_infoManager.SetShowInfo(true);
     }
     break;
-    // TODO: These should be mapped to it's own function - at the moment it's overriding
-    // the global action of fastforward/rewind and OSD.
+    //! @todo These should be mapped to its own function - at the moment it's overriding
+    //! the global action of fastforward/rewind and OSD.
 /*  case KEY_BUTTON_Y:
     g_application.m_CdgParser.Pause();
     return true;
@@ -163,7 +166,7 @@ bool CGUIWindowVisualisation::OnMessage(CGUIMessage& message)
   case GUI_MSG_WINDOW_DEINIT:
     {
       if (IsActive()) // save any changed settings from the OSD
-        CSettings::GetInstance().Save();
+        CServiceBroker::GetSettings().Save();
 
       // close all active modal dialogs
       g_windowManager.CloseInternalModalDialogs(true);
@@ -173,20 +176,19 @@ bool CGUIWindowVisualisation::OnMessage(CGUIMessage& message)
     {
       // check whether we've come back here from a window during which time we've actually
       // stopped playing music
-      if (message.GetParam1() == WINDOW_INVALID && !g_application.m_pPlayer->IsPlayingAudio())
+      if (message.GetParam1() == WINDOW_INVALID && !g_application.GetAppPlayer().IsPlayingAudio())
       { // why are we here if nothing is playing???
         g_windowManager.PreviousWindow();
         return true;
       }
 
       // hide or show the preset button(s)
-      g_infoManager.SetShowCodec(m_bShowPreset);
       g_infoManager.SetShowInfo(true);  // always show the info initially.
       CGUIWindow::OnMessage(message);
       if (g_infoManager.GetCurrentSongTag())
         m_tag = *g_infoManager.GetCurrentSongTag();
 
-      if (CSettings::GetInstance().GetBool(CSettings::SETTING_MYMUSIC_SONGTHUMBINVIS))
+      if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_MYMUSIC_SONGTHUMBINVIS))
       { // always on
         m_initTimer.Stop();
       }
@@ -212,7 +214,7 @@ EVENT_RESULT CGUIWindowVisualisation::OnMouseEvent(const CPoint &point, const CM
     return EVENT_RESULT_UNHANDLED;
   if (event.m_id != ACTION_MOUSE_MOVE || event.m_offsetX || event.m_offsetY)
   { // some other mouse action has occurred - bring up the OSD
-    CGUIDialog *pOSD = (CGUIDialog *)g_windowManager.GetWindow(WINDOW_DIALOG_MUSIC_OSD);
+    CGUIDialog *pOSD = g_windowManager.GetDialog(WINDOW_DIALOG_MUSIC_OSD);
     if (pOSD)
     {
       pOSD->SetAutoClose(3000);
@@ -237,7 +239,7 @@ void CGUIWindowVisualisation::FrameMove()
   if (m_initTimer.IsRunning() && m_initTimer.GetElapsedSeconds() > (float)g_advancedSettings.m_songInfoDuration)
   {
     m_initTimer.Stop();
-    if (!CSettings::GetInstance().GetBool(CSettings::SETTING_MYMUSIC_SONGTHUMBINVIS))
+    if (!CServiceBroker::GetSettings().GetBool(CSettings::SETTING_MYMUSIC_SONGTHUMBINVIS))
     { // reached end of fade in, fade out again
       g_infoManager.SetShowInfo(false);
     }
@@ -246,10 +248,6 @@ void CGUIWindowVisualisation::FrameMove()
   if (m_lockedTimer.IsRunning() && m_lockedTimer.GetElapsedSeconds() > START_FADE_LENGTH)
   {
     m_lockedTimer.Stop();
-    if (!m_bShowPreset)
-    {
-      g_infoManager.SetShowCodec(false);
-    }
   }
   CGUIWindow::FrameMove();
 }

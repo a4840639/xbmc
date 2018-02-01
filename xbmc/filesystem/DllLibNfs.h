@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2011-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -40,7 +40,7 @@ struct __stat64;
 class DllLibNfsInterface
 {
 public:
-  virtual ~DllLibNfsInterface() {}
+  virtual ~DllLibNfsInterface() = default;
 
 //  virtual struct rpc_context *rpc_init_context(void)=0;
 //  virtual void rpc_destroy_context(struct rpc_context *rpc)=0;

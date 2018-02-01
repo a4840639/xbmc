@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,8 +23,9 @@
 #include "XBMCApp.h"
 #include "Application.h"
 #include "guilib/GUIWindowManager.h"
-#include "windowing/WinEvents.h"
 #include "input/MouseStat.h"
+#include "ServiceBroker.h"
+#include "windowing/android/WinSystemAndroid.h"
 
 //#define DEBUG_VERBOSE
 
@@ -45,9 +46,9 @@ bool CAndroidMouse::onMouseEvent(AInputEvent* event)
   int32_t eventAction = AMotionEvent_getAction(event);
   int8_t mouseAction = eventAction & AMOTION_EVENT_ACTION_MASK;
   size_t mousePointerIdx = eventAction >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
-  int32_t mousePointerId = AMotionEvent_getPointerId(event, mousePointerIdx);
 
 #ifdef DEBUG_VERBOSE
+  int32_t mousePointerId = AMotionEvent_getPointerId(event, mousePointerIdx);
   CXBMCApp::android_printf("%s idx:%i, id:%i", __PRETTY_FUNCTION__, mousePointerIdx, mousePointerId);
 #endif
   float x = AMotionEvent_getX(event, mousePointerIdx);
@@ -79,14 +80,9 @@ void CAndroidMouse::MouseMove(float x, float y)
   memset(&newEvent, 0, sizeof(newEvent));
 
   newEvent.type = XBMC_MOUSEMOTION;
-  newEvent.motion.type = XBMC_MOUSEMOTION;
-  newEvent.motion.which = 0;
-  newEvent.motion.state = 0;
   newEvent.motion.x = x;
   newEvent.motion.y = y;
-  newEvent.motion.xrel = 0;
-  newEvent.motion.yrel = 0;
-  CWinEvents::MessagePush(&newEvent);
+  g_application.OnEvent(newEvent);
 }
 
 void CAndroidMouse::MouseButton(float x, float y, int32_t action, int32_t buttons)
@@ -103,8 +99,6 @@ void CAndroidMouse::MouseButton(float x, float y, int32_t action, int32_t button
     checkButtons = m_lastButtonState;
 
   newEvent.type = (action ==  AMOTION_EVENT_ACTION_DOWN) ? XBMC_MOUSEBUTTONDOWN : XBMC_MOUSEBUTTONUP;
-  newEvent.button.state = (action ==  AMOTION_EVENT_ACTION_DOWN) ? XBMC_PRESSED : XBMC_RELEASED;
-  newEvent.button.type = newEvent.type;
   newEvent.button.x = x;
   newEvent.button.y = y;
   if (checkButtons & AMOTION_EVENT_BUTTON_PRIMARY)
@@ -113,7 +107,7 @@ void CAndroidMouse::MouseButton(float x, float y, int32_t action, int32_t button
     newEvent.button.button = XBMC_BUTTON_RIGHT;
   else if (checkButtons & AMOTION_EVENT_BUTTON_TERTIARY)
     newEvent.button.button = XBMC_BUTTON_MIDDLE;
-  CWinEvents::MessagePush(&newEvent);
+  g_application.OnEvent(newEvent);
 
   m_lastButtonState = buttons;
 }
@@ -130,28 +124,22 @@ void CAndroidMouse::MouseWheel(float x, float y, float value)
   if (value > 0.0f)
   {
     newEvent.type = XBMC_MOUSEBUTTONDOWN;
-    newEvent.button.state = XBMC_PRESSED;
     newEvent.button.button = XBMC_BUTTON_WHEELUP;
   }
   else if (value < 0.0f)
   {
     newEvent.type = XBMC_MOUSEBUTTONDOWN;
-    newEvent.button.state = XBMC_PRESSED;
     newEvent.button.button = XBMC_BUTTON_WHEELDOWN;
   }
   else
     return;
 
-  newEvent.button.type = newEvent.type;
   newEvent.button.x = x;
   newEvent.button.y = y;
 
-  CWinEvents::MessagePush(&newEvent);
+  g_application.OnEvent(newEvent);
 
   newEvent.type = XBMC_MOUSEBUTTONUP;
-  newEvent.button.state = XBMC_RELEASED;
-  newEvent.button.type = newEvent.type;
 
-  CWinEvents::MessagePush(&newEvent);
+  dynamic_cast<CWinSystemAndroid&>(CServiceBroker::GetWinSystem()).MessagePush(&newEvent);
 }
-

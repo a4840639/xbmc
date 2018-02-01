@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -54,6 +54,7 @@
 @property (readonly, nonatomic, getter=isReadyToRun) BOOL readyToRun;
 @property (readonly, nonatomic, getter=isPause) BOOL pause;
 @property (readonly, getter=getCurrentScreen) UIScreen *currentScreen;
+@property (readonly, getter=getCurrentEAGLContext) EAGLContext *context;
 @property BOOL framebufferResizeRequested;
 
 - (id)initWithFrame:(CGRect)frame withScreen:(UIScreen *)screen;

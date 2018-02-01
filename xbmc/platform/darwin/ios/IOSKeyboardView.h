@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -37,8 +37,8 @@
 @property (nonatomic, retain) NSMutableString *text;
 @property (getter = isConfirmed) BOOL _confirmed;
 @property (assign, setter = registerKeyboard:) CIOSKeyboard *_iosKeyboard;
+@property CGRect _frame;
 
-- (void) setDefault:(NSString *)defaultText;
 - (void) setHeading:(NSString *)heading;
 - (void) setHidden:(BOOL)hidden;
 - (void) activate;
@@ -47,4 +47,5 @@
 - (void) textChanged:(NSNotification*)aNotification;
 - (void) setCancelFlag:(bool *)cancelFlag;
 - (void) doDeactivate:(NSDictionary *)dict;
+- (id)initWithFrameInternal;
 @end

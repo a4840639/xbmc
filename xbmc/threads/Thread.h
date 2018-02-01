@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,12 +24,12 @@
 
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <stdint.h>
 #include "Event.h"
 #include "threads/ThreadImpl.h"
 #include "threads/ThreadLocal.h"
-#include "commons/ilog.h"
 
 #ifdef TARGET_DARWIN
 #include <mach/mach.h>
@@ -39,7 +39,7 @@ class IRunnable
 {
 public:
   virtual void Run()=0;
-  virtual ~IRunnable() {}
+  virtual ~IRunnable() = default;
 };
 
 // minimum as mandated by XTL
@@ -49,10 +49,8 @@ namespace XbmcThreads { class ThreadSettings; }
 
 class CThread
 {
-  static XbmcCommons::ILogger* logger;
-
 protected:
-  CThread(const char* ThreadName);
+  explicit CThread(const char* ThreadName);
 
 public:
   CThread(IRunnable* pRunnable, const char* ThreadName);
@@ -82,8 +80,6 @@ public:
   static bool IsCurrentThread(const ThreadIdentifier tid);
   static ThreadIdentifier GetCurrentThreadId();
   static CThread* GetCurrentThread();
-  static inline void SetLogger(XbmcCommons::ILogger* logger_) { CThread::logger = logger_; }
-  static inline XbmcCommons::ILogger* GetLogger() { return CThread::logger; }
 
   virtual void OnException(){} // signal termination handler
 protected:
@@ -91,7 +87,7 @@ protected:
   virtual void OnExit(){};
   virtual void Process();
 
-  volatile bool m_bStop;
+  std::atomic<bool> m_bStop;
 
   enum WaitResponse { WAIT_INTERRUPTED = -1, WAIT_SIGNALED = 0, WAIT_TIMEDOUT = 1 };
 
@@ -102,7 +98,7 @@ protected:
    */
   inline WaitResponse AbortableWait(CEvent& event, int timeoutMillis = -1 /* indicates wait forever*/)
   {
-    XbmcThreads::CEventGroup group(&event, &m_StopEvent, NULL);
+    XbmcThreads::CEventGroup group{&event, &m_StopEvent};
     CEvent* result = timeoutMillis < 0 ? group.wait() : group.wait(timeoutMillis);
     return  result == &event ? WAIT_SIGNALED :
       (result == NULL ? WAIT_TIMEDOUT : WAIT_INTERRUPTED);
@@ -123,7 +119,7 @@ private:
   // -----------------------------------------------------------------------------------
 
   ThreadIdentifier m_ThreadId;
-  ThreadOpaque m_ThreadOpaque;
+  ThreadOpaque m_ThreadOpaque = {};
   bool m_bAutoDelete;
   CEvent m_StopEvent;
   CEvent m_TermEvent;

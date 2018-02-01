@@ -21,6 +21,7 @@
 */
 
 #include <string>
+#include <memory>
 #include <vector>
 
 class IInputCodingTable
@@ -29,7 +30,7 @@ public:
   enum { TYPE_WORD_LIST, TYPE_CONVERT_STRING };
   virtual int GetType() { return TYPE_WORD_LIST; }
 
-  virtual ~IInputCodingTable() {}
+  virtual ~IInputCodingTable() = default;
   /*! \brief Called for the active keyboard layout when it's loaded, stick any initialization here
 
       This won't be needed for most implementations so we don't set it =0 but provide a default
@@ -45,7 +46,7 @@ public:
   virtual void Deinitialize() {}
 
   /*! \brief Can be overridden if initialization is expensive to avoid calling initialize more than needed
-      \return true if initialization has beeen done and was successful, false otherwise.
+      \return true if initialization has been done and was successful, false otherwise.
   */
   virtual bool IsInitialized() const { return true; }
   virtual bool GetWordListPage(const std::string& strCode, bool isFirstPage) = 0;
@@ -58,3 +59,5 @@ public:
 protected:
   std::string m_codechars;
 };
+
+typedef std::shared_ptr<IInputCodingTable> IInputCodingTablePtr;

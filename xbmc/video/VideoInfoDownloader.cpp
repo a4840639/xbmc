@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,9 +20,8 @@
 
 #include "VideoInfoDownloader.h"
 #include "dialogs/GUIDialogProgress.h"
-#include "dialogs/GUIDialogOK.h"
 #include "messaging/ApplicationMessenger.h"
-#include "guilib/GUIWindowManager.h"
+#include "messaging/helpers/DialogOKHelper.h"
 #include "utils/log.h"
 #include "utils/Variant.h"
 
@@ -64,12 +63,7 @@ int CVideoInfoDownloader::InternalFindMovie(const std::string &strMovie,
 void CVideoInfoDownloader::ShowErrorDialog(const ADDON::CScraperError &sce)
 {
   if (!sce.Title().empty())
-  {
-    CGUIDialogOK *pdlg = (CGUIDialogOK *)g_windowManager.GetWindow(WINDOW_DIALOG_OK);
-    pdlg->SetHeading(CVariant{sce.Title()});
-    pdlg->SetLine(0, CVariant{sce.Message()});
-    pdlg->Open();
-  }
+    HELPERS::ShowOKDialogText(CVariant{ sce.Title() }, CVariant{ sce.Message() });
 }
 
 // threaded functions

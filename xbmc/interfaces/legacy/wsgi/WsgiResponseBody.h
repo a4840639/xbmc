@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,21 +25,37 @@ namespace XBMCAddon
 {
   namespace xbmcwsgi
   {
-    /**
-     * Represents the write callable returned by the start_response callable passed to a WSGI handler.
-     */
+    /// \defgroup python_xbmcwsgi_WsgiResponseBody WsgiResponseBody
+    /// \ingroup python_xbmcwsgi
+    /// @{
+    /// @brief **Represents the write callable returned by the start_response callable passed to a WSGI handler.**
+    ///
+    /// \python_class{ WsgiResponseBody() }
+    ///
+    ///-------------------------------------------------------------------------
+    ///
     class WsgiResponseBody : public AddonClass
     {
     public:
       WsgiResponseBody();
+      //! @todo Switch to 'override' usage once 14.04 (Trusty) hits EOL. swig <3.0 doesn't understand C++11
       virtual ~WsgiResponseBody();
 
-      /**
-      * Callable implemention to write data to the response.
-      */
+#ifdef DOXYGEN_SHOULD_USE_THIS
+      /// \ingroup python_xbmcwsgi_WsgiInputStreamIterator
+      /// \python_func{ operator(status, response_headers[, exc_info]) }
+      ///------------------------------------------------------------------------
+      ///
+      /// Callable implementation to write data to the response.
+      ///
+      /// @param data            string data to write
+      ///
+      operator()(...);
+#else
       void operator()(const String& data);
+#endif
 
-#ifndef SWIG
+#if !defined SWIG && !defined DOXYGEN_SHOULD_SKIP_THIS
       String m_data;
 #endif
     };

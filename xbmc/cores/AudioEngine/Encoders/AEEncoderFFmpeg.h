@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,19 +32,19 @@ class CAEEncoderFFmpeg: public IAEEncoder
 {
 public:
   CAEEncoderFFmpeg();
-  virtual ~CAEEncoderFFmpeg();
+  ~CAEEncoderFFmpeg() override;
 
-  virtual bool IsCompatible(const AEAudioFormat& format);
-  virtual bool Initialize(AEAudioFormat &format, bool allow_planar_input = false);
-  virtual void Reset();
+  bool IsCompatible(const AEAudioFormat& format) override;
+  bool Initialize(AEAudioFormat &format, bool allow_planar_input = false) override;
+  void Reset() override;
 
-  virtual unsigned int GetBitRate();
-  virtual AVCodecID GetCodecID();
-  virtual unsigned int GetFrames();
+  unsigned int GetBitRate() override;
+  AVCodecID GetCodecID() override;
+  unsigned int GetFrames() override;
 
-  virtual int Encode(uint8_t *in, int in_size, uint8_t *out, int out_size);
-  virtual int GetData(uint8_t **data);
-  virtual double GetDelay(unsigned int bufferSize);
+  int Encode(uint8_t *in, int in_size, uint8_t *out, int out_size) override;
+  int GetData(uint8_t **data) override;
+  double GetDelay(unsigned int bufferSize) override;
 private:
   unsigned int BuildChannelLayout(const int64_t ffmap, CAEChannelInfo& layout);
 
@@ -56,14 +56,12 @@ private:
   SwrContext *m_SwrCtx;
   CAEChannelInfo m_Layout;
   AVPacket m_Pkt;
-  uint8_t m_Buffer[8 + FF_MIN_BUFFER_SIZE];
+  uint8_t m_Buffer[8 + AV_INPUT_BUFFER_MIN_SIZE];
   int m_BufferSize;
   int m_OutputSize;
   double m_OutputRatio;
   double m_SampleRateMul;
   unsigned int  m_NeededFrames;
   bool m_NeedConversion;
-  uint8_t *m_ResampBuffer;
-  int m_ResampBufferSize;
 };
 

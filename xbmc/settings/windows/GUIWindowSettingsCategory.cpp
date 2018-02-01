@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,65 +23,58 @@
 #include "GUIWindowSettingsCategory.h"
 #include "GUIPassword.h"
 #include "GUIUserMessages.h"
+#include "ServiceBroker.h"
 #include "input/Key.h"
 #include "settings/DisplaySettings.h"
 #include "settings/Settings.h"
 #include "settings/lib/SettingSection.h"
+#include "settings/windows/GUIControlSettings.h"
 #include "utils/log.h"
 #include "view/ViewStateSettings.h"
 
-#define SETTINGS_PICTURES               WINDOW_SETTINGS_MYPICTURES - WINDOW_SETTINGS_START
-#define SETTINGS_PROGRAMS               WINDOW_SETTINGS_MYPROGRAMS - WINDOW_SETTINGS_START
-#define SETTINGS_WEATHER                WINDOW_SETTINGS_MYWEATHER - WINDOW_SETTINGS_START
-#define SETTINGS_MUSIC                  WINDOW_SETTINGS_MYMUSIC - WINDOW_SETTINGS_START
 #define SETTINGS_SYSTEM                 WINDOW_SETTINGS_SYSTEM - WINDOW_SETTINGS_START
-#define SETTINGS_VIDEOS                 WINDOW_SETTINGS_MYVIDEOS - WINDOW_SETTINGS_START
 #define SETTINGS_SERVICE                WINDOW_SETTINGS_SERVICE - WINDOW_SETTINGS_START
-#define SETTINGS_APPEARANCE             WINDOW_SETTINGS_APPEARANCE - WINDOW_SETTINGS_START
 #define SETTINGS_PVR                    WINDOW_SETTINGS_MYPVR - WINDOW_SETTINGS_START
+#define SETTINGS_PLAYER                 WINDOW_SETTINGS_PLAYER - WINDOW_SETTINGS_START
+#define SETTINGS_MEDIA                  WINDOW_SETTINGS_MEDIA - WINDOW_SETTINGS_START
+#define SETTINGS_INTERFACE              WINDOW_SETTINGS_INTERFACE - WINDOW_SETTINGS_START
+#define SETTINGS_GAMES                  WINDOW_SETTINGS_MYGAMES - WINDOW_SETTINGS_START
 
-#define CONTRL_BTN_LEVELS               20
+#define CONTROL_BTN_LEVELS               20
 
 typedef struct {
   int id;
   std::string name;
 } SettingGroup;
 
-static const SettingGroup s_settingGroupMap[] = { { SETTINGS_PICTURES,    "pictures" },
-                                                  { SETTINGS_PROGRAMS,    "programs" },
-                                                  { SETTINGS_WEATHER,     "weather" },
-                                                  { SETTINGS_MUSIC,       "music" },
-                                                  { SETTINGS_SYSTEM,      "system" },
-                                                  { SETTINGS_VIDEOS,      "videos" },
+static const SettingGroup s_settingGroupMap[] = { { SETTINGS_SYSTEM,      "system" },
                                                   { SETTINGS_SERVICE,     "services" },
-                                                  { SETTINGS_APPEARANCE,  "appearance" },
-                                                  { SETTINGS_PVR,         "pvr" } };
-                                                  
+                                                  { SETTINGS_PVR,         "pvr" },
+                                                  { SETTINGS_PLAYER,      "player" },
+                                                  { SETTINGS_MEDIA,       "media" },
+                                                  { SETTINGS_INTERFACE,   "interface" },
+                                                  { SETTINGS_GAMES,       "games" } };
+
 #define SettingGroupSize sizeof(s_settingGroupMap) / sizeof(SettingGroup)
 
 CGUIWindowSettingsCategory::CGUIWindowSettingsCategory()
-    : CGUIDialogSettingsManagerBase(WINDOW_SETTINGS_MYPICTURES, "SettingsCategory.xml"),
-      m_settings(CSettings::GetInstance()),
+    : CGUIDialogSettingsManagerBase(WINDOW_SETTINGS_SYSTEM, "SettingsCategory.xml"),
+      m_settings(CServiceBroker::GetSettings()),
       m_iSection(0),
       m_returningFromSkinLoad(false)
 {
-  m_settingsManager = m_settings.GetSettingsManager();
-
   // set the correct ID range...
   m_idRange.clear();
-  m_idRange.push_back(WINDOW_SETTINGS_MYPICTURES);
-  m_idRange.push_back(WINDOW_SETTINGS_MYPROGRAMS);
-  m_idRange.push_back(WINDOW_SETTINGS_MYWEATHER);
-  m_idRange.push_back(WINDOW_SETTINGS_MYMUSIC);
   m_idRange.push_back(WINDOW_SETTINGS_SYSTEM);
-  m_idRange.push_back(WINDOW_SETTINGS_MYVIDEOS);
   m_idRange.push_back(WINDOW_SETTINGS_SERVICE);
-  m_idRange.push_back(WINDOW_SETTINGS_APPEARANCE);
   m_idRange.push_back(WINDOW_SETTINGS_MYPVR);
+  m_idRange.push_back(WINDOW_SETTINGS_PLAYER);
+  m_idRange.push_back(WINDOW_SETTINGS_MEDIA);
+  m_idRange.push_back(WINDOW_SETTINGS_INTERFACE);
+  m_idRange.push_back(WINDOW_SETTINGS_MYGAMES);
 }
 
-CGUIWindowSettingsCategory::~CGUIWindowSettingsCategory()
-{ }
+CGUIWindowSettingsCategory::~CGUIWindowSettingsCategory() = default;
 
 bool CGUIWindowSettingsCategory::OnMessage(CGUIMessage &message)
 {
@@ -94,7 +87,7 @@ bool CGUIWindowSettingsCategory::OnMessage(CGUIMessage &message)
       m_returningFromSkinLoad = false;
 
       if (!message.GetStringParam(0).empty())
-        FocusCategory(message.GetStringParam(0));
+        FocusElement(message.GetStringParam(0));
 
       return true;
     }
@@ -141,14 +134,14 @@ bool CGUIWindowSettingsCategory::OnAction(const CAction &action)
         return false;
       
       CViewStateSettings::GetInstance().CycleSettingLevel();
-      CSettings::GetInstance().Save();
+      CServiceBroker::GetSettings().Save();
 
       // try to keep the current position
       std::string oldCategory;
       if (m_iCategory >= 0 && m_iCategory < (int)m_categories.size())
         oldCategory = m_categories[m_iCategory]->GetId();
 
-      SET_CONTROL_LABEL(CONTRL_BTN_LEVELS, 10036 + (int)CViewStateSettings::GetInstance().GetSettingLevel());
+      SET_CONTROL_LABEL(CONTROL_BTN_LEVELS, 10036 + (int)CViewStateSettings::GetInstance().GetSettingLevel());
       // only re-create the categories, the settings will be created later
       SetupControls(false);
 
@@ -185,7 +178,7 @@ bool CGUIWindowSettingsCategory::OnBack(int actionID)
 
 void CGUIWindowSettingsCategory::OnWindowLoaded()
 {
-  SET_CONTROL_LABEL(CONTRL_BTN_LEVELS, 10036 + (int)CViewStateSettings::GetInstance().GetSettingLevel());
+  SET_CONTROL_LABEL(CONTROL_BTN_LEVELS, 10036 + (int)CViewStateSettings::GetInstance().GetSettingLevel());
   CGUIDialogSettingsManagerBase::OnWindowLoaded();
 }
 
@@ -194,7 +187,7 @@ int CGUIWindowSettingsCategory::GetSettingLevel() const
   return (int)CViewStateSettings::GetInstance().GetSettingLevel();
 }
 
-CSettingSection* CGUIWindowSettingsCategory::GetSection()
+SettingSectionPtr CGUIWindowSettingsCategory::GetSection()
 {
   for (size_t index = 0; index < SettingGroupSize; index++)
   {
@@ -210,15 +203,37 @@ void CGUIWindowSettingsCategory::Save()
   m_settings.Save();
 }
 
-void CGUIWindowSettingsCategory::FocusCategory(const std::string& categoryId)
+CSettingsManager* CGUIWindowSettingsCategory::GetSettingsManager() const
 {
-  auto category = std::find_if(m_categories.cbegin(), m_categories.cend(),
-    [&categoryId](const CSettingCategory* category) { return category->GetId() == categoryId; });
-  if (category == m_categories.end())
-  {
-    CLog::Log(LOGERROR, "CGUIWindowSettingsCategory: asked to focus unknown category '%s'.", categoryId.c_str());
-    return;
-  }
+  return m_settings.GetSettingsManager();
+}
 
-  SET_CONTROL_FOCUS(CONTROL_SETTINGS_START_BUTTONS + std::distance(m_categories.cbegin(), category), 0);
+void CGUIWindowSettingsCategory::FocusElement(const std::string& elementId)
+{
+  for (size_t i = 0; i < m_categories.size(); ++i)
+  {
+    if (m_categories[i]->GetId() == elementId)
+    {
+      SET_CONTROL_FOCUS(CONTROL_SETTINGS_START_BUTTONS + i, 0);
+      return;
+    }
+    for (const auto& group: m_categories[i]->GetGroups())
+    {
+      for (const auto& setting : group->GetSettings())
+      {
+        if (setting->GetId() == elementId)
+        {
+          SET_CONTROL_FOCUS(CONTROL_SETTINGS_START_BUTTONS + i, 0);
+
+          auto control = GetSettingControl(elementId);
+          if (control)
+            SET_CONTROL_FOCUS(control->GetID(), 0);
+          else
+            CLog::Log(LOGERROR, "CGUIWindowSettingsCategory: failed to get control for setting '%s'.", elementId.c_str());
+          return;
+        }
+      }
+    }
+  }
+  CLog::Log(LOGERROR, "CGUIWindowSettingsCategory: failed to set focus. unknown category/setting id '%s'.", elementId.c_str());
 }

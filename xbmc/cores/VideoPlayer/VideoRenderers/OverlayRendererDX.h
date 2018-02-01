@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,8 +22,6 @@
 
 #include "OverlayRenderer.h"
 #include "guilib/D3DResource.h"
-
-#ifdef HAS_DX
 
 class CDVDOverlay;
 class CDVDOverlayImage;
@@ -52,8 +50,8 @@ namespace OVERLAY {
     : public COverlay
   {
   public:
-    COverlayImageDX(CDVDOverlayImage* o);
-    COverlayImageDX(CDVDOverlaySpu*   o);
+    explicit COverlayImageDX(CDVDOverlayImage* o);
+    explicit COverlayImageDX(CDVDOverlaySpu*   o);
     virtual ~COverlayImageDX();
 
     void Load(uint32_t* rgba, int width, int height, int stride);
@@ -66,6 +64,3 @@ namespace OVERLAY {
   };
 
 }
-
-
-#endif

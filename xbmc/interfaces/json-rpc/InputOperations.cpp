@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,7 +25,8 @@
 #include "guilib/GUIWindow.h"
 #include "guilib/GUIWindowManager.h"
 #include "guilib/GUIKeyboardFactory.h"
-#include "input/ButtonTranslator.h"
+#include "input/ActionTranslator.h"
+#include "input/Key.h"
 #include "utils/Variant.h"
 #include "input/XBMC_keyboard.h"
 #include "input/XBMC_vkeys.h"
@@ -34,9 +35,9 @@
 using namespace JSONRPC;
 using namespace KODI::MESSAGING;
 
-//TODO the breakage of the screensaver should be refactored
-//to one central super duper place for getting rid of
-//1 million dupes
+//! @todo the breakage of the screensaver should be refactored
+//! to one central super duper place for getting rid of
+//! 1 million dupes
 bool CInputOperations::handleScreenSaver()
 {
   g_application.ResetScreenSaver();
@@ -73,7 +74,7 @@ JSONRPC_STATUS CInputOperations::SendText(const std::string &method, ITransportL
   if (CGUIKeyboardFactory::SendTextToActiveKeyboard(parameterObject["text"].asString(), parameterObject["done"].asBoolean()))
     return ACK;
 
-  CGUIWindow *window = g_windowManager.GetWindow(g_windowManager.GetFocusedWindow());
+  CGUIWindow *window = g_windowManager.GetWindow(g_windowManager.GetActiveWindowOrDialog());
   if (!window)
     return ACK;
 
@@ -87,8 +88,8 @@ JSONRPC_STATUS CInputOperations::SendText(const std::string &method, ITransportL
 
 JSONRPC_STATUS CInputOperations::ExecuteAction(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
-  int action;
-  if (!CButtonTranslator::TranslateActionString(parameterObject["action"].asString().c_str(), action))
+  unsigned int action;
+  if (!CActionTranslator::TranslateString(parameterObject["action"].asString(), action))
     return InvalidParams;
 
   return SendAction(action);
@@ -141,10 +142,15 @@ JSONRPC_STATUS CInputOperations::Home(const std::string &method, ITransportLayer
 
 JSONRPC_STATUS CInputOperations::ShowCodec(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
-  return SendAction(ACTION_SHOW_CODEC);
+  return MethodNotFound;
 }
 
 JSONRPC_STATUS CInputOperations::ShowOSD(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
 {
   return SendAction(ACTION_SHOW_OSD);
+}
+
+JSONRPC_STATUS CInputOperations::ShowPlayerProcessInfo(const std::string &method, ITransportLayer *transport, IClient *client, const CVariant &parameterObject, CVariant &result)
+{
+  return SendAction(ACTION_PLAYER_PROCESS_INFO);
 }

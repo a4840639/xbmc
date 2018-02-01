@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,11 +29,11 @@ class CGUIDialogNumeric :
 public:
   enum INPUT_MODE { INPUT_TIME = 1, INPUT_DATE, INPUT_IP_ADDRESS, INPUT_PASSWORD, INPUT_NUMBER, INPUT_TIME_SECONDS };
   CGUIDialogNumeric(void);
-  virtual ~CGUIDialogNumeric(void);
-  virtual bool OnMessage(CGUIMessage& message);
-  virtual bool OnAction(const CAction &action);
-  virtual bool OnBack(int actionID);
-  virtual void FrameMove();
+  ~CGUIDialogNumeric(void) override;
+  bool OnMessage(CGUIMessage& message) override;
+  bool OnAction(const CAction &action) override;
+  bool OnBack(int actionID) override;
+  void FrameMove() override;
 
   bool IsConfirmed() const;
   bool IsCanceled() const;
@@ -56,8 +56,8 @@ public:
   static bool ShowAndGetSeconds(std::string& timeString, const std::string &heading);
 
 protected:
-  virtual void OnInitWindow();
-  virtual void OnDeinitWindow(int nextWindowID);
+  void OnInitWindow() override;
+  void OnDeinitWindow(int nextWindowID) override;
 
   void OnNumber(uint32_t num);
   void VerifyDate(bool checkYear);

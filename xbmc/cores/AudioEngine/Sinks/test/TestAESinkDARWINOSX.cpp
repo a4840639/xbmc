@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -70,15 +70,15 @@ void addPassthroughFormats(std::vector<AudioStreamBasicDescription> &streamForma
 
   FillOutASBDForLPCM(streamFormat, 96000, 2, 16, 16, false, false, false);
   streamFormat.mFormatID = kAudioFormat60958AC3;
-  streamFormats.push_back(streamFormat); // stereoFormtsWithoutPassthrough.size() + 0
+  streamFormats.push_back(streamFormat); // stereoFormatsWithoutPassthrough.size() + 0
 
   FillOutASBDForLPCM(streamFormat, 48000, 2, 16, 16, false, false, false);
   streamFormat.mFormatID = kAudioFormat60958AC3;
-  streamFormats.push_back(streamFormat); // stereoFormtsWithoutPassthrough.size() + 1
+  streamFormats.push_back(streamFormat); // stereoFormatsWithoutPassthrough.size() + 1
 
   FillOutASBDForLPCM(streamFormat, 44100, 2, 16, 16, false, false, false);
   streamFormat.mFormatID = kAudioFormat60958AC3;
-  streamFormats.push_back(streamFormat); // stereoFormtsWithoutPassthrough.size() + 2
+  streamFormats.push_back(streamFormat); // stereoFormatsWithoutPassthrough.size() + 2
 }
 
 void initStereoFormatsWithoutPassthrough()

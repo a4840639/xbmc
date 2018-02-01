@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
  */
 
 #include "Webinterface.h"
+#include "ServiceBroker.h"
 #include "addons/AddonManager.h"
 #include "utils/log.h"
 #include "utils/StringUtils.h"
@@ -26,27 +27,27 @@
 
 using namespace ADDON;
 
-std::unique_ptr<CWebinterface> CWebinterface::FromExtension(AddonProps props, const cp_extension_t* ext)
+std::unique_ptr<CWebinterface> CWebinterface::FromExtension(CAddonInfo addonInfo, const cp_extension_t* ext)
 {
   // determine the type of the webinterface
   WebinterfaceType type(WebinterfaceTypeStatic);
-  std::string webinterfaceType = CAddonMgr::GetInstance().GetExtValue(ext->configuration, "@type");
+  std::string webinterfaceType = CServiceBroker::GetAddonMgr().GetExtValue(ext->configuration, "@type");
   if (StringUtils::EqualsNoCase(webinterfaceType.c_str(), "wsgi"))
     type = WebinterfaceTypeWsgi;
   else if (!webinterfaceType.empty() && !StringUtils::EqualsNoCase(webinterfaceType.c_str(), "static") && !StringUtils::EqualsNoCase(webinterfaceType.c_str(), "html"))
-    CLog::Log(LOGWARNING, "Webinterface addon \"%s\" has specified an unsupported type \"%s\"", props.id.c_str(), webinterfaceType.c_str());
+    CLog::Log(LOGWARNING, "Webinterface addon \"%s\" has specified an unsupported type \"%s\"", addonInfo.ID().c_str(), webinterfaceType.c_str());
 
   // determine the entry point of the webinterface
   std::string entryPoint(WEBINTERFACE_DEFAULT_ENTRY_POINT);
-  std::string entry = CAddonMgr::GetInstance().GetExtValue(ext->configuration, "@entry");
+  std::string entry = CServiceBroker::GetAddonMgr().GetExtValue(ext->configuration, "@entry");
   if (!entry.empty())
     entryPoint = entry;
 
-  return std::unique_ptr<CWebinterface>(new CWebinterface(std::move(props), type, entryPoint));
+  return std::unique_ptr<CWebinterface>(new CWebinterface(std::move(addonInfo), type, entryPoint));
 }
 
-CWebinterface::CWebinterface(ADDON::AddonProps props, WebinterfaceType type,
-    const std::string &entryPoint) : CAddon(std::move(props)), m_type(type), m_entryPoint(entryPoint)
+CWebinterface::CWebinterface(ADDON::CAddonInfo addonInfo, WebinterfaceType type,
+    const std::string &entryPoint) : CAddon(std::move(addonInfo)), m_type(type), m_entryPoint(entryPoint)
 { }
 
 std::string CWebinterface::GetEntryPoint(const std::string &path) const
@@ -63,9 +64,4 @@ std::string CWebinterface::GetBaseLocation() const
     return "/addons/" + ID();
 
   return "";
-}
-
-AddonPtr CWebinterface::Clone() const
-{
-  return AddonPtr(new CWebinterface(*this));
 }

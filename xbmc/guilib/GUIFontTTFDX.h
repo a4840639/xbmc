@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,6 +30,8 @@
 #include "D3DResource.h"
 #include "GUIFontTTF.h"
 #include <list>
+#include <vector>
+#include <wrl/client.h>
 
 #define ELEMENT_ARRAY_MAX_CHAR_INDEX (2000)
 
@@ -40,38 +42,37 @@
 class CGUIFontTTFDX : public CGUIFontTTFBase, public ID3DResource
 {
 public:
-  CGUIFontTTFDX(const std::string& strFileName);
+  explicit CGUIFontTTFDX(const std::string& strFileName);
   virtual ~CGUIFontTTFDX(void);
 
-  virtual bool FirstBegin();
-  virtual void LastEnd();
-  virtual CVertexBuffer CreateVertexBuffer(const std::vector<SVertex> &vertices) const;
-  virtual void DestroyVertexBuffer(CVertexBuffer &bufferHandle) const;
+  bool FirstBegin() override;
+  void LastEnd() override;
+  CVertexBuffer CreateVertexBuffer(const std::vector<SVertex> &vertices) const override;
+  void DestroyVertexBuffer(CVertexBuffer &bufferHandle) const override;
 
-  virtual void OnDestroyDevice();
-  virtual void OnCreateDevice();
+  void OnDestroyDevice(bool fatal) override;
+  void OnCreateDevice() override;
 
   static void CreateStaticIndexBuffer(void);
   static void DestroyStaticIndexBuffer(void);
 
 protected:
-  virtual CBaseTexture* ReallocTexture(unsigned int& newHeight);
-  virtual bool CopyCharToTexture(FT_BitmapGlyph bitGlyph, unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2);
-  virtual void DeleteHardwareTexture();
+  CBaseTexture* ReallocTexture(unsigned int& newHeight) override;
+  bool CopyCharToTexture(FT_BitmapGlyph bitGlyph, unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2) override;
+  void DeleteHardwareTexture() override;
 
 private:
   bool UpdateDynamicVertexBuffer(const SVertex* pSysMem, unsigned int count);
   static void AddReference(CGUIFontTTFDX* font, CD3DBuffer* pBuffer);
   static void ClearReference(CGUIFontTTFDX* font, CD3DBuffer* pBuffer);
 
-  CD3DTexture*           m_speedupTexture;  // extra texture to speed up reallocations when the main texture is in d3dpool_default.
-                                            // that's the typical situation of Windows Vista and above.
-  ID3D11Buffer*          m_vertexBuffer;
-  unsigned               m_vertexWidth;
+  unsigned m_vertexWidth;
+  CD3DTexture* m_speedupTexture;  // extra texture to speed up reallocations
+  Microsoft::WRL::ComPtr<ID3D11Buffer> m_vertexBuffer;
   std::list<CD3DBuffer*> m_buffers;
 
-  static bool            m_staticIndexBufferCreated;
-  static ID3D11Buffer*   m_staticIndexBuffer;
+  static bool m_staticIndexBufferCreated;
+  static Microsoft::WRL::ComPtr<ID3D11Buffer> m_staticIndexBuffer;
 };
 
 #endif

@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -34,12 +34,12 @@ public:
   /**
    * Constructor
    */
-  IAEEncoder() {};
+  IAEEncoder() = default;
 
   /**
    * Destructor
    */
-  virtual ~IAEEncoder() {};
+  virtual ~IAEEncoder() = default;
 
   /**
    * Return true if the supplied format is compatible with the current open encoder.

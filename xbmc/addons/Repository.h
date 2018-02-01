@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,10 @@
  *
  */
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "Addon.h"
 #include "utils/Job.h"
 #include "utils/ProgressJob.h"
@@ -30,38 +34,40 @@ namespace ADDON
   public:
     struct DirInfo
     {
-      DirInfo() : version("0.0.0"), compressed(false), zipped(false), hashes(false) {}
+      DirInfo() : version("0.0.0"), hashes(false) {}
       AddonVersion version;
       std::string info;
       std::string checksum;
       std::string datadir;
-      bool compressed;
-      bool zipped;
       bool hashes;
     };
 
     typedef std::vector<DirInfo> DirList;
 
-    DirList m_dirs;
+    static std::unique_ptr<CRepository> FromExtension(CAddonInfo addonInfo, const cp_extension_t* ext);
 
-    static std::unique_ptr<CRepository> FromExtension(AddonProps props, const cp_extension_t* ext);
-
-    explicit CRepository(AddonProps props) : CAddon(std::move(props)) {};
-    CRepository(AddonProps props, DirList dirs);
-
-    virtual AddonPtr Clone() const;
+    explicit CRepository(CAddonInfo addonInfo) : CAddon(std::move(addonInfo)) {};
+    CRepository(CAddonInfo addonInfo, DirList dirs);
 
     /*! \brief Get the md5 hash for an addon.
      \param the addon in question.
-     \return the md5 hash for the given addon, empty if non exists.
      */
-    std::string GetAddonHash(const AddonPtr& addon) const;
+    bool GetAddonHash(const AddonPtr& addon, std::string& checksum) const;
 
-    static bool Parse(const DirInfo& dir, VECADDONS& addons);
-    static std::string FetchChecksum(const std::string& url);
+    enum FetchStatus
+    {
+      STATUS_OK,
+      STATUS_NOT_MODIFIED,
+      STATUS_ERROR
+    };
+
+    FetchStatus FetchIfChanged(const std::string& oldChecksum, std::string& checksum, VECADDONS& addons) const;
 
   private:
-    static bool FetchIndex(const std::string& url, VECADDONS& addons);
+    static bool FetchChecksum(const std::string& url, std::string& checksum) noexcept;
+    static bool FetchIndex(const DirInfo& repo, VECADDONS& addons) noexcept;
+
+    DirList m_dirs;
   };
 
   typedef std::shared_ptr<CRepository> RepositoryPtr;
@@ -70,22 +76,12 @@ namespace ADDON
   class CRepositoryUpdateJob : public CProgressJob
   {
   public:
-    CRepositoryUpdateJob(const RepositoryPtr& repo);
-    virtual ~CRepositoryUpdateJob() {}
-    virtual bool DoWork();
+    explicit CRepositoryUpdateJob(const RepositoryPtr& repo);
+    ~CRepositoryUpdateJob() override = default;
+    bool DoWork() override;
     const RepositoryPtr& GetAddon() const { return m_repo; };
 
   private:
-    enum FetchStatus
-    {
-      STATUS_OK,
-      STATUS_NOT_MODIFIED,
-      STATUS_ERROR
-    };
-
-    FetchStatus FetchIfChanged(const std::string& oldChecksum,
-        std::string& checksum, VECADDONS& addons);
-
     const RepositoryPtr m_repo;
   };
 }

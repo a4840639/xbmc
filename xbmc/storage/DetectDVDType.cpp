@@ -20,8 +20,6 @@
 
 #include "system.h"
 
-#ifdef HAS_DVD_DRIVE
-
 #include "DetectDVDType.h"
 #include "guilib/LocalizeStrings.h"
 #include "utils/StringUtils.h"
@@ -48,7 +46,6 @@
 #include "FileItem.h"
 #include "Application.h"
 #include "IoSupport.h"
-#include "cdioSupport.h"
 #include "storage/MediaManager.h"
 
 
@@ -74,9 +71,7 @@ CDetectDVDMedia::CDetectDVDMedia() : CThread("DetectDVDMedia"),
   m_pInstance = this;
 }
 
-CDetectDVDMedia::~CDetectDVDMedia()
-{
-}
+CDetectDVDMedia::~CDetectDVDMedia() = default;
 
 void CDetectDVDMedia::OnStartup()
 {
@@ -98,7 +93,7 @@ void CDetectDVDMedia::Process()
 
   while (( !m_bStop ))
   {
-    if (g_application.m_pPlayer->IsPlayingVideo())
+    if (g_application.GetAppPlayer().IsPlayingVideo())
     {
       Sleep(10000);
     }
@@ -132,7 +127,7 @@ VOID CDetectDVDMedia::UpdateDvdrom()
     switch (GetTrayState())
     {
       case DRIVE_NONE:
-        // TODO: reduce / stop polling for drive updates
+        //! @todo reduce / stop polling for drive updates
         break;
 
       case DRIVE_OPEN:
@@ -498,4 +493,3 @@ const std::string &CDetectDVDMedia::GetDVDPath()
 {
   return m_diskPath;
 }
-#endif

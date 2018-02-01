@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,13 +18,15 @@
  *
  */
 
-#ifdef HAS_DX
-
 #include "D3DResource.h"
 #include "GUIShaderDX.h"
 #include "GUITextureD3D.h"
+#include "rendering/dx/RenderContext.h"
 #include "Texture.h"
-#include "windowing/WindowingFactory.h"
+
+#include <DirectXMath.h>
+
+using namespace DirectX;
 
 CGUITextureD3D::CGUITextureD3D(float posX, float posY, float width, float height, const CTextureInfo &texture)
 : CGUITextureBase(posX, posY, width, height, texture)
@@ -45,7 +47,7 @@ void CGUITextureD3D::Begin(color_t color)
 
   m_col = color;
 
-  g_Windowing.SetAlphaBlendEnable(true);
+  DX::Windowing().SetAlphaBlendEnable(true);
 }
 
 void CGUITextureD3D::End()
@@ -115,7 +117,7 @@ void CGUITextureD3D::Draw(float *x, float *y, float *z, const CRect &texture, co
   verts[3].color = xcolor;
 
   CDXTexture* tex = (CDXTexture *)m_texture.m_textures[m_currentFrame];
-  CGUIShaderDX* pGUIShader = g_Windowing.GetGUIShader();
+  CGUIShaderDX* pGUIShader = DX::Windowing().GetGUIShader();
 
   pGUIShader->Begin(m_diffuse.size() ? SHADER_METHOD_RENDER_MULTI_TEXTURE_BLEND : SHADER_METHOD_RENDER_TEXTURE_BLEND);
 
@@ -147,5 +149,3 @@ void CGUITextureD3D::DrawQuad(const CRect &rect, color_t color, CBaseTexture *te
 
   CD3DTexture::DrawQuad(rect, color, numViews, &views, texCoords, texture ? SHADER_METHOD_RENDER_TEXTURE_BLEND : SHADER_METHOD_RENDER_DEFAULT);
 }
-
-#endif

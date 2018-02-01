@@ -34,7 +34,7 @@ CAutorunMediaJob::CAutorunMediaJob(const std::string &label, const std::string &
 
 bool CAutorunMediaJob::DoWork()
 {
-  CGUIDialogSelect* pDialog= (CGUIDialogSelect*)g_windowManager.GetWindow(WINDOW_DIALOG_SELECT);
+  CGUIDialogSelect* pDialog= g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
 
   // wake up and turn off the screensaver if it's active
   g_application.WakeUpScreenSaverAndDPMS();
@@ -67,9 +67,9 @@ const char *CAutorunMediaJob::GetWindowString(int selection)
   switch (selection)
   {
     case 0:
-      return "VideoFiles";
+      return "Videos";
     case 1:
-      return "MusicFiles";
+      return "Music";
     case 2:
       return "Pictures";
     case 3:

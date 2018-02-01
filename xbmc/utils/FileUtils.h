@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ public:
   /*! \brief Get the modified date of a file if its invalid it returns the creation date - this behavior changes when you set bUseLatestDate
   \param strFileNameAndPath path to the file
   \param bUseLatestDate use the newer datetime of the files mtime and ctime
-  \return Returns the file date, can return a invalid date if problems occure
+  \return Returns the file date, can return a invalid date if problems occur
   */
   static CDateTime GetModificationDate(const std::string& strFileNameAndPath, const bool& bUseLatestDate);
 };

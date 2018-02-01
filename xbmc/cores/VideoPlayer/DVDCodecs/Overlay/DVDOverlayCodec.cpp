@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,16 +18,17 @@
  *
  */
 #include "DVDOverlayCodec.h"
-#include "cores/VideoPlayer/DVDClock.h"
+#include "cores/VideoPlayer/Interface/Addon/DemuxPacket.h"
+#include "cores/VideoPlayer/Interface/Addon/TimingConstants.h"
 
 void CDVDOverlayCodec::GetAbsoluteTimes(double &starttime, double &stoptime, DemuxPacket *pkt, bool &replace, double offset/* = 0.0*/)
 {
   if (!pkt)
     return;
-  
+
   double duration = 0.0;
   double pts = starttime;
-  
+
   // we assume pts from packet is better than what
   // decoder gives us, only take duration
   // from decoder if available
@@ -35,12 +36,12 @@ void CDVDOverlayCodec::GetAbsoluteTimes(double &starttime, double &stoptime, Dem
     duration = stoptime - starttime;
   else if(pkt->duration != DVD_NOPTS_VALUE)
     duration = pkt->duration;
-  
+
   if     (pkt->pts != DVD_NOPTS_VALUE)
     pts = pkt->pts;
   else if(pkt->dts != DVD_NOPTS_VALUE)
     pts = pkt->dts;
-  
+
   starttime = pts + offset;
   if(duration)
   {

@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,8 +33,8 @@ public:
 
   static std::string GetSourcesFile();
   
-  virtual void OnSettingsLoaded() override;
-  virtual void OnSettingsUnloaded() override;
+  void OnSettingsLoaded() override;
+  void OnSettingsUnloaded() override;
 
   bool Load();
   bool Load(const std::string &file);
@@ -53,9 +53,9 @@ public:
 
 protected:
   CMediaSourceSettings();
-  CMediaSourceSettings(const CMediaSourceSettings&);
-  CMediaSourceSettings& operator=(CMediaSourceSettings const&);
-  virtual ~CMediaSourceSettings();
+  CMediaSourceSettings(const CMediaSourceSettings&) = delete;
+  CMediaSourceSettings& operator=(CMediaSourceSettings const&) = delete;
+  ~CMediaSourceSettings() override;
 
 private:
   bool GetSource(const std::string &category, const TiXmlNode *source, CMediaSource &share);
@@ -67,6 +67,7 @@ private:
   VECSOURCES m_fileSources;
   VECSOURCES m_musicSources;
   VECSOURCES m_videoSources;
+  VECSOURCES m_gameSources;
 
   std::string m_defaultProgramSource;
   std::string m_defaultMusicSource;

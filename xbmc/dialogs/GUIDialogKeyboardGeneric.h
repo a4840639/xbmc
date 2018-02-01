@@ -20,6 +20,9 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "guilib/GUIKeyboard.h"
 #include "guilib/GUIDialog.h"
 #include "input/KeyboardLayout.h"
@@ -34,9 +37,9 @@ class CGUIDialogKeyboardGeneric : public CGUIDialog, public CGUIKeyboard
     CGUIDialogKeyboardGeneric();
 
     //CGUIKeyboard Interface
-    virtual bool ShowAndGetInput(char_callback_t pCallback, const std::string &initialString, std::string &typedString, const std::string &heading, bool bHiddenInput);
-    virtual void Cancel();
-    virtual int GetWindowId() const;
+    bool ShowAndGetInput(char_callback_t pCallback, const std::string &initialString, std::string &typedString, const std::string &heading, bool bHiddenInput) override;
+    void Cancel() override;
+    int GetWindowId() const override;
 
     void SetHeading(const std::string& heading);
     void SetText(const std::string& text);
@@ -46,17 +49,18 @@ class CGUIDialogKeyboardGeneric : public CGUIDialog, public CGUIKeyboard
     bool IsInputHidden() const { return m_hiddenInput; };
 
   protected:
-    virtual void OnWindowLoaded();
-    virtual void OnInitWindow();
-    virtual bool OnAction(const CAction &action);
-    virtual bool OnMessage(CGUIMessage& message);
-    virtual void OnDeinitWindow(int nextWindowID);
+    void OnWindowLoaded() override;
+    void OnInitWindow() override;
+    bool OnAction(const CAction &action) override;
+    bool OnMessage(CGUIMessage& message) override;
+    void OnDeinitWindow(int nextWindowID) override;
     void SetControlLabel(int id, const std::string &label);
     void OnShift();
     void MoveCursor(int iAmount);
     void OnLayout();
     void OnSymbols();
     void OnIPAddress();
+    void OnVoiceRecognition();
     void OnOK();
 
   private:
@@ -84,7 +88,7 @@ class CGUIDialogKeyboardGeneric : public CGUIDialog, public CGUIKeyboard
     std::string m_strHeading;
     std::string m_text;       ///< current text
 
-    IInputCodingTable *m_codingtable;
+    IInputCodingTablePtr m_codingtable;
     std::vector<std::wstring> m_words;
     std::string m_hzcode;
     int         m_pos;

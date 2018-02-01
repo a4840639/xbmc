@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,8 @@
 
 #include <memory>
 #include <map>
+#include <string>
+#include <vector>
 
 #include "network/ZeroconfBrowser.h"
 #include "threads/Thread.h"
@@ -64,7 +66,7 @@ private:
   CFRunLoopRef m_runloop;
   
   //shared variables (with guard)
-  //TODO: split the guard for discovered, resolved access?
+  //! @todo split the guard for discovered, resolved access?
   CCriticalSection m_data_guard;
   // tBrowserMap maps service types the corresponding browser
   typedef std::map<std::string, CFNetServiceBrowserRef> tBrowserMap;

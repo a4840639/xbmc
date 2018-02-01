@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,8 +36,7 @@
 
 #define PLAYERCOREFACTORY_XML "playercorefactory.xml"
 
-CPlayerCoreFactory::CPlayerCoreFactory()
-{ }
+CPlayerCoreFactory::CPlayerCoreFactory() = default;
 
 CPlayerCoreFactory::~CPlayerCoreFactory()
 {
@@ -112,13 +111,13 @@ void CPlayerCoreFactory::GetPlayers(const CFileItem& item, std::vector<std::stri
   for (auto rule: m_vecCoreSelectionRules)
     rule->GetPlayers(item, validPlayers, players);
 
-  CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: matched %" PRIuS" rules with players", players.size());
+  CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: matched {0} rules with players", players.size());
 
   // Process defaults
 
-  // Set video default player. Check whether it's video first (overrule audio check)
-  // Also push these players in case it is NOT audio either
-  if (item.IsVideo() || !item.IsAudio())
+  // Set video default player. Check whether it's video first (overrule audio and
+  // game check). Also push these players in case it is NOT audio or game either.
+  if (item.IsVideo() || (!item.IsAudio() && !item.IsGame()))
   {
     int idx = GetPlayerIndex("videodefaultplayer");
     if (idx > -1)
@@ -146,7 +145,13 @@ void CPlayerCoreFactory::GetPlayers(const CFileItem& item, std::vector<std::stri
     GetPlayers(players, true, true);  // Audio & video players
   }
 
-  CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: added %" PRIuS" players", players.size());
+  if (item.IsGame())
+  {
+    CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: adding retroplayer");
+    players.push_back("RetroPlayer");
+  }
+
+  CLog::Log(LOGDEBUG, "CPlayerCoreFactory::GetPlayers: added {0} players", players.size());
 }
 
 int CPlayerCoreFactory::GetPlayerIndex(const std::string& strCoreName) const
@@ -323,6 +328,9 @@ bool CPlayerCoreFactory::LoadConfiguration(const std::string &file, bool clear)
     CPlayerCoreConfig* paplayer = new CPlayerCoreConfig("PAPlayer", "music", nullptr);
     paplayer->m_bPlaysAudio = true;
     m_vecPlayerConfigs.push_back(paplayer);
+
+    CPlayerCoreConfig* retroPlayer = new CPlayerCoreConfig("RetroPlayer", "game", nullptr);
+    m_vecPlayerConfigs.push_back(retroPlayer);
   }
 
   if (!pConfig || strcmpi(pConfig->Value(), "playercorefactory") != 0)

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,10 +22,7 @@
 #include "DVDInputStreams/DVDInputStreamNavigator.h"
 #include "threads/SingleLock.h"
 
-CDVDOverlayContainer::CDVDOverlayContainer()
-{
-  m_overlays.clear();
-}
+CDVDOverlayContainer::CDVDOverlayContainer() = default;
 
 CDVDOverlayContainer::~CDVDOverlayContainer()
 {
@@ -123,25 +120,14 @@ void CDVDOverlayContainer::CleanUp(double pts)
 
 }
 
-void CDVDOverlayContainer::Remove()
-{
-  if (!m_overlays.empty())
-  {
-    CDVDOverlay* pOverlay;
-
-    {
-      CSingleLock lock(*this);
-
-      pOverlay = m_overlays.front();
-      m_overlays.erase(m_overlays.begin());
-    }
-    pOverlay->Release();
-  }
-}
-
 void CDVDOverlayContainer::Clear()
 {
-  while (!m_overlays.empty()) Remove();
+  CSingleLock lock(*this);
+  for (auto &overlay : m_overlays)
+  {
+    overlay->Release();
+  }
+  m_overlays.clear();
 }
 
 int CDVDOverlayContainer::GetSize()
@@ -168,7 +154,7 @@ bool CDVDOverlayContainer::ContainsOverlayType(DVDOverlayType type)
 /*
  * iAction should be LIBDVDNAV_BUTTON_NORMAL or LIBDVDNAV_BUTTON_CLICKED
  */
-void CDVDOverlayContainer::UpdateOverlayInfo(CDVDInputStreamNavigator* pStream, CDVDDemuxSPU *pSpu, int iAction)
+void CDVDOverlayContainer::UpdateOverlayInfo(std::shared_ptr<CDVDInputStreamNavigator> pStream, CDVDDemuxSPU *pSpu, int iAction)
 {
   CSingleLock lock(*this);
 
@@ -185,7 +171,7 @@ void CDVDOverlayContainer::UpdateOverlayInfo(CDVDInputStreamNavigator* pStream, 
       // set menu spu color and alpha data if there is a valid menu overlay
       if (pOverlaySpu->bForced)
       {
-        if(pOverlaySpu->Acquire()->Release() > 1)
+        if (pOverlaySpu->Acquire()->Release() > 1)
         {
           pOverlaySpu = new CDVDOverlaySpu(*pOverlaySpu);
           (*it)->Release();

@@ -20,19 +20,18 @@
 
 #include "system.h"
 
-#ifdef HAS_DVD_DRIVE
-
 #include "cdioSupport.h"
 #include "threads/SingleLock.h"
 #include "utils/log.h"
-#include "utils/Environment.h"
+#include "platform/Environment.h"
+#include <cdio/cdio.h>
 #include <cdio/logging.h>
 #include <cdio/util.h>
 #include <cdio/mmc.h>
 #include <cdio/cd_types.h>
 
 #if defined(TARGET_WINDOWS)
-#pragma comment(lib, "libcdio.dll.lib")
+#pragma comment(lib, "libcdio.lib")
 #endif
 
 using namespace MEDIA_DETECT;
@@ -233,6 +232,11 @@ char* CLibcdio::GetDeviceFileName()
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 CCdIoSupport::CCdIoSupport()
+: i(0),
+  j(0),
+  cdio(nullptr),
+  m_nNumTracks(CDIO_INVALID_TRACK),
+  m_nFirstTrackNum(CDIO_INVALID_TRACK)
 {
   m_cdio = CLibcdio::GetInstance();
   m_nFirstData = -1;        /* # of first data track */
@@ -249,18 +253,16 @@ CCdIoSupport::CCdIoSupport()
   m_nStartTrack = 0;
 }
 
-CCdIoSupport::~CCdIoSupport()
+CCdIoSupport::~CCdIoSupport() = default;
+
+bool CCdIoSupport::EjectTray()
 {
+  return false;
 }
 
-HRESULT CCdIoSupport::EjectTray()
+bool CCdIoSupport::CloseTray()
 {
-  return E_FAIL;
-}
-
-HRESULT CCdIoSupport::CloseTray()
-{
-  return E_FAIL;
+  return false;
 }
 
 HANDLE CCdIoSupport::OpenCDROM()
@@ -270,7 +272,7 @@ HANDLE CCdIoSupport::OpenCDROM()
   char* source_name = m_cdio->GetDeviceFileName();
   CdIo* cdio = ::cdio_open(source_name, DRIVER_UNKNOWN);
 
-  return (HANDLE) cdio;
+  return reinterpret_cast<HANDLE>(cdio);
 }
 
 HANDLE CCdIoSupport::OpenIMAGE( std::string& strFilename )
@@ -279,7 +281,7 @@ HANDLE CCdIoSupport::OpenIMAGE( std::string& strFilename )
 
   CdIo* cdio = ::cdio_open(strFilename.c_str(), DRIVER_UNKNOWN);
 
-  return (HANDLE) cdio;
+  return reinterpret_cast<HANDLE>(cdio);
 }
 
 INT CCdIoSupport::ReadSector(HANDLE hDevice, DWORD dwSector, LPSTR lpczBuffer)
@@ -497,7 +499,7 @@ bool CCdIoSupport::IsIt(int num)
   signature_t *sigp = &sigs[num];
   int len = strlen(sigp->sig_str);
 
-  /* TODO: check that num < largest sig. */
+  //! @todo check that num < largest sig.
   return 0 == memcmp(&buffer[sigp->buf_num][sigp->offset], sigp->sig_str, len);
 }
 
@@ -941,6 +943,3 @@ uint32_t CCdIoSupport::CddbDiscId()
 
   return ((n % 0xff) << 24 | t << 8 | m_nNumTracks);
 }
-
-#endif
-

@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,15 +23,16 @@
 #include "DVDSubtitleParser.h"
 #include "DVDSubtitlesLibass.h"
 
+#include <memory>
 
 class CDVDSubtitleParserSSA : public CDVDSubtitleParserText
 {
 public:
-  CDVDSubtitleParserSSA(CDVDSubtitleStream* pStream, const std::string& strFile);
-  virtual ~CDVDSubtitleParserSSA();
+  CDVDSubtitleParserSSA(std::unique_ptr<CDVDSubtitleStream> && pStream, const std::string& strFile);
+  ~CDVDSubtitleParserSSA() override;
 
-  virtual bool Open(CDVDStreamInfo &hints);
-  virtual void Dispose();
+  bool Open(CDVDStreamInfo &hints) override;
+  void Dispose() override;
 
 private:
   CDVDSubtitlesLibass* m_libass;

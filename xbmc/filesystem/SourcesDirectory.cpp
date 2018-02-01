@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -31,13 +31,9 @@
 
 using namespace XFILE;
 
-CSourcesDirectory::CSourcesDirectory(void)
-{
-}
+CSourcesDirectory::CSourcesDirectory(void) = default;
 
-CSourcesDirectory::~CSourcesDirectory(void)
-{
-}
+CSourcesDirectory::~CSourcesDirectory(void) = default;
 
 bool CSourcesDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 {
@@ -78,11 +74,12 @@ bool CSourcesDirectory::GetDirectory(const VECSOURCES &sources, CFileItemList &i
     }
     else if (URIUtils::IsProtocol(pItem->GetPath(), "addons"))
       strIcon = "DefaultHardDisk.png";
+    else if (   pItem->IsPath("special://musicplaylists/")
+             || pItem->IsPath("special://videoplaylists/"))
+      strIcon = "DefaultPlaylist.png";
     else if (   pItem->IsVideoDb()
              || pItem->IsMusicDb()
              || pItem->IsPlugin()
-             || pItem->IsPath("special://musicplaylists/")
-             || pItem->IsPath("special://videoplaylists/")
              || pItem->IsPath("musicsearch://"))
       strIcon = "DefaultFolder.png";
     else if (pItem->IsRemote())

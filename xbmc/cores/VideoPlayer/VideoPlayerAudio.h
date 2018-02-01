@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,11 +22,12 @@
 #include <list>
 #include <utility>
 
-#include "DVDAudio.h"
+#include "AudioSinkAE.h"
 #include "DVDClock.h"
 #include "DVDMessageQueue.h"
 #include "DVDStreamInfo.h"
 #include "IVideoPlayer.h"
+#include "cores/VideoPlayer/Interface/Addon/TimingConstants.h"
 #include "threads/Thread.h"
 #include "utils/BitstreamStats.h"
 
@@ -38,115 +39,65 @@ class CDVDAudioCodec;
 class CVideoPlayerAudio : public CThread, public IDVDStreamPlayerAudio
 {
 public:
-  CVideoPlayerAudio(CDVDClock* pClock, CDVDMessageQueue& parent);
-  virtual ~CVideoPlayerAudio();
+  CVideoPlayerAudio(CDVDClock* pClock, CDVDMessageQueue& parent, CProcessInfo &processInfo);
+  ~CVideoPlayerAudio() override;
 
-  bool OpenStream(CDVDStreamInfo &hints);
-  void CloseStream(bool bWaitForBuffers);
+  bool OpenStream(CDVDStreamInfo hints) override;
+  void CloseStream(bool bWaitForBuffers) override;
 
-  void SetSpeed(int speed);
-  void Flush(bool sync);
+  void SetSpeed(int speed) override;
+  void Flush(bool sync) override;
 
   // waits until all available data has been rendered
-  void WaitForBuffers();
-  bool AcceptsData() const;
-  bool HasData() const                                  { return m_messageQueue.GetDataSize() > 0; }
-  int  GetLevel() const                                 { return m_messageQueue.GetLevel(); }
-  bool IsInited() const                                 { return m_messageQueue.IsInited(); }
-  void SendMessage(CDVDMsg* pMsg, int priority = 0)     { m_messageQueue.Put(pMsg, priority); }
-  void FlushMessages()                                  { m_messageQueue.Flush(); }
+  bool AcceptsData() const override;
+  bool HasData() const override { return m_messageQueue.GetDataSize() > 0; }
+  int  GetLevel() const override { return m_messageQueue.GetLevel(); }
+  bool IsInited() const override { return m_messageQueue.IsInited(); }
+  void SendMessage(CDVDMsg* pMsg, int priority = 0) override { m_messageQueue.Put(pMsg, priority); }
+  void FlushMessages() override { m_messageQueue.Flush(); }
 
-  void SetVolume(float fVolume)                         { m_dvdAudio.SetVolume(fVolume); }
-  void SetMute(bool bOnOff)                             { }
-  void SetDynamicRangeCompression(long drc)             { m_dvdAudio.SetDynamicRangeCompression(drc); }
-  float GetDynamicRangeAmplification() const            { return 0.0f; }
+  void SetDynamicRangeCompression(long drc) override { m_audioSink.SetDynamicRangeCompression(drc); }
+  float GetDynamicRangeAmplification() const override { return 0.0f; }
 
+  std::string GetPlayerInfo() override;
+  int GetAudioChannels() override;
 
-  std::string GetPlayerInfo();
-  int GetAudioBitrate();
-  int GetAudioChannels();
+  double GetCurrentPts() override { CSingleLock lock(m_info_section); return m_info.pts; }
 
-  // holds stream information for current playing stream
-  CDVDStreamInfo m_streaminfo;
-
-  double GetCurrentPts()                            { CSingleLock lock(m_info_section); return m_info.pts; }
-
-  bool IsStalled() const                            { return m_stalled;  }
-  bool IsEOS()                                      { return false; }
-  bool IsPassthrough() const;
+  bool IsStalled() const override { return m_stalled;  }
+  bool IsPassthrough() const override;
 
 protected:
 
-  virtual void OnStartup();
-  virtual void OnExit();
-  virtual void Process();
+  void OnStartup() override;
+  void OnExit() override;
+  void Process() override;
 
+  bool ProcessDecoderOutput(DVDAudioFrame &audioframe);
   void UpdatePlayerInfo();
   void OpenStream(CDVDStreamInfo &hints, CDVDAudioCodec* codec);
   //! Switch codec if needed. Called when the sample rate gotten from the
   //! codec changes, in which case we may want to switch passthrough on/off.
   bool SwitchCodecIfNeeded();
-  float GetCurrentAttenuation()                         { return m_dvdAudio.GetCurrentAttenuation(); }
-  bool AllowDTSHDDecode();
 
   CDVDMessageQueue m_messageQueue;
   CDVDMessageQueue& m_messageParent;
 
+  // holds stream information for current playing stream
+  CDVDStreamInfo m_streaminfo;
+
   double m_audioClock;
 
-  // data for audio decoding
-  struct PacketStatus
-  {
-    PacketStatus()
-    {
-        msg = NULL;
-        Release();
-    }
-
-   ~PacketStatus()
-    {
-        Release();
-    }
-
-    CDVDMsgDemuxerPacket* msg;
-    uint8_t* data;
-    int size;
-    double dts;
-    double pts;
-
-    void Attach(CDVDMsgDemuxerPacket* msg2)
-    {
-      if(msg) msg->Release();
-      msg = msg2;
-      msg->Acquire();
-      DemuxPacket* p = msg->GetPacket();
-      data = p->pData;
-      size = p->iSize;
-      dts = p->dts;
-      pts = p->pts;
-    }
-    void Release()
-    {
-      if(msg) msg->Release();
-      msg  = NULL;
-      data = NULL;
-      size = 0;
-      dts  = DVD_NOPTS_VALUE;
-    }
-  } m_decode;
-
-  CDVDAudio m_dvdAudio; // audio output device
+  CAudioSinkAE m_audioSink; // audio output device
   CDVDClock* m_pClock; // dvd master clock
   CDVDAudioCodec* m_pAudioCodec; // audio codec
   BitstreamStats m_audioStats;
 
   int m_speed;
   bool m_stalled;
-  bool m_silence;
+  bool m_paused;
   IDVDStreamPlayer::ESyncState m_syncState;
   XbmcThreads::EndTime m_syncTimer;
-
-  bool OutputPacket(DVDAudioFrame &audioframe);
 
   //SYNC_DISCON, SYNC_SKIPDUP, SYNC_RESAMPLE
   int    m_synctype;

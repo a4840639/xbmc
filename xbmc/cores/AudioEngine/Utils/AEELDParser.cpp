@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -191,7 +191,7 @@ void CAEELDParser::Parse(const uint8_t *data, size_t length, CAEDeviceInfo& info
     AEDataFormat fmt = AE_FMT_INVALID;
     switch (formatCode)
     {
-      // TODO
+      //! @todo implement
       case CEA_861_FORMAT_AC3  : fmt = AE_FMT_RAW   ; break;
       case CEA_861_FORMAT_DTS  : fmt = AE_FMT_RAW   ; break;
       case CEA_861_FORMAT_DTSHD: fmt = AE_FMT_RAW ; break;

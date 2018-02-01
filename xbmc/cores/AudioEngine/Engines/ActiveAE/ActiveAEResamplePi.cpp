@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,13 +21,11 @@
 #include "system.h"
 #include <cassert>
 
-#if defined(TARGET_RASPBERRY_PI)
-
 #include "cores/AudioEngine/Utils/AEUtil.h"
 #include "ActiveAEResamplePi.h"
 #include "settings/Settings.h"
 #include "utils/log.h"
-#include "linux/RBP.h"
+#include "platform/linux/RBP.h"
 
 extern "C" {
 #include "libavutil/channel_layout.h"
@@ -592,5 +590,3 @@ int CActiveAEResamplePi::GetDstBufferSize(int samples)
   #endif
   return ret;
 }
-
-#endif

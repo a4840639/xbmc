@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,14 +25,14 @@
 class CDVDInputStreamMemory : public CDVDInputStream
 {
 public:
-  CDVDInputStreamMemory(CFileItem &fileitem);
-  virtual ~CDVDInputStreamMemory();
-  virtual bool Open();
-  virtual void Close();
-  virtual int Read(uint8_t* buf, int buf_size);
-  virtual int64_t Seek(int64_t offset, int whence);
-  virtual bool IsEOF();
-  virtual int64_t GetLength();
+  explicit CDVDInputStreamMemory(CFileItem &fileitem);
+  ~CDVDInputStreamMemory() override;
+  bool Open() override;
+  void Close() override;
+  int Read(uint8_t* buf, int buf_size) override;
+  int64_t Seek(int64_t offset, int whence) override;
+  bool IsEOF() override;
+  int64_t GetLength() override;
 
 protected:
   uint8_t* m_pData;

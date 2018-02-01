@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,10 +21,13 @@
 #include "threads/SystemClock.h"
 #include "CacheStrategy.h"
 #include "IFile.h"
+#ifdef TARGET_POSIX
+#include "PlatformInclude.h"
+#include "ConvUtils.h"
+#endif
 #include "Util.h"
 #include "utils/log.h"
 #include "SpecialProtocol.h"
-#include "PlatformDefs.h" //for PRIdS, PRId64
 #include "URL.h"
 #if defined(TARGET_POSIX)
 #include "posix/PosixFile.h"
@@ -44,9 +47,7 @@ CCacheStrategy::CCacheStrategy() : m_bEndOfInput(false)
 }
 
 
-CCacheStrategy::~CCacheStrategy()
-{
-}
+CCacheStrategy::~CCacheStrategy() = default;
 
 void CCacheStrategy::EndOfInput() {
   m_bEndOfInput = true;

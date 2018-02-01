@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@
 #include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "input/KeyboardLayout.h"
 
@@ -42,12 +43,12 @@ public:
   const KeyboardLayouts& GetLayouts() const { return m_layouts; }
   bool GetLayout(const std::string& name, CKeyboardLayout& layout) const;
 
-  static void SettingOptionsKeyboardLayoutsFiller(const CSetting *setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current, void* data);
+  static void SettingOptionsKeyboardLayoutsFiller(std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, std::string> > &list, std::string &current, void* data);
 
 private:
-  CKeyboardLayoutManager() { }
-  CKeyboardLayoutManager(const CKeyboardLayoutManager&);
-  CKeyboardLayoutManager const& operator=(CKeyboardLayoutManager const&);
+  CKeyboardLayoutManager() = default;
+  CKeyboardLayoutManager(const CKeyboardLayoutManager&) = delete;
+  CKeyboardLayoutManager const& operator=(CKeyboardLayoutManager const&) = delete;
 
   KeyboardLayouts m_layouts;
 };

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@
 
 #include "SmartPlaylistDirectory.h"
 #include "FileItem.h"
+#include "ServiceBroker.h"
 #include "filesystem/Directory.h"
 #include "filesystem/File.h"
 #include "filesystem/FileDirectoryFactory.h"
@@ -41,13 +42,9 @@
 
 namespace XFILE
 {
-  CSmartPlaylistDirectory::CSmartPlaylistDirectory()
-  {
-  }
+  CSmartPlaylistDirectory::CSmartPlaylistDirectory() = default;
 
-  CSmartPlaylistDirectory::~CSmartPlaylistDirectory()
-  {
-  }
+  CSmartPlaylistDirectory::~CSmartPlaylistDirectory() = default;
 
   bool CSmartPlaylistDirectory::GetDirectory(const CURL& url, CFileItemList& items)
   {
@@ -72,7 +69,7 @@ namespace XFILE
     sorting.sortBy = playlist.GetOrder();
     sorting.sortOrder = playlist.GetOrderAscending() ? SortOrderAscending : SortOrderDescending;
     sorting.sortAttributes = playlist.GetOrderAttributes();
-    if (CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
+    if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
       sorting.sortAttributes = (SortAttribute)(sorting.sortAttributes | SortAttributeIgnoreArticle);
     items.SetSortIgnoreFolders((sorting.sortAttributes & SortAttributeIgnoreFolders) == SortAttributeIgnoreFolders);
 
@@ -292,7 +289,7 @@ namespace XFILE
 
     // sort grouped list by label
     if (items.Size() > 1 && !group.empty())
-      items.Sort(SortByLabel, SortOrderAscending, CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING) ? SortAttributeIgnoreArticle : SortAttributeNone);
+      items.Sort(SortByLabel, SortOrderAscending, CServiceBroker::GetSettings().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING) ? SortAttributeIgnoreArticle : SortAttributeNone);
 
     // go through and set the playlist order
     for (int i = 0; i < items.Size(); i++)

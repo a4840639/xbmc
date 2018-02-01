@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,20 +27,20 @@ using namespace XbmcThreads;
 
 bool destructorCalled = false;
 
-class Thinggy
+class Thingy
 {
 public:
-  inline ~Thinggy() { destructorCalled = true; }
+  inline ~Thingy() { destructorCalled = true; }
 };
 
-Thinggy* staticThinggy = NULL;
+Thingy* staticThingy = NULL;
 CEvent gate;
-ThreadLocal<Thinggy> staticThreadLocal;
+ThreadLocal<Thingy> staticThreadLocal;
 
 void cleanup()
 {
   if (destructorCalled)
-    staticThinggy = NULL;
+    staticThingy = NULL;
   destructorCalled = false;
 }
 
@@ -50,13 +50,13 @@ class Runnable : public IRunnable
 public:
   bool waiting;
   bool threadLocalHadValue;
-  ThreadLocal<Thinggy>& threadLocal;
+  ThreadLocal<Thingy>& threadLocal;
 
-  inline Runnable(ThreadLocal<Thinggy>& tl) : waiting(false), threadLocal(tl) {}
-  inline void Run()
+  inline Runnable(ThreadLocal<Thingy>& tl) : waiting(false), threadLocal(tl) {}
+  inline void Run() override
   {
-    staticThinggy = new Thinggy;
-    staticThreadLocal.set(staticThinggy);
+    staticThingy = new Thingy;
+    staticThreadLocal.set(staticThingy);
     waiting = true;
     gate.Set();
     waiter.Wait();
@@ -76,93 +76,42 @@ public:
 class StackThreadLocal : public Runnable
 {
 public:
-  ThreadLocal<Thinggy> threadLocal;
+  ThreadLocal<Thingy> threadLocal;
   inline StackThreadLocal() : Runnable(threadLocal) {}
 };
 
-class HeapThreadLocal : public Runnable
-{
-public:
-  ThreadLocal<Thinggy>* hthreadLocal;
-  inline HeapThreadLocal() : Runnable(*(new ThreadLocal<Thinggy>)) { hthreadLocal = &threadLocal; }
-  inline ~HeapThreadLocal() { delete hthreadLocal; }
-};
-
-
-TEST(TestThreadLocal, Simple)
+TEST(TestThreadLocal, DISABLED_Simple)
 {
   GlobalThreadLocal runnable;
   thread t(runnable);
 
   gate.Wait();
   EXPECT_TRUE(runnable.waiting);
-  EXPECT_TRUE(staticThinggy != NULL);
+  EXPECT_TRUE(staticThingy != NULL);
   EXPECT_TRUE(staticThreadLocal.get() == NULL);
   waiter.Set();
   gate.Wait();
   EXPECT_TRUE(runnable.threadLocalHadValue);
   EXPECT_TRUE(!destructorCalled);
-  delete staticThinggy;
+  delete staticThingy;
   EXPECT_TRUE(destructorCalled);
   cleanup();
 }
 
-TEST(TestThreadLocal, Stack)
+TEST(TestThreadLocal, DISABLED_Stack)
 {
   StackThreadLocal runnable;
   thread t(runnable);
 
   gate.Wait();
   EXPECT_TRUE(runnable.waiting);
-  EXPECT_TRUE(staticThinggy != NULL);
+  EXPECT_TRUE(staticThingy != NULL);
   EXPECT_TRUE(runnable.threadLocal.get() == NULL);
   waiter.Set();
   gate.Wait();
   EXPECT_TRUE(runnable.threadLocalHadValue);
   EXPECT_TRUE(!destructorCalled);
-  delete staticThinggy;
+  delete staticThingy;
   EXPECT_TRUE(destructorCalled);
   cleanup();
 }
-
-TEST(TestThreadLocal, Heap)
-{
-  HeapThreadLocal runnable;
-  thread t(runnable);
-
-  gate.Wait();
-  EXPECT_TRUE(runnable.waiting);
-  EXPECT_TRUE(staticThinggy != NULL);
-  EXPECT_TRUE(runnable.threadLocal.get() == NULL);
-  waiter.Set();
-  gate.Wait();
-  EXPECT_TRUE(runnable.threadLocalHadValue);
-  EXPECT_TRUE(!destructorCalled);
-  delete staticThinggy;
-  EXPECT_TRUE(destructorCalled);
-  cleanup();
-}
-
-TEST(TestThreadLocal, HeapDestroyed)
-{
-  {
-    HeapThreadLocal runnable;
-    thread t(runnable);
-
-    gate.Wait();
-    EXPECT_TRUE(runnable.waiting);
-    EXPECT_TRUE(staticThinggy != NULL);
-    EXPECT_TRUE(runnable.threadLocal.get() == NULL);
-    waiter.Set();
-    gate.Wait();
-    EXPECT_TRUE(runnable.threadLocalHadValue);
-    EXPECT_TRUE(!destructorCalled);
-  } // runnable goes out of scope
-
-  // even though the threadlocal is gone ...
-  EXPECT_TRUE(!destructorCalled);
-  delete staticThinggy;
-  EXPECT_TRUE(destructorCalled);
-  cleanup();
-}
-

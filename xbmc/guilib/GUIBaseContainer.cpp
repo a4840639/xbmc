@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
  */
 
 #include "GUIBaseContainer.h"
+#include "ServiceBroker.h"
 #include "utils/CharsetConverter.h"
 #include "GUIInfoManager.h"
 #include "utils/TimeUtils.h"
@@ -160,7 +161,7 @@ void CGUIBaseContainer::ProcessItem(float posX, float posY, CGUIListItemPtr& ite
   {
     if (!item->GetFocusedLayout())
     {
-      CGUIListItemLayout *layout = new CGUIListItemLayout(*m_focusedLayout);
+      CGUIListItemLayout *layout = new CGUIListItemLayout(*m_focusedLayout, this);
       item->SetFocusedLayout(layout);
     }
     if (item->GetFocusedLayout())
@@ -188,6 +189,7 @@ void CGUIBaseContainer::ProcessItem(float posX, float posY, CGUIListItemPtr& ite
     if (!item->GetLayout())
     {
       CGUIListItemLayout *layout = new CGUIListItemLayout(*m_layout);
+      layout->SetParentControl(this);
       item->SetLayout(layout);
     }
     if (item->GetFocusedLayout())
@@ -348,16 +350,26 @@ bool CGUIBaseContainer::OnAction(const CAction &action)
         return CGUIControl::OnAction(action);
       }
     }
+  case ACTION_CONTEXT_MENU:
+    if (OnContextMenu())
+      return true;
     break;
-
   case ACTION_SHOW_INFO:
+    if (m_listProvider)
     {
-      if (OnInfo())
+      int selected = GetSelectedItem();
+      if (selected >= 0 && selected < static_cast<int>(m_items.size()))
+      {
+        m_listProvider->OnInfo(m_items[selected]);
         return true;
-      else if (action.GetID())
-        return OnClick(action.GetID());
+      }
     }
-    break;
+    else if (OnInfo())
+      return true;
+    else if (action.GetID())
+      return OnClick(action.GetID());
+    else
+      return false;
 
   case ACTION_FIRST_PAGE:
     SelectItem(0);
@@ -369,17 +381,11 @@ bool CGUIBaseContainer::OnAction(const CAction &action)
     return true;
 
   case ACTION_NEXT_LETTER:
-    {
-      OnNextLetter();
-      return true;
-    }
-    break;
+    OnNextLetter();
+    return true;
   case ACTION_PREV_LETTER:
-    {
-      OnPrevLetter();
-      return true;
-    }
-    break;
+    OnPrevLetter();
+    return true;
   case ACTION_JUMP_SMS2:
   case ACTION_JUMP_SMS3:
   case ACTION_JUMP_SMS4:
@@ -388,19 +394,13 @@ bool CGUIBaseContainer::OnAction(const CAction &action)
   case ACTION_JUMP_SMS7:
   case ACTION_JUMP_SMS8:
   case ACTION_JUMP_SMS9:
-    {
-      OnJumpSMS(action.GetID() - ACTION_JUMP_SMS2 + 2);
-      return true;
-    }
-    break;
+    OnJumpSMS(action.GetID() - ACTION_JUMP_SMS2 + 2);
+    return true;
 
   default:
-    if (action.GetID())
-    {
-      return OnClick(action.GetID());
-    }
+    break;
   }
-  return false;
+  return action.GetID() && OnClick(action.GetID());
 }
 
 bool CGUIBaseContainer::OnMessage(CGUIMessage& message)
@@ -412,7 +412,7 @@ bool CGUIBaseContainer::OnMessage(CGUIMessage& message)
       if (message.GetMessage() == GUI_MSG_LABEL_BIND && message.GetPointer())
       { // bind our items
         Reset();
-        CFileItemList *items = (CFileItemList *)message.GetPointer();
+        CFileItemList *items = static_cast<CFileItemList*>(message.GetPointer());
         for (int i = 0; i < items->Size(); i++)
           m_items.push_back(items->Get(i));
         UpdateLayout(true); // true to refresh all items
@@ -436,7 +436,10 @@ bool CGUIBaseContainer::OnMessage(CGUIMessage& message)
     {
       if (message.GetParam1()) // subfocus item is specified, so set the offset appropriately
       {
-        int item = std::min(GetOffset() + (int)message.GetParam1() - 1, (int)m_items.size() - 1);
+        int offset = GetOffset();
+        if (message.GetParam2() && message.GetParam2() == 1)
+          offset = 0;
+        int item = std::min(offset + (int)message.GetParam1() - 1, (int)m_items.size() - 1);
         SelectItem(item);
       }
     }
@@ -577,7 +580,7 @@ void CGUIBaseContainer::OnJumpLetter(char letter, bool skip /*=false*/)
   {
     CGUIListItemPtr item = m_items[i];
     std::string label = item->GetLabel();
-    if (CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
+    if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
       label = SortUtils::RemoveArticles(label);
     if (0 == strnicmp(label.c_str(), m_match.c_str(), m_match.size()))
     {
@@ -694,7 +697,9 @@ bool CGUIBaseContainer::OnMouseOver(const CPoint &point)
 
 EVENT_RESULT CGUIBaseContainer::OnMouseEvent(const CPoint &point, const CMouseEvent &event)
 {
-  if (event.m_id >= ACTION_MOUSE_LEFT_CLICK && event.m_id <= ACTION_MOUSE_DOUBLE_CLICK)
+  if (event.m_id == ACTION_MOUSE_LEFT_CLICK ||
+      event.m_id == ACTION_MOUSE_DOUBLE_CLICK ||
+      event.m_id == ACTION_MOUSE_RIGHT_CLICK)
   {
     if (SelectItemFromPoint(point - CPoint(m_posX, m_posY)))
     {
@@ -733,7 +738,7 @@ EVENT_RESULT CGUIBaseContainer::OnMouseEvent(const CPoint &point, const CMouseEv
     ValidateOffset();
     return EVENT_RESULT_HANDLED;
   }
-  else if (event.m_id == ACTION_GESTURE_END)
+  else if (event.m_id == ACTION_GESTURE_END || event.m_id == ACTION_GESTURE_ABORT)
   { // release exclusive access
     CGUIMessage msg(GUI_MSG_EXCLUSIVE_MOUSE, 0, GetParentID());
     SendWindowMessage(msg);
@@ -762,7 +767,7 @@ bool CGUIBaseContainer::OnClick(int actionID)
       int selected = GetSelectedItem();
       if (selected >= 0 && selected < (int)m_items.size())
       {
-        if (m_clickActions.HasAnyActions())
+        if (m_clickActions.HasActionsMeetingCondition())
           m_clickActions.ExecuteActions(0, GetParentID(), m_items[selected]);
         else
           m_listProvider->OnClick(m_items[selected]);
@@ -774,9 +779,28 @@ bool CGUIBaseContainer::OnClick(int actionID)
     if (focusedLayout)
       subItem = focusedLayout->GetFocusedItem();
   }
+  else if (actionID == ACTION_MOUSE_RIGHT_CLICK)
+  {
+    if (OnContextMenu())
+      return true;
+  }
   // Don't know what to do, so send to our parent window.
   CGUIMessage msg(GUI_MSG_CLICKED, GetID(), GetParentID(), actionID, subItem);
   return SendWindowMessage(msg);
+}
+
+bool CGUIBaseContainer::OnContextMenu()
+{
+  if (m_listProvider)
+  {
+    int selected = GetSelectedItem();
+    if (selected >= 0 && selected < static_cast<int>(m_items.size()))
+    {
+      m_listProvider->OnContextMenu(m_items[selected]);
+      return true;
+    }
+  }
+  return false;
 }
 
 std::string CGUIBaseContainer::GetDescription() const
@@ -833,7 +857,6 @@ void CGUIBaseContainer::AllocResources()
   if (m_listProvider)
   {
     UpdateListProvider(true);
-    SelectItem(m_listProvider->GetDefaultItem());
   }
 }
 
@@ -843,9 +866,10 @@ void CGUIBaseContainer::FreeResources(bool immediately)
   if (m_listProvider)
   {
     if (immediately)
+    {
       Reset();
-
-    m_listProvider->Reset(immediately);
+      m_listProvider->Reset();
+    }
   }
   m_scroller.Stop();
 }
@@ -888,11 +912,13 @@ void CGUIBaseContainer::UpdateVisibility(const CGUIListItem *item)
   if (!IsVisible() && !CGUIControl::CanFocus())
     return; // no need to update the content if we're not visible and we can't focus
 
-  // check whether we need to update our layouts
-  if ((m_layout && !m_layout->CheckCondition()) ||
-      (m_focusedLayout && !m_focusedLayout->CheckCondition()))
+  // update layouts in case of condition changed
+  if ((m_layout && m_layout->CheckCondition() != m_layoutCondition) ||
+      (m_focusedLayout && m_focusedLayout->CheckCondition() != m_focusedLayoutCondition))
   {
-    // and do it
+    m_layoutCondition = m_layout->CheckCondition();
+    m_focusedLayoutCondition = m_focusedLayout->CheckCondition();
+
     int itemIndex = GetSelectedItem();
     UpdateLayout(true); // true to refresh all items
     SelectItem(itemIndex);
@@ -910,11 +936,15 @@ void CGUIBaseContainer::UpdateListProvider(bool forceRefresh /* = false */)
       // save the current item
       int currentItem = GetSelectedItem();
       CGUIListItem *current = (currentItem >= 0 && currentItem < (int)m_items.size()) ? m_items[currentItem].get() : NULL;
+      const std::string prevSelectedPath((current && current->IsFileItem()) ? static_cast<CFileItem *>(current)->GetPath() : "");
+
       Reset();
       m_listProvider->Fetch(m_items);
       SetPageControlRange();
       // update the newly selected item
       bool found = false;
+
+      // first, try to re-identify selected item by comparing item pointers, though it is not guaranteed that item instances got not recreated on update.
       for (int i = 0; i < (int)m_items.size(); i++)
       {
         if (m_items[i].get() == current)
@@ -924,6 +954,27 @@ void CGUIBaseContainer::UpdateListProvider(bool forceRefresh /* = false */)
           {
             SelectItem(i);
             break;
+          }
+        }
+      }
+      if (!found && !prevSelectedPath.empty())
+      {
+        // as fallback, try to re-identify selected item by comparing item paths.
+        for (int i = 0; i < static_cast<int>(m_items.size()); i++)
+        {
+          const CGUIListItemPtr c(m_items[i]);
+          if (c->IsFileItem())
+          {
+            const std::string &selectedPath = static_cast<CFileItem *>(c.get())->GetPath();
+            if (selectedPath == prevSelectedPath)
+            {
+              found = true;
+              if (i != currentItem)
+              {
+                SelectItem(i);
+                break;
+              }
+            }
           }
         }
       }
@@ -1095,18 +1146,18 @@ void CGUIBaseContainer::LoadLayout(TiXmlElement *layout)
   TiXmlElement *itemElement = layout->FirstChildElement("itemlayout");
   while (itemElement)
   { // we have a new item layout
-    CGUIListItemLayout itemLayout;
-    itemLayout.LoadLayout(itemElement, GetParentID(), false);
-    m_layouts.push_back(itemLayout);
+    m_layouts.emplace_back();
+    m_layouts.back().LoadLayout(itemElement, GetParentID(), false, m_width, m_height);
     itemElement = itemElement->NextSiblingElement("itemlayout");
+    m_layouts.back().SetParentControl(this);
   }
   itemElement = layout->FirstChildElement("focusedlayout");
   while (itemElement)
   { // we have a new item layout
-    CGUIListItemLayout itemLayout;
-    itemLayout.LoadLayout(itemElement, GetParentID(), true);
-    m_focusedLayouts.push_back(itemLayout);
+    m_focusedLayouts.emplace_back();
+    m_focusedLayouts.back().LoadLayout(itemElement, GetParentID(), true, m_width, m_height);
     itemElement = itemElement->NextSiblingElement("focusedlayout");
+    m_focusedLayouts.back().SetParentControl(this);
   }
 }
 
@@ -1201,28 +1252,28 @@ bool CGUIBaseContainer::GetCondition(int condition, int data) const
 void CGUIBaseContainer::GetCurrentLayouts()
 {
   m_layout = NULL;
-  for (unsigned int i = 0; i < m_layouts.size(); i++)
+  for (auto &layout : m_layouts)
   {
-    if (m_layouts[i].CheckCondition())
+    if (layout.CheckCondition())
     {
-      m_layout = &m_layouts[i];
+      m_layout = &layout;
       break;
     }
   }
-  if (!m_layout && m_layouts.size())
-    m_layout = &m_layouts[0];  // failsafe
+  if (!m_layout && !m_layouts.empty())
+    m_layout = &m_layouts.front(); // failsafe
 
   m_focusedLayout = NULL;
-  for (unsigned int i = 0; i < m_focusedLayouts.size(); i++)
+  for (auto &layout : m_focusedLayouts)
   {
-    if (m_focusedLayouts[i].CheckCondition())
+    if (layout.CheckCondition())
     {
-      m_focusedLayout = &m_focusedLayouts[i];
+      m_focusedLayout = &layout;
       break;
     }
   }
-  if (!m_focusedLayout && m_focusedLayouts.size())
-    m_focusedLayout = &m_focusedLayouts[0];  // failsafe
+  if (!m_focusedLayout && !m_focusedLayouts.empty())
+    m_focusedLayout = &m_focusedLayouts.front(); // failsafe
 }
 
 bool CGUIBaseContainer::HasNextPage() const
@@ -1257,17 +1308,29 @@ std::string CGUIBaseContainer::GetLabel(int info) const
         label = StringUtils::Format("%i", GetSelectedItem() + 1);
     }
     break;
+  case CONTAINER_NUM_ALL_ITEMS:
   case CONTAINER_NUM_ITEMS:
     {
       unsigned int numItems = GetNumItems();
-      if (numItems && m_items[0]->IsFileItem() && (std::static_pointer_cast<CFileItem>(m_items[0]))->IsParentFolder())
+      if (info == CONTAINER_NUM_ITEMS && numItems && m_items[0]->IsFileItem() && (std::static_pointer_cast<CFileItem>(m_items[0]))->IsParentFolder())
         label = StringUtils::Format("%u", numItems-1);
       else
         label = StringUtils::Format("%u", numItems);
     }
     break;
+  case CONTAINER_NUM_NONFOLDER_ITEMS:
+    {
+      int numItems = 0;
+      for (auto item : m_items)
+      {
+        if (!item->m_bIsFolder)
+          numItems++;
+      }
+      label = StringUtils::Format("%u", numItems);
+    }
+    break;
   default:
-      break;
+    break;
   }
   return label;
 }
@@ -1300,6 +1363,8 @@ void CGUIBaseContainer::GetCacheOffsets(int &cacheBefore, int &cacheAfter) const
 
 void CGUIBaseContainer::SetCursor(int cursor)
 {
+  if (m_cursor != cursor)
+    MarkDirtyRegion();
   m_cursor = cursor;
 }
 

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -133,9 +133,7 @@ bool CAEStreamInfo::operator==(const CAEStreamInfo& info) const
   return true;
 }
 
-CAEStreamParser::~CAEStreamParser()
-{
-}
+CAEStreamParser::~CAEStreamParser() = default;
 
 void CAEStreamParser::Reset()
 {
@@ -279,10 +277,10 @@ void CAEStreamParser::GetPacket(uint8_t **buffer, unsigned int *bufferSize)
 /* SYNC FUNCTIONS */
 
 /*
-  This function looks for sync words across the types in paralell, and only does an exhaustive
+  This function looks for sync words across the types in parallel, and only does an exhaustive
   test if it finds a syncword. Once sync has been established, the relevent sync function sets
   m_syncFunc to itself. This function will only be called again if total sync is lost, which
-  allows is to switch stream types on the fly much like a real reicever does.
+  allows is to switch stream types on the fly much like a real receiver does.
 */
 unsigned int CAEStreamParser::DetectType(uint8_t *data, unsigned int size)
 {
@@ -426,31 +424,33 @@ unsigned int CAEStreamParser::SyncAC3(uint8_t *data, unsigned int size)
     }
     else
     {
-      /* Enhanced AC-3 */
+      // Enhanced AC-3
       uint8_t strmtyp = data[2] >> 6;
       if (strmtyp == 3)
         continue;
 
       unsigned int framesize = (((data[2] & 0x7) << 8) | data[3]) + 1;
-      uint8_t      fscod     = (data[4] >> 6) & 0x3;
-      uint8_t      cod       = (data[4] >> 4) & 0x3;
-      uint8_t      blocks;
+      uint8_t fscod = (data[4] >> 6) & 0x3;
+      uint8_t cod = (data[4] >> 4) & 0x3;
+      uint8_t acmod = (data[4] >> 1) & 0x7;
+      uint8_t lfeon = data[4] & 0x1;
+      uint8_t blocks;
 
       if (fscod == 0x3)
       {
         if (cod == 0x3)
           continue;
 
-        blocks       = 6;
+        blocks = 6;
         m_info.m_sampleRate = AC3FSCod[cod] >> 1;
       }
       else
       {
-        blocks = AC3BlkCod[cod  ];
-        m_info.m_sampleRate = AC3FSCod [fscod];
+        blocks = AC3BlkCod[cod];
+        m_info.m_sampleRate = AC3FSCod[fscod];
       }
 
-      m_fsize        = framesize << 1;
+      m_fsize = framesize << 1;
 
       // concatenate substream to independent stream
       if (strmtyp == 1 && m_fsizeMain)
@@ -464,9 +464,9 @@ unsigned int CAEStreamParser::SyncAC3(uint8_t *data, unsigned int size)
       if (m_info.m_type == CAEStreamInfo::STREAM_TYPE_EAC3 && m_hasSync && skip == 0)
         return 0;
 
-      /* if we get here, we can sync */
+      // if we get here, we can sync
       m_hasSync = true;
-      m_info.m_channels = 8; /* FIXME: this should be read out of the stream */
+      m_info.m_channels = AC3Channels[acmod] + lfeon;
       m_syncFunc = &CAEStreamParser::SyncAC3;
       m_info.m_type = CAEStreamInfo::STREAM_TYPE_EAC3;
       m_info.m_ac3FrameSize = m_fsize;
@@ -477,7 +477,7 @@ unsigned int CAEStreamParser::SyncAC3(uint8_t *data, unsigned int size)
     }
   }
 
-  /* if we get here, the entire packet is invalid and we have lost sync */
+  // if we get here, the entire packet is invalid and we have lost sync
   CLog::Log(LOGINFO, "CAEStreamParser::SyncAC3 - AC3 sync lost");
   m_hasSync = false;
   m_fsizeMain = 0;
@@ -498,7 +498,6 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t *data, unsigned int size)
   {
     unsigned int header = data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
     unsigned int hd_sync = 0;
-    bool match = true;
     unsigned int dtsBlocks;
     unsigned int amode;
     unsigned int sfreq;
@@ -510,10 +509,7 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t *data, unsigned int size)
       /* 14bit BE */
       case DTS_PREAMBLE_14BE:
         if (data[4] != 0x07 || (data[5] & 0xf0) != 0xf0)
-        {
-          match = false;
-          break;
-        }
+          continue;
         dtsBlocks = (((data[5] & 0x7) << 4) | ((data[6] & 0x3C) >> 2)) + 1;
         m_fsize = (((((data[6] & 0x3) << 8) | data[7]) << 4) | ((data[8] & 0x3C) >> 2)) + 1;
         amode = ((data[8] & 0x3) << 4) | ((data[9] & 0xF0) >> 4);
@@ -526,10 +522,7 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t *data, unsigned int size)
       /* 14bit LE */
       case DTS_PREAMBLE_14LE:
         if (data[5] != 0x07 || (data[4] & 0xf0) != 0xf0)
-        {
-          match = false;
-          break;
-        }
+          continue;
         dtsBlocks = (((data[4] & 0x7) << 4) | ((data[7] & 0x3C) >> 2)) + 1;
         m_fsize = (((((data[7] & 0x3) << 8) | data[6]) << 4) | ((data[9] & 0x3C) >> 2)) + 1;
         amode = ((data[9] & 0x3) << 4) | ((data[8] & 0xF0) >> 4);
@@ -562,11 +555,10 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t *data, unsigned int size)
         break;
 
       default:
-        match = false;
-        break;
+        continue;
     }
 
-    if (!match || sfreq == 0 || sfreq >= DTS_SFREQ_COUNT)
+    if (sfreq == 0 || sfreq >= DTS_SFREQ_COUNT)
       continue;
 
     /* make sure the framesize is sane */

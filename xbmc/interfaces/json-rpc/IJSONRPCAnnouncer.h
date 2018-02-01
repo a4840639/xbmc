@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@ namespace JSONRPC
   class IJSONRPCAnnouncer : public ANNOUNCEMENT::IAnnouncer
   {
   public:
-    virtual ~IJSONRPCAnnouncer() { }
+    ~IJSONRPCAnnouncer() override = default;
 
   protected:
     static std::string AnnouncementToJSONRPC(ANNOUNCEMENT::AnnouncementFlag flag, const char *sender, const char *method, const CVariant &data, bool compactOutput)
@@ -44,7 +44,10 @@ namespace JSONRPC
       root["params"]["data"] = data;
       root["params"]["sender"] = sender;
 
-      return CJSONVariantWriter::Write(root, compactOutput);
+      std::string str;
+      CJSONVariantWriter::Write(root, str, compactOutput);
+
+      return str;
     }
   };
 }

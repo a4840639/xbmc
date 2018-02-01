@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -71,11 +71,11 @@ public:
   AEAudioFormat GetFormat();
   unsigned int GetChannels() { return GetFormat().m_channelLayout.Count(); }
   // Data management
-  unsigned int GetDataSize();
+  unsigned int GetDataSize(bool checkPktSize);
   void *GetData(unsigned int samples);
   uint8_t* GetRawData(int &size);
   ICodec *GetCodec() const { return m_codec; }
-  float GetReplayGain();
+  float GetReplayGain(float &peakVal);
 
 private:
   // pcm buffer

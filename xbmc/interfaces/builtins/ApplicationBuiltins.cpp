@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,9 +21,10 @@
 #include "ApplicationBuiltins.h"
 
 #include "Application.h"
-#include "filesystem/RarManager.h"
+#include "ServiceBroker.h"
 #include "filesystem/ZipManager.h"
 #include "messaging/ApplicationMessenger.h"
+#include "input/Key.h"
 #include "interfaces/AnnouncementManager.h"
 #include "network/Network.h"
 #include "settings/AdvancedSettings.h"
@@ -57,10 +58,6 @@ static int Extract(const std::vector<std::string>& params)
 
     if (URIUtils::IsZIP(params[0]))
       g_ZipManager.ExtractArchive(params[0],strDestDirect);
-#ifdef HAS_FILESYSTEM_RAR
-    else if (URIUtils::IsRAR(params[0]))
-      g_RarManager.ExtractArchive(params[0],strDestDirect);
-#endif
     else
       CLog::Log(LOGERROR, "Extract, No archive given");
 
@@ -87,7 +84,13 @@ static int NotifyAll(const std::vector<std::string>& params)
 {
   CVariant data;
   if (params.size() > 2)
-    data = CJSONVariantParser::Parse((const unsigned char *)params[2].c_str(), params[2].size());
+  {
+    if (!CJSONVariantParser::Parse(params[2], data))
+    {
+      CLog::Log(LOGERROR, "NotifyAll failed to parse data: %s", params[2].c_str());
+      return -3;
+    }
+  }
 
   ANNOUNCEMENT::CAnnouncementManager::GetInstance().Announce(ANNOUNCEMENT::Other, params[0].c_str(), params[1].c_str(), data);
 
@@ -121,8 +124,8 @@ static int SetVolume(const std::vector<std::string>& params)
  */
 static int ToggleDebug(const std::vector<std::string>& params)
 {
-  bool debug = CSettings::GetInstance().GetBool(CSettings::SETTING_DEBUG_SHOWLOGINFO);
-  CSettings::GetInstance().SetBool(CSettings::SETTING_DEBUG_SHOWLOGINFO, !debug);
+  bool debug = CServiceBroker::GetSettings().GetBool(CSettings::SETTING_DEBUG_SHOWLOGINFO);
+  CServiceBroker::GetSettings().SetBool(CSettings::SETTING_DEBUG_SHOWLOGINFO, !debug);
   g_advancedSettings.SetDebugMode(!debug);
 
   return 0;
@@ -144,10 +147,70 @@ static int ToggleDPMS(const std::vector<std::string>& params)
  */
 static int WakeOnLAN(const std::vector<std::string>& params)
 {
-  g_application.getNetwork().WakeOnLan(params[0].c_str());
+  CServiceBroker::GetNetwork().WakeOnLan(params[0].c_str());
 
   return 0;
 }
+
+// Note: For new Texts with comma add a "\" before!!! Is used for table text.
+//
+/// \page page_List_of_built_in_functions
+/// \section built_in_functions_3 Application built-in's
+///
+/// -----------------------------------------------------------------------------
+///
+/// \table_start
+///   \table_h2_l{
+///     Function,
+///     Description }
+///   \table_row2_l{
+///     <b>`Extract(url [\, dest])`</b>
+///     ,
+///     Extracts a specified archive to an optionally specified 'absolute' path.
+///     @param[in] url                   The archive URL.
+///     @param[in] dest                  Destination path (optional).
+///             @note If not given\, extracts to folder with archive.
+///   }
+///   \table_row2_l{
+///     <b>`Mute`</b>
+///     ,
+///     Mutes (or unmutes) the volume.
+///   }
+///   \table_row2_l{
+///     <b>`NotifyAll(sender\, data [\, json])`</b>
+///     ,
+///     Notify all connected clients
+///     @param[in] sender                 Sender.
+///     @param[in] data                   Data.
+///     @param[in] json                   JSON with extra parameters (optional).
+///   }
+///   \table_row2_l{
+///     <b>`SetVolume(percent[\,showvolumebar])`</b>
+///     ,
+///     Sets the volume to the percentage specified. Optionally\, show the Volume
+///     Dialog in Kodi when setting the volume.
+///     @param[in] percent               Volume level.
+///     @param[in] showvolumebar         Add "showVolumeBar" to show volume bar (optional).
+///   }
+///   \table_row2_l{
+///     <b>`Skin.ToggleDebug`</b>
+///     ,
+///     Toggles skin debug info on/off
+///   }
+///   \table_row2_l{
+///     <b>`ToggleDPMS`</b>
+///     ,
+///     Toggle DPMS mode manually
+///   }
+///   \table_row2_l{
+///     <b>`WakeOnLan(mac)`</b>
+///     ,
+///     Sends the wake-up packet to the broadcast address for the specified MAC
+///     address (Format: FF:FF:FF:FF:FF:FF or FF-FF-FF-FF-FF-FF).
+///     @param[in] mac                   The MAC of the host to wake.
+///   }
+///  \table_end
+///
 
 CBuiltins::CommandMap CApplicationBuiltins::GetOperations() const
 {

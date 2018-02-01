@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,10 +20,12 @@
 
 #include "GUIViewStatePrograms.h"
 #include "FileItem.h"
+#include "ServiceBroker.h"
 #include "view/ViewState.h"
 #include "settings/MediaSourceSettings.h"
 #include "filesystem/Directory.h"
 #include "guilib/LocalizeStrings.h"
+#include "guilib/TextureManager.h"
 #include "guilib/WindowIDs.h"
 #include "settings/Settings.h"
 #include "view/ViewStateSettings.h"
@@ -33,7 +35,7 @@ using namespace XFILE;
 CGUIViewStateWindowPrograms::CGUIViewStateWindowPrograms(const CFileItemList& items) : CGUIViewState(items)
 {
   AddSortMethod(SortByLabel, 551, LABEL_MASKS("%K", "%I", "%L", ""),  // Titel, Size | Foldername, empty
-    CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING) ? SortAttributeIgnoreArticle : SortAttributeNone);
+    CServiceBroker::GetSettings().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING) ? SortAttributeIgnoreArticle : SortAttributeNone);
 
   const CViewState *viewState = CViewStateSettings::GetInstance().Get("programs");
   SetSortMethod(viewState->m_sortDescription);
@@ -55,14 +57,23 @@ std::string CGUIViewStateWindowPrograms::GetLockType()
 
 std::string CGUIViewStateWindowPrograms::GetExtensions()
 {
-  return ".xbe|.cut";
+  return ".cut";
 }
 
 VECSOURCES& CGUIViewStateWindowPrograms::GetSources()
 {
   AddAddonsSource("executable", g_localizeStrings.Get(1043), "DefaultAddonProgram.png");
 #if defined(TARGET_ANDROID)
-  AddAndroidSource("apps", g_localizeStrings.Get(20244), "DefaultProgram.png");
+  {
+    CMediaSource source;
+    source.strPath = "androidapp://sources/apps/";
+    source.strName = g_localizeStrings.Get(20244);
+    if (g_TextureManager.HasTexture("DefaultProgram.png"))
+      source.m_strThumbnailImage = "DefaultProgram.png";
+    source.m_iDriveType = CMediaSource::SOURCE_TYPE_LOCAL;
+    source.m_ignore = true;
+    m_sources.emplace_back(std::move(source));
+  }
 #endif
 
   VECSOURCES *programSources = CMediaSourceSettings::GetInstance().GetSources("programs");

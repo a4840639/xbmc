@@ -1,6 +1,6 @@
  /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -62,7 +62,7 @@ namespace XBMCAddon
           CGUIMessage msg(GUI_MSG_WINDOW_INIT,0,0);
           w->OnMessage(msg);
           w->window->setActive(true);
-          // TODO: Figure out how to clean up the CAction
+          //! @todo Figure out how to clean up the CAction
           return true;
         }
         break;

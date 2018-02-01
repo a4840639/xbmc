@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,12 +19,13 @@
  */
 
 #include "Application.h"
+#include "ServiceBroker.h"
 #include "messaging/ApplicationMessenger.h"
 #include "LocalizeStrings.h"
 #include "GUIKeyboardFactory.h"
-#include "dialogs/GUIDialogOK.h"
 #include "GUIUserMessages.h"
 #include "GUIWindowManager.h"
+#include "messaging/helpers/DialogOKHelper.h"
 #include "settings/Settings.h"
 #include "utils/md5.h"
 #include "utils/StringUtils.h"
@@ -32,21 +33,17 @@
 
 #include "dialogs/GUIDialogKeyboardGeneric.h"
 #if defined(TARGET_DARWIN_IOS)
-#include "platform/darwin/ios/IOSKeyboard.h"
-#include "windowing/WindowingFactory.h"
+#include "dialogs/GUIDialogKeyboardTouch.h"
 #endif
 
 using namespace KODI::MESSAGING;
 
-CGUIKeyboard *CGUIKeyboardFactory::g_activedKeyboard = NULL;
+CGUIKeyboard *CGUIKeyboardFactory::g_activeKeyboard = NULL;
 FILTERING CGUIKeyboardFactory::m_filtering = FILTERING_NONE;
 
-CGUIKeyboardFactory::CGUIKeyboardFactory(void)
-{
-}
+CGUIKeyboardFactory::CGUIKeyboardFactory(void) = default;
 
-CGUIKeyboardFactory::~CGUIKeyboardFactory(void)
-{}
+CGUIKeyboardFactory::~CGUIKeyboardFactory(void) = default;
 
 void CGUIKeyboardFactory::keyTypedCB(CGUIKeyboard *ref, const std::string &typedString)
 {
@@ -75,9 +72,9 @@ void CGUIKeyboardFactory::keyTypedCB(CGUIKeyboard *ref, const std::string &typed
 
 bool CGUIKeyboardFactory::SendTextToActiveKeyboard(const std::string &aTextString, bool closeKeyboard /* = false */)
 {
-  if (!g_activedKeyboard)
+  if (!g_activeKeyboard)
     return false;
-  return g_activedKeyboard->SetTextToKeyboard(aTextString, closeKeyboard);
+  return g_activeKeyboard->SetTextToKeyboard(aTextString, closeKeyboard);
 }
 
 
@@ -88,7 +85,6 @@ bool CGUIKeyboardFactory::ShowAndGetInput(std::string& aTextString, CVariant hea
 {
   bool confirmed = false;
   CGUIKeyboard *kb = NULL;
-  bool needsFreeing = true;
   //heading can be a string or a localization id
   std::string headingStr;
   if (heading.isString())
@@ -97,24 +93,17 @@ bool CGUIKeyboardFactory::ShowAndGetInput(std::string& aTextString, CVariant hea
     headingStr = g_localizeStrings.Get((uint32_t)heading.asInteger());
 
 #if defined(TARGET_DARWIN_IOS)
-  if (g_Windowing.GetCurrentScreen() == 0)
-    kb = new CIOSKeyboard();
+  kb = g_windowManager.GetWindow<CGUIDialogKeyboardTouch>(WINDOW_DIALOG_KEYBOARD_TOUCH);
+#else
+  kb = g_windowManager.GetWindow<CGUIDialogKeyboardGeneric>(WINDOW_DIALOG_KEYBOARD);
 #endif
 
-  if(!kb)
+  if (kb)
   {
-    kb = (CGUIDialogKeyboardGeneric*)g_windowManager.GetWindow(WINDOW_DIALOG_KEYBOARD);
-    needsFreeing = false;
-  }
-
-  if(kb)
-  {
-    g_activedKeyboard = kb;
+    g_activeKeyboard = kb;
     kb->startAutoCloseTimer(autoCloseMs);
     confirmed = kb->ShowAndGetInput(keyTypedCB, aTextString, aTextString, headingStr, hiddenInput);
-    g_activedKeyboard = NULL;
-    if(needsFreeing)
-      delete kb;
+    g_activeKeyboard = NULL;
   }
 
   if (confirmed)
@@ -180,7 +169,7 @@ bool CGUIKeyboardFactory::ShowAndVerifyNewPassword(std::string& newPassword, CVa
     StringUtils::ToLower(newPassword);
     return true;
   }
-  CGUIDialogOK::ShowAndGetInput(CVariant{12341}, CVariant{12344});
+  HELPERS::ShowOKDialogText(CVariant{12341}, CVariant{12344});
   return false;
 }
 
@@ -206,11 +195,12 @@ int CGUIKeyboardFactory::ShowAndVerifyPassword(std::string& strPassword, const s
   else
     strHeadingTemp = StringUtils::Format("%s - %i %s",
                                          g_localizeStrings.Get(12326).c_str(),
-                                         CSettings::GetInstance().GetInt(CSettings::SETTING_MASTERLOCK_MAXRETRIES) - iRetries,
+                                         CServiceBroker::GetSettings().GetInt(CSettings::SETTING_MASTERLOCK_MAXRETRIES) - iRetries,
                                          g_localizeStrings.Get(12343).c_str());
 
   std::string strUserInput;
-  if (!ShowAndGetInput(strUserInput, strHeadingTemp, false, true, autoCloseMs))  //bool hiddenInput = false/true ? TODO: GUI Setting to enable disable this feature y/n?
+  //! @todo GUI Setting to enable disable this feature y/n?
+  if (!ShowAndGetInput(strUserInput, strHeadingTemp, false, true, autoCloseMs))  //bool hiddenInput = false/true ?
     return -1; // user canceled out
 
   if (!strPassword.empty())

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -49,8 +49,11 @@ bool CImageLoader::DoWork()
   std::string loadPath;
 
   std::string texturePath = g_TextureManager.GetTexturePath(m_path);
+  if (texturePath.empty())
+    return false;
+
   if (m_use_cache)
-    loadPath = CTextureCache::GetInstance().CheckCachedImage(texturePath, true, needsChecking);
+    loadPath = CTextureCache::GetInstance().CheckCachedImage(texturePath, needsChecking);
   else
     loadPath = texturePath;
 
@@ -133,13 +136,9 @@ void CGUILargeTextureManager::CLargeTexture::SetTexture(CBaseTexture* texture)
     m_texture.Set(texture, texture->GetWidth(), texture->GetHeight());
 }
 
-CGUILargeTextureManager::CGUILargeTextureManager()
-{
-}
+CGUILargeTextureManager::CGUILargeTextureManager() = default;
 
-CGUILargeTextureManager::~CGUILargeTextureManager()
-{
-}
+CGUILargeTextureManager::~CGUILargeTextureManager() = default;
 
 void CGUILargeTextureManager::CleanupUnusedImages(bool immediately)
 {
@@ -209,6 +208,9 @@ void CGUILargeTextureManager::ReleaseImage(const std::string &path, bool immedia
 // queue the image, and start the background loader if necessary
 void CGUILargeTextureManager::QueueImage(const std::string &path, bool useCache)
 {
+  if (path.empty())
+    return;
+
   CSingleLock lock(m_listSection);
   for (queueIterator it = m_queued.begin(); it != m_queued.end(); ++it)
   {
@@ -234,7 +236,7 @@ void CGUILargeTextureManager::OnJobComplete(unsigned int jobID, bool success, CJ
   {
     if (it->first == jobID)
     { // found our job
-      CImageLoader *loader = (CImageLoader *)job;
+      CImageLoader *loader = static_cast<CImageLoader*>(job);
       CLargeTexture *image = it->second;
       image->SetTexture(loader->m_texture);
       loader->m_texture = NULL; // we want to keep the texture, and jobs are auto-deleted.

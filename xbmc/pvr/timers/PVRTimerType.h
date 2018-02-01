@@ -19,17 +19,21 @@
  *
  */
 
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "addons/kodi-addon-dev-kit/include/kodi/xbmc_pvr_types.h"
+
+#include "pvr/PVRTypes.h"
 
 struct PVR_TIMER_TYPE;
 
 namespace PVR
 {
-  class CPVRTimerType;
-  typedef std::shared_ptr<CPVRTimerType> CPVRTimerTypePtr;
+  static const int DEFAULT_RECORDING_PRIORITY = 50;
+  static const int DEFAULT_RECORDING_LIFETIME = 99; // days
+  static const unsigned int DEFAULT_RECORDING_DUPLICATEHANDLING = 0;
 
   class CPVRTimerType
   {
@@ -94,16 +98,16 @@ namespace PVR
     const std::string& GetDescription() const { return m_strDescription; }
 
     /*!
-     * @brief Check whether this type is for repeating ore one time timers.
-     * @return True if repeating, false otherwise.
+     * @brief Check whether this type is for timer rules or one time timers.
+     * @return True if type represents a timer rule, false otherwise.
      */
-    bool IsRepeating() const { return (m_iAttributes & PVR_TIMER_TYPE_IS_REPEATING) > 0; }
+    bool IsTimerRule() const { return (m_iAttributes & PVR_TIMER_TYPE_IS_REPEATING) > 0; }
 
     /*!
-     * @brief Check whether this type is for repeating ore one time timers.
-     * @return True if one time, false otherwise.
+     * @brief Check whether this type is for timer rules or one time timers.
+     * @return True if type represents a one time timer, false otherwise.
      */
-    bool IsOnetime() const { return !IsRepeating(); }
+    bool IsOnetime() const { return !IsTimerRule(); }
 
     /*!
      * @brief Check whether this type is for epg-based or manual timers.
@@ -118,28 +122,28 @@ namespace PVR
     bool IsEpgBased() const { return !IsManual(); }
 
     /*!
-     * @brief Check whether this type is for repeating epg-based timers.
-     * @return True if repeating epg-based, false otherwise.
+     * @brief Check whether this type is for epg-based timer rules.
+     * @return True if epg-based timer rule, false otherwise.
      */
-    bool IsRepeatingEpgBased() const { return IsRepeating() && IsEpgBased(); }
+    bool IsEpgBasedTimerRule() const { return IsEpgBased() && IsTimerRule(); }
 
     /*!
      * @brief Check whether this type is for one time epg-based timers.
      * @return True if one time epg-based, false otherwise.
      */
-    bool IsOnetimeEpgBased() const { return IsOnetime() && IsEpgBased(); }
+    bool IsEpgBasedOnetime() const { return IsEpgBased() && IsOnetime(); }
 
     /*!
-     * @brief Check whether this type is for repeating manual timers.
-     * @return True if repeating manual, false otherwise.
+     * @brief Check whether this type is for manual timer rules.
+     * @return True if manual timer rule, false otherwise.
      */
-    bool IsRepeatingManual() const { return IsRepeating() && IsManual(); }
+    bool IsManualTimerRule() const { return IsManual() && IsTimerRule(); }
 
     /*!
      * @brief Check whether this type is for one time manual timers.
      * @return True if one time manual, false otherwise.
      */
-    bool IsOnetimeManual() const { return IsOnetime() && IsManual(); }
+    bool IsManualOnetime() const { return IsManual() && IsOnetime(); }
 
     /*!
      * @brief Check whether this type is readonly (must not be modified after initial creation).
@@ -164,13 +168,20 @@ namespace PVR
      * @return True if new instances require EPG info, false otherwise.
      */
     bool RequiresEpgTagOnCreate() const { return (m_iAttributes & (PVR_TIMER_TYPE_REQUIRES_EPG_TAG_ON_CREATE |
-                                                                   PVR_TIMER_TYPE_REQUIRES_EPG_SERIES_ON_CREATE)) > 0; }
+                                                                   PVR_TIMER_TYPE_REQUIRES_EPG_SERIES_ON_CREATE |
+                                                                   PVR_TIMER_TYPE_REQUIRES_EPG_SERIESLINK_ON_CREATE)) > 0; }
 
     /*!
      * @brief Check whether this timer type requires epg tag info including series attributes to be present.
      * @return True if new instances require an EPG tag with series attributes, false otherwise.
      */
     bool RequiresEpgSeriesOnCreate() const { return (m_iAttributes & PVR_TIMER_TYPE_REQUIRES_EPG_SERIES_ON_CREATE) > 0; }
+
+    /*!
+     * @brief Check whether this timer type requires epg tag info including a series link to be present.
+     * @return True if new instances require an EPG tag with a series link, false otherwise.
+     */
+    bool RequiresEpgSeriesLinkOnCreate() const { return (m_iAttributes & PVR_TIMER_TYPE_REQUIRES_EPG_SERIESLINK_ON_CREATE) > 0; }
 
     /*!
      * @brief Check whether this type supports the "enabling/disabling" of timers of its type.
@@ -275,6 +286,12 @@ namespace PVR
     bool SupportsRecordingGroup() const { return (m_iAttributes & PVR_TIMER_TYPE_SUPPORTS_RECORDING_GROUP) > 0; }
 
     /*!
+     * @brief Check whether this type supports 'any channel', for example for defining a timer rule that should match any channel instead of a particular channel.
+     * @return True if any channel is supported, false otherwise.
+     */
+    bool SupportsAnyChannel() const { return (m_iAttributes & PVR_TIMER_TYPE_SUPPORTS_ANY_CHANNEL) > 0; }
+
+    /*!
      * @brief Obtain a list with all possible values for the priority attribute.
      * @param list out, the list with the values or an empty list, if priority is not supported by this type.
      */
@@ -288,7 +305,7 @@ namespace PVR
 
     /*!
      * @brief Obtain a list with all possible values for the lifetime attribute.
-     * @param list out, the list with the values or an empty list, if liftime is not supported by this type.
+     * @param list out, the list with the values or an empty list, if lifetime is not supported by this type.
      */
     void GetLifetimeValues(std::vector< std::pair<std::string, int> > &list) const;
 
@@ -333,7 +350,6 @@ namespace PVR
      * @return the default value.
      */
     int GetRecordingGroupDefault() const { return m_iRecordingGroupDefault; }
-
 
   private:
     void InitAttributeValues(const PVR_TIMER_TYPE &type);

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 
 #include "addons/AddonInstaller.h"
 #include "addons/AddonManager.h"
+#include "ServiceBroker.h"
 #include "filesystem/File.h"
 #include "interfaces/builtins/Builtins.h"
 #include "messaging/ApplicationMessenger.h"
@@ -68,7 +69,7 @@ void CRssManager::OnSettingsUnloaded()
   Clear();
 }
 
-void CRssManager::OnSettingAction(const CSetting *setting)
+void CRssManager::OnSettingAction(std::shared_ptr<const CSetting> setting)
 {
   if (setting == NULL)
     return;
@@ -77,7 +78,7 @@ void CRssManager::OnSettingAction(const CSetting *setting)
   if (settingId == CSettings::SETTING_LOOKANDFEEL_RSSEDIT)
   {
     ADDON::AddonPtr addon;
-    if (!ADDON::CAddonMgr::GetInstance().GetAddon("script.rss.editor", addon))
+    if (!CServiceBroker::GetAddonMgr().GetAddon("script.rss.editor", addon))
     {
       if (!CAddonInstaller::GetInstance().InstallModal("script.rss.editor", addon))
         return;
@@ -145,8 +146,8 @@ bool CRssManager::Load()
 
         if (pFeed->FirstChild() != NULL)
         {
-          // TODO: UTF-8: Do these URLs need to be converted to UTF-8?
-          //              What about the xml encoding?
+          //! @todo UTF-8: Do these URLs need to be converted to UTF-8?
+          //!              What about the xml encoding?
           std::string strUrl = pFeed->FirstChild()->ValueStr();
           set.url.push_back(strUrl);
           set.interval.push_back(iInterval);

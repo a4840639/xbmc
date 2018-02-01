@@ -57,7 +57,7 @@ TEST_F(TestAddonFactory, ShouldFailWhenAddonDoesNotHaveRequestedType)
   EXPECT_EQ(nullptr, addon);
 }
 
-TEST_F(TestAddonFactory, ShouldPickFirstExtenstionWhenNotRequestingSpecificType)
+TEST_F(TestAddonFactory, ShouldPickFirstExtensionWhenNotRequestingSpecificType)
 {
   cp_extension_t extensions[2] = {
       {&plugin, (char*)"xbmc.python.script", nullptr, nullptr, nullptr, nullptr},
@@ -71,7 +71,7 @@ TEST_F(TestAddonFactory, ShouldPickFirstExtenstionWhenNotRequestingSpecificType)
   EXPECT_EQ(ADDON_SCRIPT, addon->Type());
 }
 
-TEST_F(TestAddonFactory, ShouldIgnoreMetadataExtenstion)
+TEST_F(TestAddonFactory, ShouldIgnoreMetadataExtension)
 {
   cp_extension_t extensions[2] = {
       {&plugin, (char*)"kodi.addon.metadata", nullptr, nullptr, nullptr, nullptr},
@@ -100,11 +100,58 @@ TEST_F(TestAddonFactory, ShouldReturnDependencyInfoWhenNoExtensions)
 }
 
 
-TEST_F(TestAddonFactory, IconPathShouldBeBuildtFromPluginPath)
+TEST_F(TestAddonFactory, ShouldAcceptUnversionedDependencies)
 {
-  plugin.plugin_path = strdup("a/b");;
+  cp_plugin_import_t import{(char*)"a.b", nullptr, 0};
+  plugin.extensions = nullptr;
+  plugin.num_extensions = 0;
+  plugin.num_imports = 1;
+  plugin.imports = &import;
+
+  ADDONDEPS expected = {{"a.b", {AddonVersion{"0.0.0"}, false}}};
+  auto addon = CAddonMgr::Factory(&plugin, ADDON_UNKNOWN);
+  EXPECT_EQ(expected, addon->GetDeps());
+}
+
+
+TEST_F(TestAddonFactory, IconPathShouldBeBuiltFromPluginPath)
+{
+  plugin.plugin_path = strdup("a/b");
   auto addon = CAddonMgr::Factory(&plugin, ADDON_UNKNOWN);
   EXPECT_EQ("a/b", addon->Path());
   EXPECT_EQ("a/b/icon.png", addon->Icon());
+  free(plugin.plugin_path);
+}
+
+
+TEST_F(TestAddonFactory, AssetsElementShouldOverrideImplicitArt)
+{
+  cp_cfg_element_t icon{0};
+  icon.name = (char*)"icon";
+  icon.value = (char*)"foo/bar.jpg";
+
+  cp_cfg_element_t assets{0};
+  assets.name = (char*)"assets";
+  assets.num_children = 1;
+  assets.children = &icon;
+
+  cp_cfg_element_t root{0};
+  root.name = (char*)"kodi.addon.metadata";
+  root.num_children = 1;
+  root.children = &assets;
+  assets.parent = &root;
+  icon.parent = &assets;
+
+  cp_extension_t metadata = {&plugin, (char*)"kodi.addon.metadata", nullptr, nullptr, nullptr, &root};
+
+  cp_extension_t extensions[1] = {metadata};
+  plugin.extensions = extensions;
+  plugin.num_extensions = 1;
+  plugin.plugin_path = strdup("a/b");
+
+  auto addon = CAddonMgr::Factory(&plugin, ADDON_UNKNOWN);
+  EXPECT_EQ("a/b", addon->Path());
+  EXPECT_EQ("a/b/foo/bar.jpg", addon->Icon());
+  EXPECT_EQ("", addon->FanArt());
   free(plugin.plugin_path);
 }

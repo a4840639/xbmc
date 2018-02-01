@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "guilib/GUIMoverControl.h"
 #include "guilib/GUIResizeControl.h"
 #include "Application.h"
+#include "ServiceBroker.h"
 #include "settings/DisplaySettings.h"
 #include "settings/Settings.h"
 #include "guilib/GUIWindowManager.h"
@@ -32,7 +33,7 @@
 #include "utils/log.h"
 #include "utils/StringUtils.h"
 #include "utils/Variant.h"
-#include "windowing/WindowingFactory.h"
+#include "windowing/WinSystem.h"
 
 #include <string>
 #include <utility>
@@ -55,8 +56,7 @@ CGUIWindowSettingsScreenCalibration::CGUIWindowSettingsScreenCalibration(void)
   m_needsScaling = false;         // we handle all the scaling
 }
 
-CGUIWindowSettingsScreenCalibration::~CGUIWindowSettingsScreenCalibration(void)
-{}
+CGUIWindowSettingsScreenCalibration::~CGUIWindowSettingsScreenCalibration(void) = default;
 
 
 bool CGUIWindowSettingsScreenCalibration::OnAction(const CAction &action)
@@ -72,7 +72,7 @@ bool CGUIWindowSettingsScreenCalibration::OnAction(const CAction &action)
 
   case ACTION_CALIBRATE_RESET:
     {
-      CGUIDialogYesNo* pDialog = (CGUIDialogYesNo*)g_windowManager.GetWindow(WINDOW_DIALOG_YES_NO);
+      CGUIDialogYesNo* pDialog = g_windowManager.GetWindow<CGUIDialogYesNo>(WINDOW_DIALOG_YES_NO);
       pDialog->SetHeading(CVariant{20325});
       std::string strText = StringUtils::Format(g_localizeStrings.Get(20326).c_str(), g_graphicsContext.GetResInfo(m_Res[m_iCurRes]).strMode.c_str());
       pDialog->SetLine(0, CVariant{std::move(strText)});
@@ -93,7 +93,7 @@ bool CGUIWindowSettingsScreenCalibration::OnAction(const CAction &action)
     // choose the next resolution in our list
     {
       m_iCurRes = (m_iCurRes+1) % m_Res.size();
-      g_graphicsContext.SetVideoResolution(m_Res[m_iCurRes]);
+      g_graphicsContext.SetVideoResolution(m_Res[m_iCurRes], false);
       ResetControls();
       return true;
     }
@@ -101,6 +101,7 @@ bool CGUIWindowSettingsScreenCalibration::OnAction(const CAction &action)
   // ignore all gesture meta actions
   case ACTION_GESTURE_BEGIN:
   case ACTION_GESTURE_END:
+  case ACTION_GESTURE_ABORT:
   case ACTION_GESTURE_NOTIFY:
   case ACTION_GESTURE_PAN:
   case ACTION_GESTURE_ROTATE:
@@ -137,10 +138,10 @@ bool CGUIWindowSettingsScreenCalibration::OnMessage(CGUIMessage& message)
   case GUI_MSG_WINDOW_DEINIT:
     {
       CDisplaySettings::GetInstance().UpdateCalibrations();
-      CSettings::GetInstance().Save();
+      CServiceBroker::GetSettings().Save();
       g_graphicsContext.SetCalibrating(false);
       // reset our screen resolution to what it was initially
-      g_graphicsContext.SetVideoResolution(CDisplaySettings::GetInstance().GetCurrentResolution());
+      g_graphicsContext.SetVideoResolution(CDisplaySettings::GetInstance().GetCurrentResolution(), false);
       g_windowManager.SendMessage(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_WINDOW_RESIZE);
     }
     break;
@@ -152,13 +153,10 @@ bool CGUIWindowSettingsScreenCalibration::OnMessage(CGUIMessage& message)
 
       // Get the allowable resolutions that we can calibrate...
       m_Res.clear();
-      if (g_application.m_pPlayer->IsPlayingVideo())
+      if (g_application.GetAppPlayer().IsPlayingVideo())
       { // don't allow resolution switching if we are playing a video
 
-#ifdef HAS_VIDEO_PLAYBACK
-        RESOLUTION res = g_application.m_pPlayer->GetRenderResolution();
-        g_graphicsContext.SetVideoResolution(res);
-#endif
+        g_application.GetAppPlayer().TriggerUpdateResolution();
 
         m_iCurRes = 0;
         m_Res.push_back(g_graphicsContext.GetVideoResolution());
@@ -376,7 +374,7 @@ void CGUIWindowSettingsScreenCalibration::UpdateFromControl(int iControl)
 
   // set the label control correctly
   std::string strText;
-  if (g_Windowing.IsFullScreen())
+  if (CServiceBroker::GetWinSystem().IsFullScreen())
     strText = StringUtils::Format("%ix%i@%.2f - %s | %s",
                                   info.iScreenWidth,
                                   info.iScreenHeight,
@@ -395,7 +393,6 @@ void CGUIWindowSettingsScreenCalibration::UpdateFromControl(int iControl)
 
 void CGUIWindowSettingsScreenCalibration::FrameMove()
 {
-  //  g_Windowing.Get3DDevice()->Clear(0, NULL, D3DCLEAR_TARGET, 0, 0, 0);
   m_iControl = GetFocusedControlID();
   if (m_iControl >= 0)
   {

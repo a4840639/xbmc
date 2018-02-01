@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,8 +25,8 @@
 
 using namespace PERIPHERALS;
 
-CPeripheralNyxboard::CPeripheralNyxboard(const PeripheralScanResult& scanResult) :
-  CPeripheralHID(scanResult)
+CPeripheralNyxboard::CPeripheralNyxboard(CPeripherals& manager, const PeripheralScanResult& scanResult, CPeripheralBus* bus) :
+  CPeripheralHID(manager, scanResult, bus)
 {
   m_features.push_back(FEATURE_NYXBOARD);
 }

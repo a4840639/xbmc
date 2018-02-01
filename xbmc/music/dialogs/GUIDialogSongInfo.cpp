@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@ using namespace XFILE;
 CGUIDialogSongInfo::CGUIDialogSongInfo(void)
     : CGUIDialog(WINDOW_DIALOG_SONG_INFO, "DialogMusicInfo.xml")
     , m_song(new CFileItem)
+    , m_albumId(-1)
 {
   m_cancelled = false;
   m_needsUpdate = false;
@@ -59,9 +60,7 @@ CGUIDialogSongInfo::CGUIDialogSongInfo(void)
   m_loadType = KEEP_IN_MEMORY;
 }
 
-CGUIDialogSongInfo::~CGUIDialogSongInfo(void)
-{
-}
+CGUIDialogSongInfo::~CGUIDialogSongInfo(void) = default;
 
 bool CGUIDialogSongInfo::OnMessage(CGUIMessage& message)
 {
@@ -79,9 +78,13 @@ bool CGUIDialogSongInfo::OnMessage(CGUIMessage& message)
           db.Close();
         }
       }
+      CGUIMessage msg(GUI_MSG_LABEL_RESET, GetID(), CONTROL_LIST);
+      OnMessage(msg);
       break;
     }
   case GUI_MSG_WINDOW_INIT:
+    CGUIDialog::OnMessage(message);    
+    Update();
     m_cancelled = false;
     break;
 
@@ -94,7 +97,7 @@ bool CGUIDialogSongInfo::OnMessage(CGUIMessage& message)
       }
       else if (iControl == CONTROL_ALBUMINFO)
       {
-        CGUIWindowMusicBase *window = (CGUIWindowMusicBase *)g_windowManager.GetWindow(WINDOW_MUSIC_NAV);
+        CGUIWindowMusicBase *window = g_windowManager.GetWindow<CGUIWindowMusicBase>(WINDOW_MUSIC_NAV);
         if (window)
         {
           CFileItem item(*m_song);
@@ -109,6 +112,32 @@ bool CGUIDialogSongInfo::OnMessage(CGUIMessage& message)
       {
         OnGetThumb();
         return true;
+      }
+      else if (iControl == CONTROL_LIST)
+      {
+        int iAction = message.GetParam1();
+        if ((ACTION_SELECT_ITEM == iAction || ACTION_MOUSE_LEFT_CLICK == iAction))
+        {
+          CGUIMessage msg(GUI_MSG_ITEM_SELECTED, GetID(), iControl);
+          g_windowManager.SendMessage(msg);
+          int iItem = msg.GetParam1();
+          if (iItem < 0 || iItem >= static_cast<int>(m_song->GetMusicInfoTag()->GetContributors().size()))
+            break;
+          int idArtist = m_song->GetMusicInfoTag()->GetContributors()[iItem].GetArtistId();
+          if (idArtist > 0)
+          {
+              CGUIWindowMusicBase *window = g_windowManager.GetWindow<CGUIWindowMusicBase>(WINDOW_MUSIC_NAV);
+              if (window)
+              {
+                CFileItem item(*m_song);
+                std::string path = StringUtils::Format("musicdb://artists/%i", idArtist);
+                item.SetPath(path);
+                item.m_bIsFolder = true;
+                window->OnItemInfo(&item, true);
+              }
+          }
+          return true;
+        }
       }
     }
     break;
@@ -146,20 +175,25 @@ bool CGUIDialogSongInfo::OnBack(int actionID)
 
 void CGUIDialogSongInfo::OnInitWindow()
 {
-  CMusicDatabase db;
-  db.Open();
+  // Normally have album id from song
+  m_albumId = m_song->GetMusicInfoTag()->GetAlbumId();
+  if (m_albumId < 0)
+  {
+    CMusicDatabase db;
+    db.Open();
 
-  // no known db info - check if parent dir is an album
-  if (m_song->GetMusicInfoTag()->GetDatabaseId() == -1)
-  {
-    std::string path = URIUtils::GetDirectory(m_song->GetPath());
-    m_albumId = db.GetAlbumIdByPath(path);
-  }
-  else
-  {
-    CAlbum album;
-    db.GetAlbumFromSong(m_song->GetMusicInfoTag()->GetDatabaseId(),album);
-    m_albumId = album.idAlbum;
+    // no known db info - check if parent dir is an album
+    if (m_song->GetMusicInfoTag()->GetDatabaseId() == -1)
+    {
+      std::string path = URIUtils::GetDirectory(m_song->GetPath());
+      m_albumId = db.GetAlbumIdByPath(path);
+    }
+    else
+    {
+      CAlbum album;
+      db.GetAlbumFromSong(m_song->GetMusicInfoTag()->GetDatabaseId(), album);
+      m_albumId = album.idAlbum;
+    }
   }
   CONTROL_ENABLE_ON_CONDITION(CONTROL_ALBUMINFO, m_albumId > -1);
 
@@ -170,12 +204,25 @@ void CGUIDialogSongInfo::OnInitWindow()
     CONTROL_ENABLE(CONTROL_USERRATING);
 
   SET_CONTROL_HIDDEN(CONTROL_BTN_REFRESH);
-  SET_CONTROL_HIDDEN(CONTROL_LIST);
   SET_CONTROL_LABEL(CONTROL_USERRATING, 38023);
   SET_CONTROL_LABEL(CONTROL_BTN_GET_THUMB, 13405);
   SET_CONTROL_LABEL(CONTROL_ALBUMINFO, 10523);
 
   CGUIDialog::OnInitWindow();
+}
+
+void CGUIDialogSongInfo::Update()
+{
+  CFileItemList items;
+  for (const auto& contributor : m_song->GetMusicInfoTag()->GetContributors())
+  {
+    auto item = std::make_shared<CFileItem>(contributor.GetRoleDesc());
+    item->SetLabel2(contributor.GetArtist());
+    item->GetMusicInfoTag()->SetDatabaseId(contributor.GetArtistId(), "artist");
+    items.Add(std::move(item));
+  }
+  CGUIMessage message(GUI_MSG_LABEL_BIND, GetID(), CONTROL_LIST, 0, 0, &items);
+  OnMessage(message);
 }
 
 void CGUIDialogSongInfo::SetUserrating(int userrating)
@@ -197,32 +244,25 @@ void CGUIDialogSongInfo::SetSong(CFileItem *item)
   m_song->LoadMusicTag();
   m_startUserrating = m_song->GetMusicInfoTag()->GetUserrating();
   MUSIC_INFO::CMusicInfoLoader::LoadAdditionalTagInfo(m_song.get());
-   // set artist thumb as well
-  CMusicDatabase db;
-  db.Open();
-  if (item->IsMusicDb())
+
+  // Load song art. 
+  // For songs in library this includes related album and artist(s) art, 
+  // otherwise just embedded or cached thumb is fetched.
+  CMusicThumbLoader loader;
+  loader.LoadItem(m_song.get());
+
+   // Set artist art for non db songs when artist can be found uniquely by name
+  if (!m_song->IsMusicDb() && m_song->HasMusicInfoTag() && !m_song->GetMusicInfoTag()->GetArtist().empty())
   {
-    std::vector<int> artists;
-    CVariant artistthumbs;
-    db.GetArtistsBySong(item->GetMusicInfoTag()->GetDatabaseId(), artists);
-    for (std::vector<int>::const_iterator artistId = artists.begin(); artistId != artists.end(); ++artistId)
-    {
-      std::string thumb = db.GetArtForItem(*artistId, MediaTypeArtist, "thumb");
-      if (!thumb.empty())
-        artistthumbs.push_back(thumb);
-    }
-    if (artistthumbs.size())
-    {
-      m_song->SetProperty("artistthumbs", artistthumbs);
-      m_song->SetProperty("artistthumb", artistthumbs[0]);
-    }
-  }
-  else if (m_song->HasMusicInfoTag() && !m_song->GetMusicInfoTag()->GetArtist().empty())
-  {
+    CMusicDatabase db;
+    db.Open();
     int idArtist = db.GetArtistByName(m_song->GetMusicInfoTag()->GetArtist()[0]);
-    std::string thumb = db.GetArtForItem(idArtist, MediaTypeArtist, "thumb");
-    if (!thumb.empty())
-      m_song->SetProperty("artistthumb", thumb);
+    if (idArtist > 0)
+    {
+      std::map<std::string, std::string> art;
+      if (db.GetArtForItem(idArtist, MediaTypeArtist, art))
+        m_song->SetArt(art);
+    }
   }
   m_needsUpdate = false;
 }
@@ -234,7 +274,7 @@ CFileItemPtr CGUIDialogSongInfo::GetCurrentListItem(int offset)
 
 bool CGUIDialogSongInfo::DownloadThumbnail(const std::string &thumbFile)
 {
-  // TODO: Obtain the source...
+  //! @todo Obtain the source...
   std::string source;
   CCurlFile http;
   http.Download(source, thumbFile);
@@ -248,8 +288,8 @@ bool CGUIDialogSongInfo::DownloadThumbnail(const std::string &thumbFile)
 // 3.  Local thumb
 // 4.  No thumb (if no Local thumb is available)
 
-// TODO: Currently no support for "embedded thumb" as there is no easy way to grab it
-//       without sending a file that has this as it's album to this class
+//! @todo Currently no support for "embedded thumb" as there is no easy way to grab it
+//!       without sending a file that has this as it's album to this class
 void CGUIDialogSongInfo::OnGetThumb()
 {
   CFileItemList items;
@@ -316,7 +356,7 @@ void CGUIDialogSongInfo::OnGetThumb()
 
   std::string newThumb;
   if (result == "thumb://None")
-    newThumb = "-";
+    newThumb = "";
   else if (result == "thumb://allmusic.com")
     newThumb.clear();
   else if (result == "thumb://Local")
@@ -344,7 +384,7 @@ void CGUIDialogSongInfo::OnGetThumb()
 
 void CGUIDialogSongInfo::OnSetUserrating()
 {
-  CGUIDialogSelect *dialog = (CGUIDialogSelect *)g_windowManager.GetWindow(WINDOW_DIALOG_SELECT);
+  CGUIDialogSelect *dialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
   if (dialog)
   {
     dialog->SetHeading(CVariant{ 38023 });

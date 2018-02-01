@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,11 +20,11 @@
 
 #include "DVDSubtitleParserSSA.h"
 #include "DVDCodecs/Overlay/DVDOverlaySSA.h"
-#include "DVDClock.h"
+#include "cores/VideoPlayer/Interface/Addon/TimingConstants.h"
 #include "utils/log.h"
 
-CDVDSubtitleParserSSA::CDVDSubtitleParserSSA(CDVDSubtitleStream* pStream, const std::string& strFile)
-    : CDVDSubtitleParserText(pStream, strFile)
+CDVDSubtitleParserSSA::CDVDSubtitleParserSSA(std::unique_ptr<CDVDSubtitleStream> && pStream, const std::string& strFile)
+    : CDVDSubtitleParserText(std::move(pStream), strFile)
 {
   m_libass = new CDVDSubtitlesLibass();
 }
@@ -54,7 +54,6 @@ bool CDVDSubtitleParserSSA::Open(CDVDStreamInfo &hints)
     if (curEvent)
     {
       CDVDOverlaySSA* overlay = new CDVDOverlaySSA(m_libass);
-      overlay->Acquire(); // increase ref count with one so that we can hold a handle to this overlay
 
       overlay->iPTSStartTime = (double)curEvent->Start * (DVD_TIME_BASE / 1000);
       overlay->iPTSStopTime  = (double)(curEvent->Start + curEvent->Duration) * (DVD_TIME_BASE / 1000);

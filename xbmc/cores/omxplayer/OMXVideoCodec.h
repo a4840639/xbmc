@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -177,16 +177,6 @@ public:
    */
   virtual bool GetPicture(DVDVideoPicture* pDvdVideoPicture) = 0;
 
-
-  /*
-   * returns true if successfull
-   * the data is cleared to zero
-   */ 
-  virtual bool ClearPicture(DVDVideoPicture* pDvdVideoPicture)
-  {
-    memset(pDvdVideoPicture, 0, sizeof(DVDVideoPicture));
-    return true;
-  }
 
   /*
    * returns true if successfull

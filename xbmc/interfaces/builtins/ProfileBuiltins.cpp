@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@
 #include "network/Network.h"
 #include "network/NetworkServices.h"
 #include "profiles/ProfilesManager.h"
+#include "ServiceBroker.h"
 #include "Util.h"
 #include "utils/StringUtils.h"
 #include "video/VideoLibraryQueue.h"
@@ -75,9 +76,7 @@ static int LogOff(const std::vector<std::string>& params)
   if (CVideoLibraryQueue::GetInstance().IsRunning())
     CVideoLibraryQueue::GetInstance().CancelAllJobs();
 
-  ADDON::CAddonMgr::GetInstance().StopServices(true);
-
-  g_application.getNetwork().NetworkMessage(CNetwork::SERVICES_DOWN,1);
+  CServiceBroker::GetNetwork().NetworkMessage(CNetwork::SERVICES_DOWN,1);
   CProfilesManager::GetInstance().LoadMasterProfileForLogin();
   g_passwordManager.bMasterUser = false;
 
@@ -114,6 +113,41 @@ static int MasterMode(const std::vector<std::string>& params)
 
   return 0;
 }
+
+
+// Note: For new Texts with comma add a "\" before!!! Is used for table text.
+//
+/// \page page_List_of_built_in_functions
+/// \section built_in_functions_13 Profile built-in's
+///
+/// -----------------------------------------------------------------------------
+///
+/// \table_start
+///   \table_h2_l{
+///     Function,
+///     Description }
+///   \table_row2_l{
+///     <b>`LoadProfile(profilename\,[prompt])`</b>
+///     ,
+///     Load the specified profile. If prompt is not specified\, and a password
+///     would be required for the requested profile\, this command will silently
+///     fail. If prompt is specified and a password is required\, a password
+///     dialog will be shown.
+///     @param[in] profilename           The profile name.
+///     @param[in] prompt                Add "prompt" to allow unlocking dialogs (optional)
+///   }
+///   \table_row2_l{
+///     <b>`Mastermode`</b>
+///     ,
+///     Runs Kodi in master mode
+///   }
+///   \table_row2_l{
+///     <b>`System.LogOff`</b>
+///     ,
+///     Log off current user.
+///   }
+/// \table_end
+///
 
 CBuiltins::CommandMap CProfileBuiltins::GetOperations() const
 {

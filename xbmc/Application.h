@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,14 +23,20 @@
 #include "system.h" // for HAS_DVD_DRIVE et. al.
 #include "XBApplicationEx.h"
 
+#include "addons/AddonSystemSettings.h"
 #include "guilib/IMsgTargetCallback.h"
 #include "guilib/Resolution.h"
 #include "utils/GlobalsHandling.h"
 #include "messaging/IMessageTarget.h"
+#include "ServiceManager.h"
+#include "ApplicationStackHelper.h"
 
+#include <atomic>
+#include <deque>
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 class CAction;
 class CFileItem;
@@ -50,9 +56,12 @@ namespace MEDIA_DETECT
   class CAutorun;
 }
 
+namespace PLAYLIST
+{
+  class CPlayList;
+}
+
 #include "cores/IPlayerCallback.h"
-#include "cores/playercorefactory/PlayerCoreFactory.h"
-#include "PlayListPlayer.h"
 #include "settings/lib/ISettingsHandler.h"
 #include "settings/lib/ISettingCallback.h"
 #include "settings/lib/ISubSettings.h"
@@ -60,24 +69,23 @@ namespace MEDIA_DETECT
 #include "storage/DetectDVDType.h"
 #endif
 #ifdef TARGET_WINDOWS
-#include "win32/WIN32Util.h"
+#include "powermanagement/WinIdleTimer.h"
 #endif
 #include "utils/Stopwatch.h"
-#ifdef HAS_PERFORMANCE_SAMPLE
-#include "utils/PerformanceStats.h"
-#endif
+#include "windowing/OSScreenSaver.h"
 #include "windowing/XBMC_events.h"
+#include "threads/SystemClock.h"
 #include "threads/Thread.h"
 
 #include "ApplicationPlayer.h"
-#include "interfaces/IActionListener.h"
+#include "FileItem.h"
 
 class CSeekHandler;
 class CInertialScrollingHandler;
 class DPMSSupport;
 class CSplash;
 class CBookmark;
-class CNetwork;
+class IActionListener;
 
 namespace VIDEO
 {
@@ -92,7 +100,6 @@ namespace MUSIC_INFO
 #define VOLUME_MINIMUM 0.0f        // -60dB
 #define VOLUME_MAXIMUM 1.0f        // 0dB
 #define VOLUME_DYNAMIC_RANGE 90.0f // 60dB
-#define VOLUME_CONTROL_STEPS 90    // 90 steps
 
 // replay gain settings struct for quick access by the player multiple
 // times per second (saves doing settings lookup)
@@ -104,22 +111,17 @@ struct ReplayGainSettings
   bool bAvoidClipping;
 };
 
-class CBackgroundPlayer : public CThread
+enum StartupAction
 {
-public:
-  CBackgroundPlayer(const CFileItem &item, int iPlayList);
-  virtual ~CBackgroundPlayer();
-  virtual void Process();
-protected:
-  CFileItem *m_item;
-  int       m_iPlayList;
+  STARTUP_ACTION_NONE = 0,
+  STARTUP_ACTION_PLAY_TV,
+  STARTUP_ACTION_PLAY_RADIO
 };
 
 class CApplication : public CXBApplicationEx, public IPlayerCallback, public IMsgTargetCallback,
                      public ISettingCallback, public ISettingsHandler, public ISubSettings,
                      public KODI::MESSAGING::IMessageTarget
 {
-  friend class CApplicationPlayer;
 public:
 
   enum ESERVERS
@@ -134,13 +136,15 @@ public:
   };
 
   CApplication(void);
-  virtual ~CApplication(void);
-  virtual bool Initialize() override;
-  virtual void FrameMove(bool processEvents, bool processGUI = true) override;
-  virtual void Render() override;
+  ~CApplication(void) override;
+  bool Initialize() override;
+  void FrameMove(bool processEvents, bool processGUI = true) override;
+  void Render() override;
   virtual void Preflight();
-  virtual bool Create() override;
-  virtual bool Cleanup() override;
+  bool Create(const CAppParamParser &params);
+  bool Cleanup() override;
+
+  bool IsInitialized() { return !m_bInitializing; }
 
   bool CreateGUI();
   bool InitWindow(RESOLUTION res = RES_INVALID);
@@ -150,46 +154,45 @@ public:
 
   bool StartServer(enum ESERVERS eServer, bool bStart, bool bWait = false);
 
-  void StartPVRManager();
-  void StopPVRManager();
   bool IsCurrentThread() const;
   void Stop(int exitCode);
-  void RestartApp();
   void UnloadSkin(bool forReload = false);
-  bool LoadUserWindows();
+  bool LoadCustomWindows();
   void ReloadSkin(bool confirm = false);
   const std::string& CurrentFile();
   CFileItem& CurrentFileItem();
-  void SetCurrentFileItem(const CFileItem &item);
+  std::shared_ptr<CFileItem> CurrentFileItemPtr();
   CFileItem& CurrentUnstackedItem();
-  virtual bool OnMessage(CGUIMessage& message) override;
+  bool OnMessage(CGUIMessage& message) override;
+  CApplicationPlayer& GetAppPlayer();
   std::string GetCurrentPlayer();
-  virtual void OnPlayBackEnded() override;
-  virtual void OnPlayBackStarted() override;
-  virtual void OnPlayBackPaused() override;
-  virtual void OnPlayBackResumed() override;
-  virtual void OnPlayBackStopped() override;
-  virtual void OnQueueNextItem() override;
-  virtual void OnPlayBackSeek(int iTime, int seekOffset) override;
-  virtual void OnPlayBackSeekChapter(int iChapter) override;
-  virtual void OnPlayBackSpeedChanged(int iSpeed) override;
+  CApplicationStackHelper& GetAppStackHelper();
+  void OnPlayBackEnded() override;
+  void OnPlayBackStarted(const CFileItem &file) override;
+  void OnPlayerCloseFile(const CFileItem &file, const CBookmark &bookmark) override;
+  void OnPlayBackPaused() override;
+  void OnPlayBackResumed() override;
+  void OnPlayBackStopped() override;
+  void OnPlayBackError() override;
+  void OnQueueNextItem() override;
+  void OnPlayBackSeek(int64_t iTime, int64_t seekOffset) override;
+  void OnPlayBackSeekChapter(int iChapter) override;
+  void OnPlayBackSpeedChanged(int iSpeed) override;
+  void OnAVChange() override;
+  void RequestVideoSettings(const CFileItem &fileItem) override;
+  void StoreVideoSettings(const CFileItem &fileItem, CVideoSettings vs) override;
 
-  virtual int  GetMessageMask() override;
-  virtual void OnApplicationMessage(KODI::MESSAGING::ThreadMessage* pMsg) override;
+  int  GetMessageMask() override;
+  void OnApplicationMessage(KODI::MESSAGING::ThreadMessage* pMsg) override;
 
-  bool PlayMedia(const CFileItem& item, const std::string &player, int iPlaylist = PLAYLIST_MUSIC);
-  bool PlayMediaSync(const CFileItem& item, int iPlaylist = PLAYLIST_MUSIC);
+  bool PlayMedia(const CFileItem& item, const std::string &player, int iPlaylist);
   bool ProcessAndStartPlaylist(const std::string& strPlayList, PLAYLIST::CPlayList& playlist, int iPlaylist, int track=0);
-  PlayBackRet PlayFile(const CFileItem& item, const std::string& player, bool bRestart = false);
-  void SaveFileState(bool bForeground = false);
-  void UpdateFileState();
-  void LoadVideoSettings(const CFileItem& item);
+  bool PlayFile(CFileItem item, const std::string& player, bool bRestart = false);
   void StopPlaying();
   void Restart(bool bSamePosition = true);
   void DelayedPlayerRestart();
   void CheckDelayedPlayerRestart();
   bool IsPlayingFullScreenVideo() const;
-  bool IsStartingPlayback() const { return m_bPlaybackStarting; }
   bool IsFullScreen();
   bool OnAppCommand(const CAction &action);
   bool OnAction(const CAction &action);
@@ -198,13 +201,11 @@ public:
   bool IsIdleShutdownInhibited() const;
   // Checks whether the screensaver and / or DPMS should become active.
   void CheckScreenSaverAndDPMS();
-  void CheckPlayingProgress();
   void ActivateScreenSaver(bool forceType = false);
-  bool SetupNetwork();
   void CloseNetworkShares();
 
   void ShowAppMigrationMessage();
-  virtual void Process() override;
+  void Process() override;
   void ProcessSlow();
   void ResetScreenSaver();
   float GetVolume(bool percentage = true) const;
@@ -214,8 +215,8 @@ public:
   void ToggleMute(void);
   void SetMute(bool mute);
   void ShowVolumeBar(const CAction *action = NULL);
-  int GetSubtitleDelay() const;
-  int GetAudioDelay() const;
+  int GetSubtitleDelay();
+  int GetAudioDelay();
   void ResetSystemIdleTimer();
   void ResetScreenSaverTimer();
   void StopScreenSaverTimer();
@@ -253,8 +254,9 @@ public:
   /*!
    \brief Starts a video library cleanup.
    \param userInitiated Whether the action was initiated by the user (either via GUI or any other method) or not.  It is meant to hide or show dialogs.
+   \param content Content type to clean, blank for everything
    */
-  void StartVideoCleanup(bool userInitiated = true);
+  void StartVideoCleanup(bool userInitiated = true, const std::string& content = "");
 
   /*!
    \brief Starts a video library update.
@@ -281,42 +283,24 @@ public:
   void StartMusicArtistScan(const std::string& strDirectory, bool refresh = false);
 
   void UpdateLibraries();
-  void CheckMusicPlaylist();
 
   bool ExecuteXBMCAction(std::string action, const CGUIListItemPtr &item = NULL);
 
-  static bool OnEvent(XBMC_Event& newEvent);
-
-  CNetwork& getNetwork();
-#ifdef HAS_PERFORMANCE_SAMPLE
-  CPerformanceStats &GetPerformanceStats();
-#endif
+  bool OnEvent(XBMC_Event& newEvent);
 
 #ifdef HAS_DVD_DRIVE
-  MEDIA_DETECT::CAutorun* m_Autorun;
+  std::unique_ptr<MEDIA_DETECT::CAutorun> m_Autorun;
 #endif
 
 #if !defined(TARGET_WINDOWS) && defined(HAS_DVD_DRIVE)
   MEDIA_DETECT::CDetectDVDMedia m_DetectDVDType;
 #endif
 
-  CApplicationPlayer* m_pPlayer;
+  inline bool IsInScreenSaver() { return m_screensaverActive; };
+  inline std::string ScreensaverIdInUse() { return m_screensaverIdInUse; }
 
-  inline bool IsInScreenSaver() { return m_bScreenSave; };
   inline bool IsDPMSActive() { return m_dpmsIsActive; };
   int m_iScreenSaveLock; // spiff: are we checking for a lock? if so, ignore the screensaver state, if -1 we have failed to input locks
-
-  bool m_bPlaybackStarting;
-  typedef enum
-  {
-    PLAY_STATE_NONE = 0,
-    PLAY_STATE_STARTING,
-    PLAY_STATE_PLAYING,
-    PLAY_STATE_STOPPED,
-    PLAY_STATE_ENDED,
-  } PlayState;
-  PlayState m_ePlayState;
-  CCriticalSection m_playStateMutex;
 
   std::string m_strPlayListFile;
 
@@ -364,8 +348,6 @@ public:
   void Minimize();
   bool ToggleDPMS(bool manual);
 
-  float GetDimScreenSaverLevel() const;
-
   bool SwitchToFullScreen(bool force = false);
 
   void SetRenderGUI(bool renderGUI) override;
@@ -389,19 +371,32 @@ public:
    */
   void UnregisterActionListener(IActionListener *listener);
 
+  std::unique_ptr<CServiceManager> m_ServiceManager;
+
+  /*!
+  \brief Locks calls from outside kodi (e.g. python) until framemove is processed.
+  */
+  void LockFrameMoveGuard();
+
+  /*!
+  \brief Unlocks calls from outside kodi (e.g. python).
+  */
+  void UnlockFrameMoveGuard();
+
 protected:
-  virtual bool OnSettingsSaving() const override;
+  bool OnSettingsSaving() const override;
 
-  virtual bool Load(const TiXmlNode *settings) override;
-  virtual bool Save(TiXmlNode *settings) const override;
+  bool Load(const TiXmlNode *settings) override;
+  bool Save(TiXmlNode *settings) const override;
 
-  virtual void OnSettingChanged(const CSetting *setting) override;
-  virtual void OnSettingAction(const CSetting *setting) override;
-  virtual bool OnSettingUpdate(CSetting* &setting, const char *oldSettingId, const TiXmlNode *oldSettingNode) override;
+  void OnSettingChanged(std::shared_ptr<const CSetting> setting) override;
+  void OnSettingAction(std::shared_ptr<const CSetting> setting) override;
+  bool OnSettingUpdate(std::shared_ptr<CSetting> setting, const char *oldSettingId, const TiXmlNode *oldSettingNode) override;
 
   bool LoadSkin(const std::string& skinID);
-  bool LoadSkin(const std::shared_ptr<ADDON::CSkinInfo>& skin);
-  
+
+  void CheckOSScreenSaverInhibitionSetting();
+
   /*!
    \brief Delegates the action to all registered action handlers.
    \param action The action
@@ -409,8 +404,8 @@ protected:
    */
   bool NotifyActionListeners(const CAction &action) const;
 
-  bool m_skinReverting;
-  std::string m_skinReloadSettingIgnore;
+  bool m_confirmSkinChange;
+  bool m_ignoreSkinSettingChanges;
 
   bool m_saveSkinOnUnloading;
   bool m_autoExecScriptExecuted;
@@ -422,8 +417,13 @@ protected:
   friend class CWinEventsAndroid;
 #endif
   // screensaver
-  bool m_bScreenSave;
-  ADDON::AddonPtr m_screenSaver;
+  bool m_screensaverActive;
+  std::string m_screensaverIdInUse;
+  ADDON::AddonPtr m_pythonScreenSaver; // @warning: Fallback for Python interface, for binaries not needed!
+  // OS screen saver inhibitor that is always active if user selected a Kodi screen saver
+  KODI::WINDOWING::COSScreenSaverInhibitor m_globalScreensaverInhibitor;
+  // Inhibitor that is active e.g. during video playback
+  KODI::WINDOWING::COSScreenSaverInhibitor m_screensaverInhibitor;
 
   // timer information
 #ifdef TARGET_WINDOWS
@@ -438,31 +438,23 @@ protected:
   CStopWatch m_navigationTimer;
   CStopWatch m_slowTimer;
   CStopWatch m_shutdownTimer;
+  XbmcThreads::EndTime m_guiRefreshTimer;
 
   bool m_bInhibitIdleShutdown;
 
-  DPMSSupport* m_dpms;
+  std::unique_ptr<DPMSSupport> m_dpms;
   bool m_dpmsIsActive;
   bool m_dpmsIsManual;
 
   CFileItemPtr m_itemCurrentFile;
-  CFileItemList* m_currentStack;
-  CFileItemPtr m_stackFileItemToUpdate;
 
   std::string m_prevMedia;
-  ThreadIdentifier m_threadID;       // application thread ID.  Used in applicationMessanger to know where we are firing a thread with delay from.
+  ThreadIdentifier m_threadID;       // application thread ID.  Used in applicationMessenger to know where we are firing a thread with delay from.
   bool m_bInitializing;
   bool m_bPlatformDirectories;
 
-  CBookmark& m_progressTrackingVideoResumeBookmark;
-  CFileItemPtr m_progressTrackingItem;
-  bool m_progressTrackingPlayCountUpdate;
-
-  int m_currentStackPosition;
   int m_nextPlaylistItem;
 
-  bool m_bPresentFrame;
-  unsigned int m_lastFrameTime;
   unsigned int m_lastRenderTime;
   bool m_skipGuiRender;
 
@@ -471,7 +463,7 @@ protected:
   bool m_bTestMode;
   bool m_bSystemScreenSaverEnable;
 
-  MUSIC_INFO::CMusicInfoScanner *m_musicInfoScanner;
+  std::unique_ptr<MUSIC_INFO::CMusicInfoScanner> m_musicInfoScanner;
 
   bool m_muted;
   float m_volumeLevel;
@@ -481,36 +473,37 @@ protected:
 
   void SetHardwareVolume(float hardwareVolume);
 
-  void VolumeChanged() const;
+  void VolumeChanged();
 
-  PlayBackRet PlayStack(const CFileItem& item, bool bRestart);
-  int  GetActiveWindowID(void);
+  bool PlayStack(CFileItem& item, bool bRestart);
 
   float NavigationIdleTime();
-
   bool InitDirectoriesLinux();
   bool InitDirectoriesOSX();
   bool InitDirectoriesWin32();
-  void CreateUserDirs();
+  void CreateUserDirs() const;
+  void HandleWinEvents();
 
   /*! \brief Helper method to determine how to handle TMSG_SHUTDOWN
   */
   void HandleShutdownMessage();
 
   CInertialScrollingHandler *m_pInertialScrollingHandler;
-  CNetwork    *m_network;
-#ifdef HAS_PERFORMANCE_SAMPLE
-  CPerformanceStats m_perfStats;
-#endif
 
   ReplayGainSettings m_replayGainSettings;
-  
   std::vector<IActionListener *> m_actionListeners;
+  std::vector<std::string> m_incompatibleAddons;  /*!< Result of addon migration */
+  std::deque<XBMC_Event> m_winEvents;
 
-  bool m_fallbackLanguageLoaded;
-  
 private:
-  CCriticalSection                m_critSection;                 /*!< critical section for all changes to this class, except for changes to triggers */
+  CCriticalSection m_critSection;                 /*!< critical section for all changes to this class, except for changes to triggers */
+
+  CCriticalSection m_frameMoveGuard;              /*!< critical section for synchronizing GUI actions from inside and outside (python) */
+  std::atomic_uint m_WaitingExternalCalls;        /*!< counts threads wich are waiting to be processed in FrameMove */
+  unsigned int m_ProcessedExternalCalls;          /*!< counts calls wich are processed during one "door open" cycle in FrameMove */
+  unsigned int m_ProcessedExternalDecay = 0;      /*!< counts to close door after a few frames of no python activity */
+  CApplicationPlayer m_appPlayer;
+  CApplicationStackHelper m_stackHelper;
 };
 
 XBMC_GLOBAL_REF(CApplication,g_application);

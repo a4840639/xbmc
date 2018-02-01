@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,11 +29,11 @@ namespace ADDON
 class CLanguageResource : public CResource
 {
 public:
-  static std::unique_ptr<CLanguageResource> FromExtension(AddonProps props, const cp_extension_t* ext);
+  static std::unique_ptr<CLanguageResource> FromExtension(CAddonInfo addonInfo, const cp_extension_t* ext);
 
-  explicit CLanguageResource(AddonProps props) : CResource(std::move(props)), m_forceUnicodeFont(false) {};
+  explicit CLanguageResource(CAddonInfo addonInfo) : CResource(std::move(addonInfo)), m_forceUnicodeFont(false) {};
 
-  CLanguageResource(AddonProps props,
+  CLanguageResource(CAddonInfo addonInfo,
       const CLocale& locale,
       const std::string& charsetGui,
       bool forceUnicodeFont,
@@ -43,13 +43,11 @@ public:
       const std::string& dvdLanguageSubtitle,
       const std::set<std::string>& sortTokens);
 
-  virtual AddonPtr Clone() const;
+  bool IsInUse() const override;
 
-  virtual bool IsInUse() const;
+  void OnPostInstall(bool update, bool modal) override;
 
-  virtual void OnPostInstall(bool update, bool modal);
-
-  virtual bool IsAllowed(const std::string &file) const;
+  bool IsAllowed(const std::string &file) const override;
 
   const CLocale& GetLocale() const { return m_locale; }
 
@@ -66,7 +64,6 @@ public:
   static std::string GetAddonId(const std::string& locale);
 
   static bool FindLegacyLanguage(const std::string &locale, std::string &legacyLanguage);
-  static bool FindLanguageAddonByName(const std::string &legacyLanguage, std::string &addonId, const VECADDONS &languageAddons = VECADDONS());
 
 private:
   CLocale m_locale;

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#if defined(__ARM_NEON__) && !defined(__LP64__)
+#if defined(HAS_NEON) && !defined(__LP64__)
   void yuv420_2_rgb8888_neon
   (
     uint8_t *dst_ptr,

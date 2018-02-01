@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,8 +27,11 @@
 #include "PlayListPlayer.h"
 #include "dialogs/GUIDialogContextMenu.h"
 #include "dialogs/GUIDialogFileBrowser.h"
+#include "settings/dialogs/GUIDialogLibExportSettings.h"
+#include "guilib/LocalizeStrings.h"
 #include "interfaces/builtins/Builtins.h"
 #include "music/MusicDatabase.h"
+#include "music/MusicLibraryQueue.h"
 #include "messaging/ApplicationMessenger.h"
 #include "messaging/helpers/DialogHelper.h"
 #include "profiles/ProfilesManager.h"
@@ -42,7 +45,6 @@
 #include "utils/XMLUtils.h"
 #include "utils/Variant.h"
 #include "video/VideoDatabase.h"
-#include "cores/AudioEngine/DSPAddons/ActiveAEDSP.h"
 
 using namespace KODI::MESSAGING;
 
@@ -54,6 +56,7 @@ CMediaSettings::CMediaSettings()
   m_watchedModes["movies"] = WatchedModeAll;
   m_watchedModes["tvshows"] = WatchedModeAll;
   m_watchedModes["musicvideos"] = WatchedModeAll;
+  m_watchedModes["recordings"] = WatchedModeAll;
 
   m_musicPlaylistRepeat = false;
   m_musicPlaylistShuffle = false;
@@ -67,8 +70,7 @@ CMediaSettings::CMediaSettings()
   m_videoNeedsUpdate = 0;
 }
 
-CMediaSettings::~CMediaSettings()
-{ }
+CMediaSettings::~CMediaSettings() = default;
 
 CMediaSettings& CMediaSettings::GetInstance()
 {
@@ -85,31 +87,16 @@ bool CMediaSettings::Load(const TiXmlNode *settings)
   const TiXmlElement *pElement = settings->FirstChildElement("defaultvideosettings");
   if (pElement != NULL)
   {
-    int deinterlaceMode;
-    bool deinterlaceModePresent = XMLUtils::GetInt(pElement, "deinterlacemode", deinterlaceMode, VS_DEINTERLACEMODE_OFF, VS_DEINTERLACEMODE_FORCE);
     int interlaceMethod;
-    bool interlaceMethodPresent = XMLUtils::GetInt(pElement, "interlacemethod", interlaceMethod, VS_INTERLACEMETHOD_AUTO, VS_INTERLACEMETHOD_MAX);
-    // For smooth conversion of settings stored before the deinterlaceMode existed
-    if (!deinterlaceModePresent && interlaceMethodPresent)
-    {
-      if (interlaceMethod == VS_INTERLACEMETHOD_NONE)
-      {
-        deinterlaceMode = VS_DEINTERLACEMODE_OFF;
-        interlaceMethod = VS_INTERLACEMETHOD_AUTO;
-      }
-      else if (interlaceMethod == VS_INTERLACEMETHOD_AUTO)
-        deinterlaceMode = VS_DEINTERLACEMODE_AUTO;
-      else
-        deinterlaceMode = VS_DEINTERLACEMODE_FORCE;
-    }
-    m_defaultVideoSettings.m_DeinterlaceMode = (EDEINTERLACEMODE)deinterlaceMode;
+    XMLUtils::GetInt(pElement, "interlacemethod", interlaceMethod, VS_INTERLACEMETHOD_NONE, VS_INTERLACEMETHOD_MAX);
+
     m_defaultVideoSettings.m_InterlaceMethod = (EINTERLACEMETHOD)interlaceMethod;
     int scalingMethod;
     if (!XMLUtils::GetInt(pElement, "scalingmethod", scalingMethod, VS_SCALINGMETHOD_NEAREST, VS_SCALINGMETHOD_MAX))
       scalingMethod = (int)VS_SCALINGMETHOD_LINEAR;
     m_defaultVideoSettings.m_ScalingMethod = (ESCALINGMETHOD)scalingMethod;
 
-    XMLUtils::GetInt(pElement, "viewmode", m_defaultVideoSettings.m_ViewMode, ViewModeNormal, ViewModeCustom);
+    XMLUtils::GetInt(pElement, "viewmode", m_defaultVideoSettings.m_ViewMode, ViewModeNormal, ViewModeZoom110Width);
     if (!XMLUtils::GetFloat(pElement, "zoomamount", m_defaultVideoSettings.m_CustomZoomAmount, 0.5f, 2.0f))
       m_defaultVideoSettings.m_CustomZoomAmount = 1.0f;
     if (!XMLUtils::GetFloat(pElement, "pixelratio", m_defaultVideoSettings.m_CustomPixelRatio, 0.5f, 2.0f))
@@ -123,7 +110,6 @@ bool CMediaSettings::Load(const TiXmlNode *settings)
     XMLUtils::GetBoolean(pElement, "postprocess", m_defaultVideoSettings.m_PostProcess);
     if (!XMLUtils::GetFloat(pElement, "sharpness", m_defaultVideoSettings.m_Sharpness, -1.0f, 1.0f))
       m_defaultVideoSettings.m_Sharpness = 0.0f;
-    XMLUtils::GetBoolean(pElement, "outputtoallspeakers", m_defaultVideoSettings.m_OutputToAllSpeakers);
     XMLUtils::GetBoolean(pElement, "showsubtitles", m_defaultVideoSettings.m_SubtitleOn);
     if (!XMLUtils::GetFloat(pElement, "brightness", m_defaultVideoSettings.m_Brightness, 0, 100))
       m_defaultVideoSettings.m_Brightness = 50;
@@ -142,29 +128,17 @@ bool CMediaSettings::Load(const TiXmlNode *settings)
     m_defaultVideoSettings.m_SubtitleCached = false;
   }
 
-  pElement = settings->FirstChildElement("defaultaudiosettings");
-  if (pElement != NULL)
+  m_defaultGameSettings.Reset();
+  pElement = settings->FirstChildElement("defaultgamesettings");
+  if (pElement != nullptr)
   {
-    if (!XMLUtils::GetInt(pElement, "masterstreamtype", m_defaultAudioSettings.m_MasterStreamType))
-      m_defaultAudioSettings.m_MasterStreamType = AE_DSP_ASTREAM_AUTO;
-    if (!XMLUtils::GetInt(pElement, "masterstreamtypesel", m_defaultAudioSettings.m_MasterStreamTypeSel))
-      m_defaultAudioSettings.m_MasterStreamTypeSel = AE_DSP_ASTREAM_AUTO;
-    if (!XMLUtils::GetInt(pElement, "masterstreambase", m_defaultAudioSettings.m_MasterStreamBase))
-      m_defaultAudioSettings.m_MasterStreamBase = AE_DSP_ABASE_STEREO;
+    int scalingMethod;
+    if (XMLUtils::GetInt(pElement, "scalingmethod", scalingMethod, VS_SCALINGMETHOD_NEAREST, VS_SCALINGMETHOD_MAX))
+      m_defaultGameSettings.SetScalingMethod(static_cast<ESCALINGMETHOD>(scalingMethod));
 
-    std::string strTag;
-    for (int type = AE_DSP_ASTREAM_BASIC; type < AE_DSP_ASTREAM_MAX; type++)
-    {
-      for (int base = AE_DSP_ABASE_STEREO; base < AE_DSP_ABASE_MAX; base++)
-      {
-        int tmp;
-        strTag = StringUtils::Format("masterprocess_%i_%i", type, base);
-        if (XMLUtils::GetInt(pElement, strTag.c_str(), tmp))
-          m_defaultAudioSettings.m_MasterModes[type][base] = tmp;
-        else
-          m_defaultAudioSettings.m_MasterModes[type][base] = 0;
-      }
-    }
+    int viewMode;
+    if (XMLUtils::GetInt(pElement, "viewmode", viewMode, ViewModeNormal, ViewModeZoom110Width))
+      m_defaultGameSettings.SetViewMode(static_cast<ViewMode>(viewMode));
   }
 
   // mymusic settings
@@ -192,6 +166,8 @@ bool CMediaSettings::Load(const TiXmlNode *settings)
       m_watchedModes["tvshows"] = (WatchedMode)tmp;
     if (XMLUtils::GetInt(pElement, "watchmodemusicvideos", tmp, (int)WatchedModeAll, (int)WatchedModeWatched))
       m_watchedModes["musicvideos"] = (WatchedMode)tmp;
+    if (XMLUtils::GetInt(pElement, "watchmoderecordings", tmp, static_cast<int>(WatchedModeAll), static_cast<int>(WatchedModeWatched)))
+      m_watchedModes["recordings"] = static_cast<WatchedMode>(tmp);
 
     const TiXmlElement *pChild = pElement->FirstChildElement("playlist");
     if (pChild != NULL)
@@ -208,10 +184,10 @@ bool CMediaSettings::Load(const TiXmlNode *settings)
 
 void CMediaSettings::OnSettingsLoaded()
 {
-  g_playlistPlayer.SetRepeat(PLAYLIST_MUSIC, m_musicPlaylistRepeat ? PLAYLIST::REPEAT_ALL : PLAYLIST::REPEAT_NONE);
-  g_playlistPlayer.SetShuffle(PLAYLIST_MUSIC, m_musicPlaylistShuffle);
-  g_playlistPlayer.SetRepeat(PLAYLIST_VIDEO, m_videoPlaylistRepeat ? PLAYLIST::REPEAT_ALL : PLAYLIST::REPEAT_NONE);
-  g_playlistPlayer.SetShuffle(PLAYLIST_VIDEO, m_videoPlaylistShuffle);
+  CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST_MUSIC, m_musicPlaylistRepeat ? PLAYLIST::REPEAT_ALL : PLAYLIST::REPEAT_NONE);
+  CServiceBroker::GetPlaylistPlayer().SetShuffle(PLAYLIST_MUSIC, m_musicPlaylistShuffle);
+  CServiceBroker::GetPlaylistPlayer().SetRepeat(PLAYLIST_VIDEO, m_videoPlaylistRepeat ? PLAYLIST::REPEAT_ALL : PLAYLIST::REPEAT_NONE);
+  CServiceBroker::GetPlaylistPlayer().SetShuffle(PLAYLIST_VIDEO, m_videoPlaylistShuffle);
 }
 
 bool CMediaSettings::Save(TiXmlNode *settings) const
@@ -226,7 +202,6 @@ bool CMediaSettings::Save(TiXmlNode *settings) const
   if (pNode == NULL)
     return false;
 
-  XMLUtils::SetInt(pNode, "deinterlacemode", m_defaultVideoSettings.m_DeinterlaceMode);
   XMLUtils::SetInt(pNode, "interlacemethod", m_defaultVideoSettings.m_InterlaceMethod);
   XMLUtils::SetInt(pNode, "scalingmethod", m_defaultVideoSettings.m_ScalingMethod);
   XMLUtils::SetFloat(pNode, "noisereduction", m_defaultVideoSettings.m_NoiseReduction);
@@ -237,7 +212,6 @@ bool CMediaSettings::Save(TiXmlNode *settings) const
   XMLUtils::SetFloat(pNode, "pixelratio", m_defaultVideoSettings.m_CustomPixelRatio);
   XMLUtils::SetFloat(pNode, "verticalshift", m_defaultVideoSettings.m_CustomVerticalShift);
   XMLUtils::SetFloat(pNode, "volumeamplification", m_defaultVideoSettings.m_VolumeAmplification);
-  XMLUtils::SetBoolean(pNode, "outputtoallspeakers", m_defaultVideoSettings.m_OutputToAllSpeakers);
   XMLUtils::SetBoolean(pNode, "showsubtitles", m_defaultVideoSettings.m_SubtitleOn);
   XMLUtils::SetFloat(pNode, "brightness", m_defaultVideoSettings.m_Brightness);
   XMLUtils::SetFloat(pNode, "contrast", m_defaultVideoSettings.m_Contrast);
@@ -253,19 +227,14 @@ bool CMediaSettings::Save(TiXmlNode *settings) const
   if (pNode == NULL)
     return false;
 
-  XMLUtils::SetInt(pNode, "masterstreamtype", m_defaultAudioSettings.m_MasterStreamType);
-  XMLUtils::SetInt(pNode, "masterstreamtypesel", m_defaultAudioSettings.m_MasterStreamTypeSel);
-  XMLUtils::SetInt(pNode, "masterstreambase", m_defaultAudioSettings.m_MasterStreamBase);
+  // Default game settings
+  TiXmlElement gameSettingsNode("defaultgamesettings");
+  pNode = settings->InsertEndChild(gameSettingsNode);
+  if (pNode == nullptr)
+    return false;
 
-  std::string strTag;
-  for (int type = AE_DSP_ASTREAM_BASIC; type < AE_DSP_ASTREAM_MAX; type++)
-  {
-    for (int base = AE_DSP_ABASE_STEREO; base < AE_DSP_ABASE_MAX; base++)
-    {
-      strTag = StringUtils::Format("masterprocess_%i_%i", type, base);
-      XMLUtils::SetInt(pNode, strTag.c_str(), m_defaultAudioSettings.m_MasterModes[type][base]);
-    }
-  }
+  XMLUtils::SetInt(pNode, "scalingmethod", m_defaultGameSettings.ScalingMethod());
+  XMLUtils::SetInt(pNode, "viewmode", m_defaultGameSettings.ViewMode());
 
   // mymusic
   pNode = settings->FirstChild("mymusic");
@@ -299,6 +268,7 @@ bool CMediaSettings::Save(TiXmlNode *settings) const
   XMLUtils::SetInt(pNode, "watchmodemovies", m_watchedModes.find("movies")->second);
   XMLUtils::SetInt(pNode, "watchmodetvshows", m_watchedModes.find("tvshows")->second);
   XMLUtils::SetInt(pNode, "watchmodemusicvideos", m_watchedModes.find("musicvideos")->second);
+  XMLUtils::SetInt(pNode, "watchmoderecordings", m_watchedModes.find("recordings")->second);
 
   TiXmlElement videoPlaylistNode("playlist");
   playlistNode = pNode->InsertEndChild(videoPlaylistNode);
@@ -312,7 +282,7 @@ bool CMediaSettings::Save(TiXmlNode *settings) const
   return true;
 }
 
-void CMediaSettings::OnSettingAction(const CSetting *setting)
+void CMediaSettings::OnSettingAction(std::shared_ptr<const CSetting> setting)
 {
   if (setting == NULL)
     return;
@@ -324,7 +294,14 @@ void CMediaSettings::OnSettingAction(const CSetting *setting)
       g_application.StartMusicCleanup(true);
   }
   else if (settingId == CSettings::SETTING_MUSICLIBRARY_EXPORT)
-    CBuiltins::GetInstance().Execute("exportlibrary(music)");
+  {
+    CLibExportSettings m_musicExportSettings;
+    if (CGUIDialogLibExportSettings::Show(m_musicExportSettings))
+    {
+      // Export music library showing progress dialog
+      CMusicLibraryQueue::GetInstance().ExportLibrary(m_musicExportSettings, true);
+    }
+  }
   else if (settingId == CSettings::SETTING_MUSICLIBRARY_IMPORT)
   {
     std::string path;

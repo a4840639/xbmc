@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -692,7 +692,7 @@ void CDateTime::FromULargeInt(const ULARGE_INTEGER& time)
 
 bool CDateTime::SetFromDateString(const std::string &date)
 {
-  /* TODO:STRING_CLEANUP */
+  //! @todo STRING_CLEANUP
   if (date.empty())
   {
     SetValid(false);
@@ -859,6 +859,14 @@ std::string CDateTime::GetAsDBDate() const
   GetAsSystemTime(st);
 
   return StringUtils::Format("%04i-%02i-%02i", st.wYear, st.wMonth, st.wDay);
+}
+
+std::string CDateTime::GetAsDBTime() const
+{
+  SYSTEMTIME st;
+  GetAsSystemTime(st);
+
+  return StringUtils::Format("%02i:%02i:%02i", st.wHour, st.wMinute, st.wSecond);
 }
 
 std::string CDateTime::GetAsDBDateTime() const

@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,11 @@
 
 // stuff for freetype
 #include <ft2build.h>
+
+#ifdef TARGET_WINDOWS_STORE
+#define generic GenericFromFreeTypeLibrary
+#endif
+
 #include FT_FREETYPE_H
 #include FT_CACHE_H
 #include FT_CACHE_SMALL_BITMAPS_H
@@ -111,7 +116,7 @@ private:
                  int Ascender);
   TextPageinfo_t* DecodePage(bool showl25,              // 1=decode Level2.5-graphics
                              unsigned char* PageChar,   // page buffer, min. 25*40
-                             TextPageAttr_t *PageAtrb,  // attribut buffer, min 25*40
+                             TextPageAttr_t *PageAtrb,  // attribute buffer, min 25*40
                              bool HintMode,             // 1=show hidden information
                              bool showflof);            // 1=decode FLOF-line
   void Eval_l25(unsigned char* page_char, TextPageAttr_t *PageAtrb, bool HintMode);

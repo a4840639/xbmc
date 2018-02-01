@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,16 +18,14 @@
  *
  */
 
-// TODO: Need a uniform way of returning an error status
+//! @todo Need a uniform way of returning an error status
 
-#if (defined HAVE_CONFIG_H) && (!defined TARGET_WINDOWS)
-  #include "config.h"
-#endif
 #include "network/Network.h"
 
 #include "ModuleXbmc.h"
 
 #include "Application.h"
+#include "ServiceBroker.h"
 #include "messaging/ApplicationMessenger.h"
 #include "utils/URIUtils.h"
 #include "aojsonrpc.h"
@@ -43,12 +41,14 @@
 #include "utils/Crc32.h"
 #include "FileItem.h"
 #include "LangInfo.h"
+#include "PlayListPlayer.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "guilib/TextureManager.h"
 #include "Util.h"
-#include "cores/AudioEngine/AEFactory.h"
+#include "cores/AudioEngine/Interfaces/AE.h"
 #include "storage/MediaManager.h"
+#include "utils/FileExtensionProvider.h"
 #include "utils/LangCodeExpander.h"
 #include "utils/StringUtils.h"
 #include "utils/SystemInfo.h"
@@ -61,6 +61,10 @@
 #include "utils/log.h"
 
 using namespace KODI::MESSAGING;
+
+#ifdef TARGET_POSIX
+#include "platform/linux/XMemUtils.h"
+#endif
 
 namespace XBMCAddon
 {
@@ -114,7 +118,6 @@ namespace XBMCAddon
     {
       XBMC_TRACE;
       DelayedCallGuard dg;
-#ifdef HAS_JSONRPC
       String ret;
 
       if (! jsonrpccommand)
@@ -126,9 +129,6 @@ namespace XBMCAddon
       CAddOnTransport::CAddOnClient client;
 
       return JSONRPC::CJSONRPC::MethodCall(/*method*/ jsonrpccommand, &transport, &client);
-#else
-      THROW_UNIMP("executeJSONRPC");
-#endif
     }
 
     void sleep(long timemillis)
@@ -169,7 +169,7 @@ namespace XBMCAddon
     String getSkinDir()
     {
       XBMC_TRACE;
-      return CSettings::GetInstance().GetString(CSettings::SETTING_LOOKANDFEEL_SKIN);
+      return CServiceBroker::GetSettings().GetString(CSettings::SETTING_LOOKANDFEEL_SKIN);
     }
 
     String getLanguage(int format /* = CLangCodeExpander::ENGLISH_NAME */, bool region /*= false*/)
@@ -205,12 +205,12 @@ namespace XBMCAddon
       case CLangCodeExpander::ISO_639_2:
         {
           std::string langCode;
-          g_LangCodeExpander.ConvertToISO6392T(lang, langCode);
+          g_LangCodeExpander.ConvertToISO6392B(lang, langCode);
           if (region)
           {
             std::string region = g_langInfo.GetRegionLocale();
             std::string region3Code;
-            g_LangCodeExpander.ConvertToISO6392T(region, region3Code);
+            g_LangCodeExpander.ConvertToISO6392B(region, region3Code);
             region3Code = "-" + region3Code;
             return (langCode += region3Code);
           }
@@ -227,7 +227,7 @@ namespace XBMCAddon
       XBMC_TRACE;
       char cTitleIP[32];
       sprintf(cTitleIP, "127.0.0.1");
-      CNetworkInterface* iface = g_application.getNetwork().GetFirstConnectedInterface();
+      CNetworkInterface* iface = CServiceBroker::GetNetwork().GetFirstConnectedInterface();
       if (iface)
         return iface->GetCurrentIPAddress();
 
@@ -346,9 +346,9 @@ namespace XBMCAddon
 
       bool ret;
       {
-        LOCKGUI;
+        XBMCAddonUtils::GuiLock lock(nullptr, false);
 
-        int id = g_windowManager.GetTopMostModalDialogID();
+        int id = g_windowManager.GetTopmostModalDialog();
         if (id == WINDOW_INVALID) id = g_windowManager.GetActiveWindow();
         ret = g_infoManager.EvaluateBool(condition,id);
       }
@@ -365,9 +365,8 @@ namespace XBMCAddon
     String getCacheThumbName(const String& path)
     {
       XBMC_TRACE;
-      Crc32 crc;
-      crc.ComputeFromLowerCase(path);
-      return StringUtils::Format("%08x.tbn", (unsigned __int32)crc);
+      auto crc = Crc32::ComputeFromLowerCase(path);
+      return StringUtils::Format("%08x.tbn", crc);
     }
 
     String makeLegalFilename(const String& filename, bool fatX)
@@ -449,19 +448,19 @@ namespace XBMCAddon
       return result;
     }
 
-    // TODO: Add a mediaType enum
+    //! @todo Add a mediaType enum
     String getSupportedMedia(const char* mediaType)
     {
       XBMC_TRACE;
       String result;
       if (strcmpi(mediaType, "video") == 0)
-        result = g_advancedSettings.m_videoExtensions;
+        result = CServiceBroker::GetFileExtensionProvider().GetVideoExtensions();
       else if (strcmpi(mediaType, "music") == 0)
-        result = g_advancedSettings.GetMusicExtensions();
+        result = CServiceBroker::GetFileExtensionProvider().GetMusicExtensions();
       else if (strcmpi(mediaType, "picture") == 0)
-        result = g_advancedSettings.m_pictureExtensions;
+        result = CServiceBroker::GetFileExtensionProvider().GetPictureExtensions();
 
-      // TODO:
+      //! @todo implement
       //    else
       //      return an error
 
@@ -484,12 +483,12 @@ namespace XBMCAddon
 
     void audioSuspend()
     {  
-      CAEFactory::Suspend();
+      CServiceBroker::GetActiveAE().Suspend();
     }
 
     void audioResume()
     { 
-      CAEFactory::Resume();
+      CServiceBroker::GetActiveAE().Resume();
     }
 
     String convertLanguage(const char* language, int format)
@@ -503,7 +502,7 @@ namespace XBMCAddon
           // maybe it's a check whether the language exists or not
           if (convertedLanguage.empty())
           {
-            g_LangCodeExpander.ConvertToISO6392T(language, convertedLanguage);
+            g_LangCodeExpander.ConvertToISO6392B(language, convertedLanguage);
             g_LangCodeExpander.Lookup(convertedLanguage, convertedLanguage);
           }
           break;
@@ -512,7 +511,7 @@ namespace XBMCAddon
         g_LangCodeExpander.ConvertToISO6391(language, convertedLanguage);
         break;
       case CLangCodeExpander::ISO_639_2:
-        g_LangCodeExpander.ConvertToISO6392T(language, convertedLanguage);
+        g_LangCodeExpander.ConvertToISO6392B(language, convertedLanguage);
         break;
       default:
         return "";

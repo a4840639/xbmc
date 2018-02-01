@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@
 
 #include "utils/ISerializable.h"
 #include "XBDateTime.h"
-#include "music/EmbeddedArt.h"
+#include "utils/EmbeddedArt.h"
 #include "music/tags/ReplayGain.h"
 #include "Artist.h"
 #include <map>
@@ -58,11 +58,11 @@ class CSong: public ISerializable
 {
 public:
   CSong() ;
-  CSong(CFileItem& item);
-  virtual ~CSong(){};
+  explicit CSong(CFileItem& item);
+  ~CSong() override = default;
   void Clear() ;
   void MergeScrapedSong(const CSong& source, bool override);
-  virtual void Serialize(CVariant& value) const;
+  void Serialize(CVariant& value) const override;
 
   bool operator<(const CSong &song) const
   {
@@ -77,12 +77,17 @@ public:
   */
   const std::vector<std::string> GetArtist() const;
   
+  /*! \brief Get artist sort name string 
+  \return artist sort name as a single string
+  */
+  const std::string GetArtistSort() const;
+
   /*! \brief Get artist MusicBrainz IDs from the vector of artistcredits objects
   \return artist MusicBrainz IDs as a vector of strings
   */
   const std::vector<std::string> GetMusicBrainzArtistID() const;
 
-  /*! \brief Get artist names from the artist decription string (if it exists)
+  /*! \brief Get artist names from the artist description string (if it exists)
   or concatenated from the vector of artistcredits objects
   \return artist names as a single string
   */
@@ -100,6 +105,16 @@ public:
   */
   const std::vector<std::string> GetAlbumArtist() const { return m_albumArtist; }
   
+  /*! \brief Get album artist sort name string
+  \return album artist sort name as a single string
+  */
+  const std::string GetAlbumArtistSort() const { return m_strAlbumArtistSort; }
+
+  /*! \brief Get composer sort name string
+  \return composer sort name as a single string
+  */
+  const std::string GetComposerSort() const { return m_strComposerSort; }
+
   /*! \brief Get the full list of artist names and the role each played for those
     that contributed to the recording. Given in music file tags other than ARTIST
     or ALBUMARTIST, e.g. COMPOSER or CONDUCTOR etc.
@@ -137,16 +152,27 @@ public:
    */
   bool ArtMatches(const CSong &right) const;
 
+  /*! \brief Set artist credits using the arrays of tag values.
+    If strArtistSort (as from ARTISTSORT tag) is already set then individual
+    artist sort names are also processed.
+    \param names       String vector of artist names (as from ARTIST tag)
+    \param hints       String vector of artist name hints (as from ARTISTS tag)
+    \param mbids       String vector of artist Musicbrainz IDs (as from MUSICBRAINZARTISTID tag)
+  */
+  void SetArtistCredits(const std::vector<std::string>& names, const std::vector<std::string>& hints,
+    const std::vector<std::string>& mbids);
+
   long idSong;
   int idAlbum;
   std::string strFileName;
   std::string strTitle;
+  std::string strArtistSort;
   std::string strArtistDesc;
   VECARTISTCREDITS artistCredits;
   std::string strAlbum;
   std::vector<std::string> genre;
   std::string strThumb;
-  MUSIC_INFO::EmbeddedArtInfo embeddedArt;
+  EmbeddedArtInfo embeddedArt;
   std::string strMusicBrainzTrackID;
   std::string strComment;
   std::string strMood;
@@ -163,10 +189,14 @@ public:
   int iStartOffset;
   int iEndOffset;
   bool bCompilation;
+  std::string strRecordLabel; // Record label from tag for album processing by CMusicInfoScanner::FileItemsToAlbums
+  std::string strAlbumType; // (Musicbrainz release type) album type from tag for album processing by CMusicInfoScanner::FileItemsToAlbums
 
   ReplayGain replayGain;
 private:
   std::vector<std::string> m_albumArtist; // Album artist from tag for album processing, no desc or MBID
+  std::string m_strAlbumArtistSort; // Albumartist sort string from tag for album processing by CMusicInfoScanner::FileItemsToAlbums
+  std::string m_strComposerSort;
   VECMUSICROLES m_musicRoles;
 };
 

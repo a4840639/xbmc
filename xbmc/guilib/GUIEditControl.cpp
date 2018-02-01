@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 
 #include "GUIEditControl.h"
 #include "GUIWindowManager.h"
+#include "ServiceBroker.h"
 #include "utils/CharsetConverter.h"
 #include "utils/Variant.h"
 #include "GUIKeyboardFactory.h"
@@ -28,7 +29,7 @@
 #include "input/Key.h"
 #include "LocalizeStrings.h"
 #include "XBDateTime.h"
-#include "windowing/WindowingFactory.h"
+#include "windowing/WinSystem.h"
 #include "utils/md5.h"
 #include "GUIUserMessages.h"
 
@@ -59,7 +60,7 @@ void CGUIEditControl::DefaultConstructor()
   m_textWidth = GetWidth();
   m_cursorPos = 0;
   m_cursorBlink = 0;
-  m_inputHeading = 0;
+  m_inputHeading = g_localizeStrings.Get(16028);
   m_inputType = INPUT_TYPE_TEXT;
   m_smsLastKey = 0;
   m_smsKeyIndex = 0;
@@ -79,9 +80,7 @@ CGUIEditControl::CGUIEditControl(const CGUIButtonControl &button)
   DefaultConstructor();
 }
 
-CGUIEditControl::~CGUIEditControl(void)
-{
-}
+CGUIEditControl::~CGUIEditControl(void) = default;
 
 bool CGUIEditControl::OnMessage(CGUIMessage &message)
 {
@@ -100,14 +99,6 @@ bool CGUIEditControl::OnMessage(CGUIMessage &message)
   {
     SetLabel2(message.GetLabel());
     UpdateText();
-  }
-  else if (message.GetMessage() == GUI_MSG_INPUT_TEXT_EDIT && HasFocus())
-  {
-    g_charsetConverter.utf8ToW(message.GetLabel(), m_edit);
-    m_editOffset = message.GetParam1();
-    m_editLength = message.GetParam2();
-    UpdateText(false);
-    return true;
   }
   return CGUIButtonControl::OnMessage(message);
 }
@@ -259,12 +250,9 @@ bool CGUIEditControl::OnAction(const CAction &action)
         }
       default:
         {
-          if (!g_Windowing.IsTextInputEnabled())
-          {
-            ClearMD5();
-            m_edit.clear();
-            m_text2.insert(m_text2.begin() + m_cursorPos++, (WCHAR)action.GetUnicode());
-          }
+          ClearMD5();
+          m_edit.clear();
+          m_text2.insert(m_text2.begin() + m_cursorPos++, (WCHAR)action.GetUnicode());
           break;
         }
       }
@@ -303,14 +291,13 @@ void CGUIEditControl::OnClick()
   std::string utf8;
   g_charsetConverter.wToUTF8(m_text2, utf8);
   bool textChanged = false;
-  std::string heading = g_localizeStrings.Get(m_inputHeading ? m_inputHeading : 16028);
   switch (m_inputType)
   {
     case INPUT_TYPE_READONLY:
       textChanged = false;
       break;
     case INPUT_TYPE_NUMBER:
-      textChanged = CGUIDialogNumeric::ShowAndGetNumber(utf8, heading);
+      textChanged = CGUIDialogNumeric::ShowAndGetNumber(utf8, m_inputHeading);
       break;
     case INPUT_TYPE_SECONDS:
       textChanged = CGUIDialogNumeric::ShowAndGetSeconds(utf8, g_localizeStrings.Get(21420));
@@ -321,7 +308,7 @@ void CGUIEditControl::OnClick()
       dateTime.SetFromDBTime(utf8);
       SYSTEMTIME time;
       dateTime.GetAsSystemTime(time);
-      if (CGUIDialogNumeric::ShowAndGetTime(time, !heading.empty() ? heading : g_localizeStrings.Get(21420)))
+      if (CGUIDialogNumeric::ShowAndGetTime(time, !m_inputHeading.empty() ? m_inputHeading : g_localizeStrings.Get(21420)))
       {
         dateTime = CDateTime(time);
         utf8 = dateTime.GetAsLocalizedTime("", false);
@@ -337,7 +324,7 @@ void CGUIEditControl::OnClick()
         dateTime = CDateTime(2000, 1, 1, 0, 0, 0);
       SYSTEMTIME date;
       dateTime.GetAsSystemTime(date);
-      if (CGUIDialogNumeric::ShowAndGetDate(date, !heading.empty() ? heading : g_localizeStrings.Get(21420)))
+      if (CGUIDialogNumeric::ShowAndGetDate(date, !m_inputHeading.empty() ? m_inputHeading : g_localizeStrings.Get(21420)))
       {
         dateTime = CDateTime(date);
         utf8 = dateTime.GetAsDBDate();
@@ -346,7 +333,7 @@ void CGUIEditControl::OnClick()
       break;
     }
     case INPUT_TYPE_IPADDRESS:
-      textChanged = CGUIDialogNumeric::ShowAndGetIPAddress(utf8, heading);
+      textChanged = CGUIDialogNumeric::ShowAndGetIPAddress(utf8, m_inputHeading);
       break;
     case INPUT_TYPE_SEARCH:
       textChanged = CGUIKeyboardFactory::ShowAndGetFilter(utf8, true);
@@ -358,11 +345,11 @@ void CGUIEditControl::OnClick()
       textChanged = CGUIDialogNumeric::ShowAndVerifyNewPassword(utf8);
       break;
     case INPUT_TYPE_PASSWORD_MD5:
-      utf8 = ""; // TODO: Ideally we'd send this to the keyboard and tell the keyboard we have this type of input
+      utf8 = ""; //! @todo Ideally we'd send this to the keyboard and tell the keyboard we have this type of input
       // fallthrough
     case INPUT_TYPE_TEXT:
     default:
-      textChanged = CGUIKeyboardFactory::ShowAndGetInput(utf8, CVariant{heading}, true, m_inputType == INPUT_TYPE_PASSWORD || m_inputType == INPUT_TYPE_PASSWORD_MD5);
+      textChanged = CGUIKeyboardFactory::ShowAndGetInput(utf8, m_inputHeading, true, m_inputType == INPUT_TYPE_PASSWORD || m_inputType == INPUT_TYPE_PASSWORD_MD5);
       break;
   }
   if (textChanged)
@@ -390,11 +377,14 @@ void CGUIEditControl::UpdateText(bool sendUpdate)
   SetInvalid();
 }
 
-void CGUIEditControl::SetInputType(CGUIEditControl::INPUT_TYPE type, int heading)
+void CGUIEditControl::SetInputType(CGUIEditControl::INPUT_TYPE type, CVariant heading)
 {
   m_inputType = type;
-  m_inputHeading = heading;
-  // TODO: Verify the current input string?
+  if (heading.isString())
+    m_inputHeading = heading.asString();
+  else if (heading.isInteger() && heading.asInteger())
+    m_inputHeading = g_localizeStrings.Get(static_cast<uint32_t>(heading.asInteger()));
+  //! @todo Verify the current input string?
 }
 
 void CGUIEditControl::RecalcLabelPosition()
@@ -685,8 +675,8 @@ void CGUIEditControl::OnPasteClipboard()
   std::wstring unicode_text;
   std::string utf8_text;
 
-// Get text from the clipboard
-  utf8_text = g_Windowing.GetClipboardText();
+  // Get text from the clipboard
+  utf8_text = CServiceBroker::GetWinSystem().GetClipboardText();
   g_charsetConverter.utf8ToW(utf8_text, unicode_text);
 
   // Insert the pasted text at the current cursor position.
@@ -743,7 +733,6 @@ void CGUIEditControl::ValidateInput()
 void CGUIEditControl::SetFocus(bool focus)
 {
   m_smsTimer.Stop();
-  g_Windowing.EnableTextInput(focus);
   CGUIControl::SetFocus(focus);
   SetInvalid();
 }

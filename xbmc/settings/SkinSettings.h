@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,9 +33,9 @@ class CSkinSettings : public ISubSettings
 public:
   static CSkinSettings& GetInstance();
 
-  virtual bool Load(const TiXmlNode *settings) override;
-  virtual bool Save(TiXmlNode *settings) const override;
-  virtual void Clear() override;
+  bool Load(const TiXmlNode *settings) override;
+  bool Save(TiXmlNode *settings) const override;
+  void Clear() override;
 
   void MigrateSettings(const ADDON::SkinPtr& skin);
 
@@ -52,9 +52,9 @@ public:
 
 protected:
   CSkinSettings();
-  CSkinSettings(const CSkinSettings&);
-  CSkinSettings& operator=(CSkinSettings const&);
-  virtual ~CSkinSettings();
+  CSkinSettings(const CSkinSettings&) = delete;
+  CSkinSettings& operator=(CSkinSettings const&) = delete;
+  ~CSkinSettings() override;
 
 private:
   CCriticalSection m_critical;

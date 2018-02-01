@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,14 +19,20 @@
  */
 
 #include "DVDInputStreamFFmpeg.h"
+
+#include "filesystem/CurlFile.h"
 #include "playlists/PlayListM3U.h"
 #include "settings/Settings.h"
 #include "utils/log.h"
+#include "utils/StringUtils.h"
+#include "utils/URIUtils.h"
+
 #include <limits.h>
 
 using namespace XFILE;
+using PLAYLIST::CPlayListM3U;
 
-CDVDInputStreamFFmpeg::CDVDInputStreamFFmpeg(CFileItem& fileitem)
+CDVDInputStreamFFmpeg::CDVDInputStreamFFmpeg(const CFileItem& fileitem)
   : CDVDInputStream(DVDSTREAM_TYPE_FFMPEG, fileitem)
   , m_can_pause(false)
   , m_can_seek(false)
@@ -50,21 +56,6 @@ bool CDVDInputStreamFFmpeg::IsEOF()
 
 bool CDVDInputStreamFFmpeg::Open()
 {
-  std::string selected;
-  if (m_item.IsInternetStream() && (m_item.IsType(".m3u8") || m_item.GetMimeType() == "application/vnd.apple.mpegurl"))
-  {
-    // get the available bandwidth and  determine the most appropriate stream
-    int bandwidth = CSettings::GetInstance().GetInt(CSettings::SETTING_NETWORK_BANDWIDTH);
-    if(bandwidth <= 0)
-      bandwidth = INT_MAX;
-    selected = PLAYLIST::CPlayListM3U::GetBestBandwidthStream(m_item.GetPath(), bandwidth);
-    if (selected.compare(m_item.GetPath()) != 0)
-    {
-      CLog::Log(LOGINFO, "CDVDInputStreamFFmpeg: Auto-selecting %s based on configured bandwidth.", selected.c_str());
-      m_item.SetPath(selected.c_str());
-    }
-  }
-
   if (!CDVDInputStream::Open())
     return false;
 
@@ -72,15 +63,15 @@ bool CDVDInputStreamFFmpeg::Open()
   m_can_seek  = true;
   m_aborted   = false;
 
-  if(strnicmp(m_item.GetPath().c_str(), "udp://", 6) == 0 ||
-     strnicmp(m_item.GetPath().c_str(), "rtp://", 6) == 0)
+  if(strnicmp(m_item.GetDynPath().c_str(), "udp://", 6) == 0 ||
+     strnicmp(m_item.GetDynPath().c_str(), "rtp://", 6) == 0)
   {
     m_can_pause = false;
     m_can_seek = false;
     m_realtime = true;
   }
 
-  if(strnicmp(m_item.GetPath().c_str(), "tcp://", 6) == 0)
+  if(strnicmp(m_item.GetDynPath().c_str(), "tcp://", 6) == 0)
   {
     m_can_pause = true;
     m_can_seek  = false;
@@ -88,7 +79,7 @@ bool CDVDInputStreamFFmpeg::Open()
   return true;
 }
 
-// close file and reset everyting
+// close file and reset everything
 void CDVDInputStreamFFmpeg::Close()
 {
   CDVDInputStream::Close();
@@ -109,3 +100,58 @@ int64_t CDVDInputStreamFFmpeg::Seek(int64_t offset, int whence)
   return -1;
 }
 
+std::string CDVDInputStreamFFmpeg::GetProxyType() const
+{
+  return m_item.HasProperty("proxy.type") ?
+    m_item.GetProperty("proxy.type").asString() : std::string();
+}
+
+std::string CDVDInputStreamFFmpeg::GetProxyHost() const
+{
+  return m_item.HasProperty("proxy.host") ?
+    m_item.GetProperty("proxy.host").asString() : std::string();
+}
+
+uint16_t CDVDInputStreamFFmpeg::GetProxyPort() const
+{
+  if (m_item.HasProperty("proxy.port"))
+    return static_cast<uint16_t>(m_item.GetProperty("proxy.port").asInteger());
+
+  // Select the standard port
+  const std::string value = GetProxyType();
+  if (value == "socks4" || value == "socks4a" ||
+      value == "socks5" || value == "socks5-remote")
+    return 1080;
+  else
+    return 3128;
+}
+
+std::string CDVDInputStreamFFmpeg::GetProxyUser() const
+{
+  return m_item.HasProperty("proxy.user") ?
+    m_item.GetProperty("proxy.user").asString() : std::string();
+}
+
+std::string CDVDInputStreamFFmpeg::GetProxyPassword() const
+{
+  return m_item.HasProperty("proxy.password") ?
+    m_item.GetProperty("proxy.password").asString() : std::string();
+}
+
+std::string CDVDInputStreamFFmpeg::GetFileName()
+{
+  CURL url = GetURL();
+  // rtmp options
+  if (url.IsProtocol("rtmp")  || url.IsProtocol("rtmpt")  ||
+      url.IsProtocol("rtmpe") || url.IsProtocol("rtmpte") ||
+      url.IsProtocol("rtmps"))
+  {
+    std::vector<std::string> opts = StringUtils::Split(url.Get(), " ");
+    if (opts.size() > 0)
+    {
+      return opts.front();
+    }
+    return url.Get();
+  }
+  return CDVDInputStream::GetFileName();
+}

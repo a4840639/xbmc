@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -123,7 +123,7 @@ JSONRPC_STATUS CProfilesOperations::LoadProfile(const std::string &method, ITran
     else if (encryption == "md5")
       md5pword2 = password;
 
-    // Verify profided password
+    // Verify provided password
     if (StringUtils::EqualsNoCase(strToVerify, md5pword2))
       bLoadProfile = true;
   }

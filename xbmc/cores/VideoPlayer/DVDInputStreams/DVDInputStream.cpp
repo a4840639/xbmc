@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,8 +20,9 @@
 
 #include "DVDInputStream.h"
 #include "URL.h"
+#include "DVDStreamInfo.h"
 
-CDVDInputStream::CDVDInputStream(DVDStreamType streamType, CFileItem& fileitem)
+CDVDInputStream::CDVDInputStream(DVDStreamType streamType, const CFileItem& fileitem)
 {
   m_streamType = streamType;
   m_contentLookup = true;
@@ -29,10 +30,7 @@ CDVDInputStream::CDVDInputStream(DVDStreamType streamType, CFileItem& fileitem)
   m_item = fileitem;
 }
 
-CDVDInputStream::~CDVDInputStream()
-{
-
-}
+CDVDInputStream::~CDVDInputStream() = default;
 
 bool CDVDInputStream::Open()
 {
@@ -48,7 +46,7 @@ void CDVDInputStream::Close()
 
 std::string CDVDInputStream::GetFileName()
 {
-  CURL url(m_item.GetPath());
+  CURL url(m_item.GetDynPath());
 
   url.SetProtocolOptions("");
   return url.Get();
@@ -56,5 +54,5 @@ std::string CDVDInputStream::GetFileName()
 
 CURL CDVDInputStream::GetURL()
 {
-  return m_item.GetURL();
+  return m_item.GetDynURL();
 }

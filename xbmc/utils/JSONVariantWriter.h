@@ -1,7 +1,7 @@
 #pragma once
 /*
- *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      Copyright (C) 2015 Team XBMC
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
  *
  */
 
-#include <yajl/yajl_gen.h>
 #include <string>
 
 class CVariant;
@@ -27,7 +26,7 @@ class CVariant;
 class CJSONVariantWriter
 {
 public:
-  static std::string Write(const CVariant &value, bool compact);
-private:
-  static bool InternalWrite(yajl_gen g, const CVariant &value);
+  CJSONVariantWriter() = delete;
+
+  static bool Write(const CVariant &value, std::string& output, bool compact);
 };

@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,13 +22,11 @@
 
 #include <string>
 #include <vector>
-#include <stdint.h>
 
 class CEdl
 {
 public:
   CEdl();
-  virtual ~CEdl(void);
 
   typedef enum
   {
@@ -53,19 +51,23 @@ public:
   std::string GetInfo() const;
   int GetTotalCutTime() const;
   int RemoveCutTime(int iSeek) const;
-  int RestoreCutTime(int iClock) const;
+  double RestoreCutTime(double dClock) const;
 
-  bool InCut(int iSeek, Cut *pCut = NULL) const;
+  bool InCut(int iSeek, Cut *pCut = NULL);
+  bool GetNearestCut(bool bPlus, const int iSeek, Cut *pCut) const;
 
-  bool GetNextSceneMarker(bool bPlus, const int iClock, int *iSceneMarker) const;
+  int GetLastCutTime() const;
+  void SetLastCutTime(const int iCutTime);
+
+  bool GetNextSceneMarker(bool bPlus, const int iClock, int *iSceneMarker);
 
   static std::string MillisecondsToTimeString(const int iMilliseconds);
 
-protected:
 private:
   int m_iTotalCutTime; // ms
   std::vector<Cut> m_vecCuts;
   std::vector<int> m_vecSceneMarkers;
+  int m_lastCutTime;
 
   bool ReadEdl(const std::string& strMovie, const float fFramesPerSecond);
   bool ReadComskip(const std::string& strMovie, const float fFramesPerSecond);

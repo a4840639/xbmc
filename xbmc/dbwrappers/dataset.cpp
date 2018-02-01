@@ -338,7 +338,7 @@ bool Dataset::get_index_map_entry(const char *f_name) {
       return true;
     }
   }
-  // indexMap not found on the expected way, either first row strange retrival order
+  // indexMap not found on the expected way, either first row strange retrieval order
   FieldIndexMapEntry tmp(f_name);
   std::vector<unsigned int>::iterator ins(lower_bound(fieldIndexMap_Sorter.begin(), fieldIndexMap_Sorter.end(), tmp, FieldIndexMapComparator(fieldIndexMap_Entries)));
   if (ins == fieldIndexMap_Sorter.end() || (tmp <  fieldIndexMap_Entries[*ins])) //new entry
@@ -393,23 +393,23 @@ const field_value Dataset::get_field_value(const char *f_name) {
 const field_value Dataset::get_field_value(int index) {
   if (ds_state != dsInactive) {
     if (ds_state == dsEdit || ds_state == dsInsert){
-      if (index <0 || index >field_count())
+      if (index < 0 || index >= field_count())
         throw DbErrors("Field index not found: %d",index);
 
       return (*edit_object)[index].val;
     }
     else
-      if (index <0 || index >field_count())
+    {
+      if (index < 0 || index >= field_count())
         throw DbErrors("Field index not found: %d",index);
 
       return (*fields_object)[index].val;
+    }
   }
   throw DbErrors("Dataset state is Inactive");
-  //field_value fv;
-  //return fv;
 }
 
-const sql_record* const Dataset::get_sql_record()
+const sql_record* Dataset::get_sql_record()
 {
   if (result.records.empty() || frecno >= (int)result.records.size())
     return NULL;
@@ -432,8 +432,8 @@ int Dataset::str_compare(const char * s1, const char * s2) {
  	std::string::const_iterator p = ts1.begin();
  	std::string::const_iterator p2 = ts2.begin();
  	while (p!=ts1.end() && p2 != ts2.end()) {
- 	if (toupper(*p)!=toupper(*p2))
- 		return (toupper(*p)<toupper(*p2)) ? -1 : 1;
+ 		if (toupper(*p)!=toupper(*p2))
+ 			return (toupper(*p)<toupper(*p2)) ? -1 : 1;
  		++p;
  		++p2;		
  	}	

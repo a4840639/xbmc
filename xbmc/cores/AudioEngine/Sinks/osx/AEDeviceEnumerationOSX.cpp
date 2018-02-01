@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -247,7 +247,7 @@ unsigned int AEDeviceEnumerationOSX::GetNumPlanes() const
   if (m_isPlanar)
     return m_caStreamInfos.size();
   else
-    return 1;//interlaved - one plane
+    return 1;//interleaved - one plane
 }
 
 bool AEDeviceEnumerationOSX::hasSampleRate(const AESampleRateList &list, const unsigned int samplerate) const
@@ -355,27 +355,42 @@ AEDataFormatList AEDeviceEnumerationOSX::caFormatToAE(const AudioStreamBasicDesc
     {
       case 16:
         if (formatDesc.mFormatFlags & kAudioFormatFlagIsBigEndian)
+        {
           formatList.push_back(AE_FMT_S16BE);
+        }
         else
         {
           formatList.push_back(AE_FMT_S16LE);
         }
+        formatList.push_back(AE_FMT_S16NE); // if we support either LE or BE - we always support NE too...
         break;
       case 24:
         if (formatDesc.mFormatFlags & kAudioFormatFlagIsBigEndian)
+        {
           formatList.push_back(AE_FMT_S24BE3);
+        }
         else
+        {
           formatList.push_back(AE_FMT_S24LE3);
+        }
+        formatList.push_back(AE_FMT_S24NE3); // if we support either LE or BE - we always support NE too...
         break;
       case 32:
         if (formatDesc.mFormatFlags & kAudioFormatFlagIsFloat)
+        {
           formatList.push_back(AE_FMT_FLOAT);
+        }
         else
         {
           if (formatDesc.mFormatFlags & kAudioFormatFlagIsBigEndian)
+          {
             formatList.push_back(AE_FMT_S32BE);
+          }
           else
+          {
             formatList.push_back(AE_FMT_S32LE);
+          }
+          formatList.push_back(AE_FMT_S32NE); // if we support either LE or BE - we always support NE too...
         }
         break;
     }
@@ -552,7 +567,7 @@ float AEDeviceEnumerationOSX::ScoreFormat(const AudioStreamBasicDescription &for
     {
       if (formatDesc.mBitsPerChannel == CAEUtil::DataFormatToBits(format.m_dataFormat))
         score += 5;
-      else if (formatDesc.mBitsPerChannel == CAEUtil::DataFormatToBits(format.m_dataFormat))
+      else if (formatDesc.mBitsPerChannel > CAEUtil::DataFormatToBits(format.m_dataFormat))
         score += 1;
     }
   }

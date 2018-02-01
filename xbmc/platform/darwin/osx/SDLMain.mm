@@ -16,18 +16,14 @@
 #import <unistd.h>
 
 #import "platform/darwin/osx/CocoaInterface.h"
-//hack around problem with xbmc's typedef int BOOL
-// and obj-c's typedef unsigned char BOOL
-#define BOOL XBMC_BOOL 
 #import "PlatformDefs.h"
 #import "messaging/ApplicationMessenger.h"
 #import "storage/osx/DarwinStorageProvider.h"
-#undef BOOL
 
 #import "platform/darwin/osx/HotKeyController.h"
 #import "platform/darwin/DarwinUtils.h"
 
-// For some reaon, Apple removed setAppleMenu from the headers in 10.4,
+// For some reason, Apple removed setAppleMenu from the headers in 10.4,
 // but the method still is there and works. To avoid warnings, we declare
 // it ourselves here.
 @interface NSApplication(SDL_Missing_Methods)
@@ -138,13 +134,13 @@ static void setupWindowMenu(void)
   menuItem = [[NSMenuItem alloc] initWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
   [windowMenu addItem:menuItem];
   [menuItem release];
-  
+
   // "Title Bar" item
   menuItem = [[NSMenuItem alloc] initWithTitle:@"Title Bar" action:@selector(titlebarToggle:) keyEquivalent:@""];
   [windowMenu addItem:menuItem];
   [menuItem setState: true];
   [menuItem release];
-  
+
   // Put menu into the menubar
   windowMenuItem = [[NSMenuItem alloc] initWithTitle:@"Window" action:nil keyEquivalent:@""];
   [windowMenuItem setSubmenu:windowMenu];
@@ -214,7 +210,7 @@ static void setupWindowMenu(void)
   BOOL isSet = [window styleMask] & NSTitledWindowMask;
   [window setMovableByWindowBackground: !isSet];
   [sender setState: isSet];
-  
+
 }
 
 
@@ -280,7 +276,7 @@ static void setupWindowMenu(void)
 // To use Cocoa on secondary POSIX threads, your application must first detach
 // at least one NSThread object, which can immediately exit. Some info says this
 // is not required anymore, who knows ?
-- (void) kickstartMultiThreaded:(id)arg;
+- (void) kickstartMultiThreaded:(id)arg
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   // empty
@@ -309,7 +305,7 @@ static void setupWindowMenu(void)
 
   NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 
-  // create media key handler singlton
+  // create media key handler singleton
   [[HotKeyController sharedController] enableTap];
   // add media key notifications
   [center addObserver:self
@@ -416,7 +412,7 @@ static void setupWindowMenu(void)
   return TRUE;
 }
 
-- (void) deviceDidMountNotification:(NSNotification *) note 
+- (void) deviceDidMountNotification:(NSNotification *) note
 {
   // calling into c++ code, need to use autorelease pools
   NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
@@ -425,103 +421,78 @@ static void setupWindowMenu(void)
   [pool release];
 }
 
-- (void) deviceDidUnMountNotification:(NSNotification *) note 
+- (void) deviceDidUnMountNotification:(NSNotification *) note
 {
   // calling into c++ code, need to use autorelease pools
   NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
 
   CDarwinStorageProvider::SetEvent();
   [pool release];
+}
+
+static void keyPress(SDLKey key)
+{
+  SDL_Event event;
+  memset(&event, 0, sizeof(event));
+  event.type = SDL_KEYDOWN;
+  event.key.keysym.sym = key;
+  SDL_PushEvent(&event);
+  event.type = SDL_KEYUP;
+  SDL_PushEvent(&event);
 }
 
 #define VK_SLEEP            0x143
 #define VK_VOLUME_MUTE      0xAD
 #define VK_VOLUME_DOWN      0xAE
 #define VK_VOLUME_UP        0xAF
-#define VK_MEDIA_NEXT_TRACK 0xB0
-#define VK_MEDIA_PREV_TRACK 0xB1
+#define VK_MEDIA_NEXT_TRACK 0x9E
+#define VK_MEDIA_PREV_TRACK 0x9D
 #define VK_MEDIA_STOP       0xB2
 #define VK_MEDIA_PLAY_PAUSE 0xB3
-#define VK_REWIND           0x9D
-#define VK_FAST_FWD         0x9E
+#define VK_REWIND           0xB1
+#define VK_FAST_FWD         0xB0
 
 - (void)powerKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_SLEEP;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_SLEEP);
 }
 
 - (void)muteKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_VOLUME_MUTE;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_VOLUME_MUTE);
 }
 - (void)soundUpKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_VOLUME_UP;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_VOLUME_UP);
 }
 - (void)soundDownKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_VOLUME_DOWN;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_VOLUME_DOWN);
 }
 
 - (void)playPauseKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_MEDIA_PLAY_PAUSE;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_MEDIA_PLAY_PAUSE);
 }
 
 - (void)fastKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_FAST_FWD;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_FAST_FWD);
 }
 
 - (void)rewindKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_REWIND;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_REWIND);
 }
 
 - (void)nextKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_MEDIA_NEXT_TRACK;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_MEDIA_NEXT_TRACK);
 }
 
 - (void)previousKeyNotification
 {
-  SDL_Event event;
-  memset(&event, 0, sizeof(event));
-  event.type = SDL_KEYDOWN;
-  event.key.keysym.sym = (SDLKey)VK_MEDIA_PREV_TRACK;
-  SDL_PushEvent(&event);
+  keyPress((SDLKey)VK_MEDIA_PREV_TRACK);
 }
 
 @end
@@ -565,7 +536,7 @@ int main(int argc, char *argv[])
   // as the whole ProcessSerialNumber approach is deprecated
   // in that case assume finder launch - else
   // we wouldn't handle documents/movies someone dragged on the app icon
-  if (CDarwinUtils::IsMavericks())
+  if (CDarwinUtils::IsMavericksOrHigher())
     gFinderLaunch = TRUE;
 
   // Ensure the application object is initialised

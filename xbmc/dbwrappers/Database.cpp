@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,6 +32,10 @@
 
 #ifdef HAS_MYSQL
 #include "mysqldataset.h"
+#endif
+
+#ifdef TARGET_POSIX
+#include "platform/linux/ConvUtils.h"
 #endif
 
 using namespace dbiplus;
@@ -95,6 +99,54 @@ void CDatabase::Filter::AppendGroup(const std::string &strGroup)
     group = strGroup;
   else
     group += ", " + strGroup;
+}
+
+void CDatabase::ExistsSubQuery::AppendJoin(const std::string &strJoin)
+{
+  if (strJoin.empty())
+    return;
+
+  if (join.empty())
+    join = strJoin;
+  else
+    join += " " + strJoin;
+}
+
+void CDatabase::ExistsSubQuery::AppendWhere(const std::string &strWhere, bool combineWithAnd /* = true */)
+{
+  if (strWhere.empty())
+    return;
+
+  if (where.empty())
+    where = strWhere;
+  else
+  {
+    where += combineWithAnd ? " AND " : " OR ";
+    where += strWhere;
+  }
+}
+
+bool CDatabase::ExistsSubQuery::BuildSQL(std::string & strSQL)
+{
+  if (tablename.empty())
+    return false;
+  strSQL = "EXISTS (SELECT 1 FROM " + tablename;
+  if (!join.empty())
+    strSQL += " " + join;
+  std::string strWhere;
+  if (!param.empty())
+    strWhere = param;
+  if (!where.empty())
+  {
+    if (!strWhere.empty())
+      strWhere += " AND ";
+    strWhere += where;
+  }
+  if (!strWhere.empty())      
+    strSQL += " WHERE " + strWhere;
+
+  strSQL += ")";
+  return true;
 }
 
 CDatabase::CDatabase(void)
@@ -186,6 +238,7 @@ bool CDatabase::DeleteValues(const std::string &strTable, const Filter &filter /
 bool CDatabase::BeginMultipleExecute()
 {
   m_multipleExecute = true;
+  m_multipleQueries.clear();
   return true;
 }
 
@@ -201,7 +254,7 @@ bool CDatabase::CommitMultipleExecute()
       return false;
     }
   }
-
+  m_multipleQueries.clear();
   return CommitTransaction();
 }
 
@@ -351,71 +404,14 @@ void CDatabase::InitSettings(DatabaseSettings &dbSettings)
     dbSettings.name = GetBaseDBName();
 }
 
-bool CDatabase::Update(const DatabaseSettings &settings)
+void CDatabase::CopyDB(const std::string& latestDb)
 {
-  DatabaseSettings dbSettings = settings;
-  InitSettings(dbSettings);
+  m_pDB->copy(latestDb.c_str());
+}
 
-  int version = GetSchemaVersion();
-  std::string latestDb = dbSettings.name;
-  latestDb += StringUtils::Format("%d", version);
-
-  while (version >= GetMinSchemaVersion())
-  {
-    std::string dbName = dbSettings.name;
-    if (version)
-      dbName += StringUtils::Format("%d", version);
-
-    if (Connect(dbName, dbSettings, false))
-    {
-      // Database exists, take a copy for our current version (if needed) and reopen that one
-      if (version < GetSchemaVersion())
-      {
-        CLog::Log(LOGNOTICE, "Old database found - updating from version %i to %i", version, GetSchemaVersion());
-
-        bool copy_fail = false;
-
-        try
-        {
-          m_pDB->copy(latestDb.c_str());
-        }
-        catch(...)
-        {
-          CLog::Log(LOGERROR, "Unable to copy old database %s to new version %s", dbName.c_str(), latestDb.c_str());
-          copy_fail = true;
-        }
-
-        Close();
-
-        if ( copy_fail )
-          return false;
-
-        if (!Connect(latestDb, dbSettings, false))
-        {
-          CLog::Log(LOGERROR, "Unable to open freshly copied database %s", latestDb.c_str());
-          return false;
-        }
-      }
-
-      // yay - we have a copy of our db, now do our worst with it
-      if (UpdateVersion(latestDb))
-        return true;
-
-      // update failed - loop around and see if we have another one available
-      Close();
-    }
-
-    // drop back to the previous version and try that
-    version--;
-  }
-  // try creating a new one
-  if (Connect(latestDb, dbSettings, true))
-    return true;
-
-  // failed to update or open the database
-  Close();
-  CLog::Log(LOGERROR, "Unable to create new database");
-  return false;
+void CDatabase::DropAnalytics()
+{
+  m_pDB->drop_analytics();
 }
 
 bool CDatabase::Connect(const std::string &dbName, const DatabaseSettings &dbSettings, bool create)
@@ -515,57 +511,6 @@ int CDatabase::GetDBVersion()
   return 0;
 }
 
-bool CDatabase::UpdateVersion(const std::string &dbName)
-{
-  int version = GetDBVersion();
-  bool bReturn = false;
-
-  if (version < GetMinSchemaVersion())
-  {
-    CLog::Log(LOGERROR, "Can't update database %s from version %i - it's too old", dbName.c_str(), version);
-    return false;
-  }
-  else if (version < GetSchemaVersion())
-  {
-    CLog::Log(LOGNOTICE, "Attempting to update the database %s from version %i to %i", dbName.c_str(), version, GetSchemaVersion());
-    bool success = true;
-    BeginTransaction();
-    try
-    {
-      // drop old analytics, update table(s), recreate analytics, update version
-      m_pDB->drop_analytics();
-      UpdateTables(version);
-      CreateAnalytics();
-      UpdateVersionNumber();
-    }
-    catch (...)
-    {
-      CLog::Log(LOGERROR, "Exception updating database %s from version %i to %i", dbName.c_str(), version, GetSchemaVersion());
-      success = false;
-    }
-    if (!success)
-    {
-      CLog::Log(LOGERROR, "Error updating database %s from version %i to %i", dbName.c_str(), version, GetSchemaVersion());
-      RollbackTransaction();
-      return false;
-    }
-    bReturn = CommitTransaction();
-    CLog::Log(LOGINFO, "Update to version %i successful", GetSchemaVersion());
-  }
-  else if (version > GetSchemaVersion())
-  {
-    bReturn = false;
-    CLog::Log(LOGERROR, "Can't open the database %s as it is a NEWER version than what we were expecting?", dbName.c_str());
-  }
-  else
-  {
-    bReturn = true;
-    CLog::Log(LOGNOTICE, "Running database version %s", dbName.c_str());
-  }
-
-  return bReturn;
-}
-
 bool CDatabase::IsOpen()
 {
   return m_openCount > 0;
@@ -629,7 +574,7 @@ bool CDatabase::Compress(bool bForce /* =true */)
   return true;
 }
 
-void CDatabase::Interupt()
+void CDatabase::Interrupt()
 {
   m_pDS->interrupt();
 }

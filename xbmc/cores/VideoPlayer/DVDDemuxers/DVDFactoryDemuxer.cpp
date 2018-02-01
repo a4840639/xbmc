@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,12 +28,14 @@
 #include "DVDDemuxBXA.h"
 #include "DVDDemuxCDDA.h"
 #include "DVDDemuxClient.h"
+#include "DemuxMultiSource.h"
 #include "pvr/PVRManager.h"
-#include "pvr/addons/PVRClients.h"
+#include "utils/log.h"
+#include "utils/URIUtils.h"
 
 using namespace PVR;
 
-CDVDDemux* CDVDFactoryDemuxer::CreateDemuxer(CDVDInputStream* pInputStream, bool fileinfo)
+CDVDDemux* CDVDFactoryDemuxer::CreateDemuxer(std::shared_ptr<CDVDInputStream> pInputStream, bool fileinfo)
 {
   if (!pInputStream)
     return NULL;
@@ -79,31 +81,25 @@ CDVDDemux* CDVDFactoryDemuxer::CreateDemuxer(CDVDInputStream* pInputStream, bool
   bool streaminfo = true; /* Look for streams before playback */
   if (pInputStream->IsStreamType(DVDSTREAM_TYPE_PVRMANAGER))
   {
-    CDVDInputStreamPVRManager* pInputStreamPVR = (CDVDInputStreamPVRManager*)pInputStream;
-    CDVDInputStream* pOtherStream = pInputStreamPVR->GetOtherStream();
-
     /* Don't parse the streaminfo for some cases of streams to reduce the channel switch time */
     bool useFastswitch = URIUtils::IsUsingFastSwitch(pInputStream->GetFileName());
     streaminfo = !useFastswitch;
-
-    if (pOtherStream)
-    {
-      /* Used for MediaPortal PVR addon (uses PVR otherstream for playback of rtsp streams) */
-      if (pOtherStream->IsStreamType(DVDSTREAM_TYPE_FFMPEG))
-      {
-        std::unique_ptr<CDVDDemuxFFmpeg> demuxer(new CDVDDemuxFFmpeg());
-        if(demuxer->Open(pOtherStream, streaminfo))
-          return demuxer.release();
-        else
-          return nullptr;
-      }
-    }
   }
 
   if (pInputStream->IsStreamType(DVDSTREAM_TYPE_FFMPEG))
   {
     bool useFastswitch = URIUtils::IsUsingFastSwitch(pInputStream->GetFileName());
     streaminfo = !useFastswitch;
+  }
+
+  // Try to open the MultiFiles demuxer
+  if (pInputStream->IsStreamType(DVDSTREAM_TYPE_MULTIFILES))
+  {
+    std::unique_ptr<CDemuxMultiSource> demuxer(new CDemuxMultiSource());
+    if (demuxer->Open(pInputStream))
+      return demuxer.release();
+    else
+      return NULL;
   }
 
   std::unique_ptr<CDVDDemuxFFmpeg> demuxer(new CDVDDemuxFFmpeg());

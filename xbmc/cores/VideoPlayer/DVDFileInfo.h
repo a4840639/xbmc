@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -33,19 +34,19 @@ class CTextureDetails;
 class CDVDFileInfo
 {
 public:
-  // Extract a thumbnail immage from the media at strPath, optionally populating a streamdetails class with the data
+  // Extract a thumbnail image from the media at strPath, optionally populating a streamdetails class with the data
   static bool ExtractThumb(const std::string &strPath,
                            CTextureDetails &details,
                            CStreamDetails *pStreamDetails, int pos=-1);
 
   // Probe the files streams and store the info in the VideoInfoTag
   static bool GetFileStreamDetails(CFileItem *pItem);
-  static bool DemuxerToStreamDetails(CDVDInputStream* pInputStream, CDVDDemux *pDemux, CStreamDetails &details, const std::string &path = "");
+  static bool DemuxerToStreamDetails(std::shared_ptr<CDVDInputStream> pInputStream, CDVDDemux *pDemux, CStreamDetails &details, const std::string &path = "");
 
   /** \brief Probe the file's internal and external streams and store the info in the StreamDetails parameter.
   *   \param[out] details The file's StreamDetails consisting of internal streams and external subtitle streams.
   */
-  static bool DemuxerToStreamDetails(CDVDInputStream *pInputStream, CDVDDemux *pDemuxer, const std::vector<CStreamDetailSubtitle> &subs, CStreamDetails &details);
+  static bool DemuxerToStreamDetails(std::shared_ptr<CDVDInputStream> pInputStream, CDVDDemux *pDemuxer, const std::vector<CStreamDetailSubtitle> &subs, CStreamDetails &details);
 
   static bool GetFileDuration(const std::string &path, int &duration);
 

@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <vector>
 
 #include "JSONRPCUtils.h"
 #include "XBDateTime.h"
@@ -140,7 +141,7 @@ namespace JSONRPC
      \return True if the given object contains a member with 
      the given key otherwise false
      */
-    static inline bool IsValueMember(const CVariant &value, std::string key) { return value.isObject() && value.isMember(key); }
+    static inline bool IsValueMember(const CVariant &value, std::string key) { return value.isMember(key); }
     
     /*!
      \brief Returns the json value of a parameter

@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 
 #include "guilib/IMsgTargetCallback.h"
 #include "messaging/IMessageTarget.h"
+#include "ServiceBroker.h"
 #include <memory>
 
 #define PLAYLIST_NONE    -1
@@ -50,11 +51,11 @@ class CPlayListPlayer : public IMsgTargetCallback,
 
 public:
   CPlayListPlayer(void);
-  virtual ~CPlayListPlayer(void);
-  virtual bool OnMessage(CGUIMessage &message) override;
+  ~CPlayListPlayer(void) override;
+  bool OnMessage(CGUIMessage &message) override;
 
-  virtual int GetMessageMask() override;
-  virtual void OnApplicationMessage(KODI::MESSAGING::ThreadMessage* pMsg) override;
+  int GetMessageMask() override;
+  void OnApplicationMessage(KODI::MESSAGING::ThreadMessage* pMsg) override;
 
   /*! \brief Play the next (or another) entry in the current playlist
    \param offset The offset from the current entry (defaults to 1, i.e. the next entry).
@@ -68,6 +69,11 @@ public:
   bool PlayPrevious();
   bool PlaySongId(int songId);
   bool Play();
+
+  /*! \brief Creates a new playlist for an item and starts playing it
+   \param pItem The item to play.
+   */
+  bool Play(const CFileItemPtr &pItem, std::string player);
 
   /*! \brief Start playing a particular entry in the current playlist
    \param index the index of the item to play. This value is modified to ensure it lies within the current playlist.
@@ -163,12 +169,12 @@ public:
   REPEAT_STATE GetRepeat(int iPlaylist) const;
 
   // add items via the playlist player
-  void Add(int iPlaylist, CPlayList& playlist);
+  void Add(int iPlaylist, const CPlayList& playlist);
   void Add(int iPlaylist, const CFileItemPtr &pItem);
-  void Add(int iPlaylist, CFileItemList& items);
-  void Insert(int iPlaylist, CPlayList& playlist, int iIndex);
+  void Add(int iPlaylist, const CFileItemList& items);
+  void Insert(int iPlaylist, const CPlayList& playlist, int iIndex);
   void Insert(int iPlaylist, const CFileItemPtr &pItem, int iIndex);
-  void Insert(int iPlaylist, CFileItemList& items, int iIndex);
+  void Insert(int iPlaylist, const CFileItemList& items, int iIndex);
   void Remove(int iPlaylist, int iPosition);
   void Swap(int iPlaylist, int indexItem1, int indexItem2);
 
@@ -205,9 +211,3 @@ protected:
 };
 
 }
-
-/*!
- \ingroup windows
- \brief Global instance of playlist player
- */
-extern PLAYLIST::CPlayListPlayer g_playlistPlayer;

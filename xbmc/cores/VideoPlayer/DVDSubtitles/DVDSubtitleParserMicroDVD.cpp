@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,14 +20,14 @@
 
 #include "DVDSubtitleParserMicroDVD.h"
 #include "DVDCodecs/Overlay/DVDOverlayText.h"
-#include "DVDClock.h"
+#include "cores/VideoPlayer/Interface/Addon/TimingConstants.h"
 #include "utils/RegExp.h"
 #include "DVDStreamInfo.h"
 #include "utils/log.h"
 #include "DVDSubtitleTagMicroDVD.h"
 
-CDVDSubtitleParserMicroDVD::CDVDSubtitleParserMicroDVD(CDVDSubtitleStream* stream, const std::string& filename)
-    : CDVDSubtitleParserText(stream, filename), m_framerate( DVD_TIME_BASE / 25.0 )
+CDVDSubtitleParserMicroDVD::CDVDSubtitleParserMicroDVD(std::unique_ptr<CDVDSubtitleStream> && stream, const std::string& filename)
+    : CDVDSubtitleParserText(std::move(stream), filename), m_framerate( DVD_TIME_BASE / 25.0 )
 {
 
 }

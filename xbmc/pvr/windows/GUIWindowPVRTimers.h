@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,19 +19,27 @@
  *
  */
 
-#include "GUIWindowPVRTimersBase.h"
-
 #include <string>
+
+#include "pvr/windows/GUIWindowPVRTimersBase.h"
 
 namespace PVR
 {
-  class CGUIWindowPVRTimers : public CGUIWindowPVRTimersBase
+  class CGUIWindowPVRTVTimers : public CGUIWindowPVRTimersBase
   {
   public:
-    CGUIWindowPVRTimers(bool bRadio);
-    virtual ~CGUIWindowPVRTimers(void) {};
+    CGUIWindowPVRTVTimers();
 
   protected:
-    virtual std::string GetDirectoryPath(void) override;
+    std::string GetDirectoryPath() override;
+  };
+
+  class CGUIWindowPVRRadioTimers : public CGUIWindowPVRTimersBase
+  {
+  public:
+    CGUIWindowPVRRadioTimers();
+
+  protected:
+    std::string GetDirectoryPath() override;
   };
 }

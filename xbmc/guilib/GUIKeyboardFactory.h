@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -43,9 +43,9 @@ class CGUIKeyboardFactory
 
     static bool SendTextToActiveKeyboard(const std::string &aTextString, bool closeKeyboard = false);
 
-    static bool isKeyboardActivated() { return g_activedKeyboard != NULL; }
+    static bool isKeyboardActivated() { return g_activeKeyboard != NULL; }
   private:
-    static CGUIKeyboard *g_activedKeyboard;
+    static CGUIKeyboard *g_activeKeyboard;
     static FILTERING m_filtering;
     static void keyTypedCB(CGUIKeyboard *ref, const std::string &typedString);
 };

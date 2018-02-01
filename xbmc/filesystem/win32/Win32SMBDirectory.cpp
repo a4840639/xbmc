@@ -1,6 +1,6 @@
 /*
 *      Copyright (C) 2014 Team XBMC
-*      http://xbmc.org
+*      http://kodi.tv
 *
 *  This Program is free software; you can redistribute it and/or modify
 *  it under the terms of the GNU General Public License as published by
@@ -18,11 +18,9 @@
 *
 */
 
-#ifdef TARGET_WINDOWS
-
 #include "Win32SMBDirectory.h"
 #include "FileItem.h"
-#include "win32/WIN32Util.h"
+#include "platform/win32/WIN32Util.h"
 #include "utils/SystemInfo.h"
 #include "utils/CharsetConverter.h"
 #include "URL.h"
@@ -111,7 +109,7 @@ bool CWin32SMBDirectory::GetDirectory(const CURL& url, CFileItemList &items)
   if (searchMask.empty())
     return false;
 
-  // TODO: support m_strFileMask, require rewrite of internal caching
+  //! @todo support m_strFileMask, require rewrite of internal caching
   if (searchMask.back() == '\\')
     searchMask += L'*';
   else
@@ -121,10 +119,7 @@ bool CWin32SMBDirectory::GetDirectory(const CURL& url, CFileItemList &items)
   WIN32_FIND_DATAW findData = {};
   CURL authUrl(url); // ConnectAndAuthenticate may update url with username and password
 
-  if (g_sysinfo.IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin7))
-    hSearch = FindFirstFileExW(searchMask.c_str(), FindExInfoBasic, &findData, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
-  else
-    hSearch = FindFirstFileExW(searchMask.c_str(), FindExInfoStandard, &findData, FindExSearchNameMatch, NULL, 0);
+  hSearch = FindFirstFileExW(searchMask.c_str(), FindExInfoBasic, &findData, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
 
   if (hSearch == INVALID_HANDLE_VALUE)
   {
@@ -134,10 +129,7 @@ bool CWin32SMBDirectory::GetDirectory(const CURL& url, CFileItemList &items)
 
     if (ConnectAndAuthenticate(authUrl, (m_flags & DIR_FLAG_ALLOW_PROMPT) != 0))
     {
-      if (g_sysinfo.IsWindowsVersionAtLeast(CSysInfo::WindowsVersionWin7))
-        hSearch = FindFirstFileExW(searchMask.c_str(), FindExInfoBasic, &findData, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
-      else
-        hSearch = FindFirstFileExW(searchMask.c_str(), FindExInfoStandard, &findData, FindExSearchNameMatch, NULL, 0);
+      hSearch = FindFirstFileExW(searchMask.c_str(), FindExInfoBasic, &findData, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
       searchErr = GetLastError();
     }
     if (hSearch == INVALID_HANDLE_VALUE)
@@ -263,7 +255,7 @@ bool CWin32SMBDirectory::RealExists(const CURL& url, bool tryToConnect)
   if (url.GetHostName().empty())
     return true; // 'root' of network is always exist
     
-  // TODO: use real caseless string comparison everywhere in this function
+  //! @todo use real caseless string comparison everywhere in this function
   if (url.GetShareName().empty() || url.GetShareName() == url.GetFileName())
   {
     if (!url.GetShareName().empty())
@@ -648,15 +640,15 @@ bool CWin32SMBDirectory::ConnectAndAuthenticate(CURL& url, bool allowPromptForCr
   {
     CLog::LogF(LOGERROR, "Can't convert username \"%s\" to wide string", url.GetUserName().c_str());
     return false;
-    std::wstring domainW;
-    if (!url.GetDomain().empty() && !g_charsetConverter.utf8ToW(url.GetDomain(), domainW, false, false, true))
-    {
-      CLog::LogF(LOGERROR, "Can't convert domain name \"%s\" to wide string", url.GetDomain().c_str());
-      return false;
-    }
-    if (!domainW.empty())
-      usernameW += L'@' + domainW;
   }
+  std::wstring domainW;
+  if (!url.GetDomain().empty() && !g_charsetConverter.utf8ToW(url.GetDomain(), domainW, false, false, true))
+  {
+    CLog::LogF(LOGERROR, "Can't convert domain name \"%s\" to wide string", url.GetDomain().c_str());
+    return false;
+  }
+  if (!domainW.empty())
+    usernameW += L'@' + domainW;
 
   std::wstring passwordW;
   if (!url.GetPassWord().empty() && !g_charsetConverter.utf8ToW(url.GetPassWord(), passwordW, false, false, true))
@@ -717,5 +709,3 @@ bool CWin32SMBDirectory::ConnectAndAuthenticate(CURL& url, bool allowPromptForCr
   CLog::LogF(LOGWARNING, "Can't connect to \"%s\" %s. Error code: %lu", serverShareName.c_str(), loginDescr.c_str(), (unsigned long)connRes);
   return false;
 }
-
-#endif // TARGET_WINDOWS

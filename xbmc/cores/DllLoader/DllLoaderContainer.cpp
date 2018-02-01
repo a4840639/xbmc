@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,7 +33,17 @@
 #include "utils/log.h"
 #include "URL.h"
 
-#define ENV_PARTIAL_PATH "special://xbmcbin/system/;" \
+#if defined(TARGET_WINDOWS)
+#define ENV_PARTIAL_PATH \
+                 "special://xbmcbin/;" \
+                 "special://xbmcbin/system/;" \
+                 "special://xbmcbin/system/python/;" \
+                 "special://xbmc/;" \
+                 "special://xbmc/system/;" \
+                 "special://xbmc/system/python/"
+#else
+#define ENV_PARTIAL_PATH \
+                 "special://xbmcbin/system/;" \
                  "special://xbmcbin/system/players/mplayer/;" \
                  "special://xbmcbin/system/players/VideoPlayer/;" \
                  "special://xbmcbin/system/players/paplayer/;" \
@@ -43,7 +53,7 @@
                  "special://xbmc/system/players/VideoPlayer/;" \
                  "special://xbmc/system/players/paplayer/;" \
                  "special://xbmc/system/python/"
-
+#endif
 #if defined(TARGET_DARWIN)
 #define ENV_PATH ENV_PARTIAL_PATH \
                  ";special://frameworks/"
@@ -241,7 +251,7 @@ LibraryLoader* DllLoaderContainer::LoadDll(const char* sName, bool bLoadSymbols)
 #ifdef TARGET_POSIX
   pLoader = new SoLoader(sName, bLoadSymbols);
 #elif defined(TARGET_WINDOWS)
-  pLoader = new Win32DllLoader(sName);
+  pLoader = new Win32DllLoader(sName, false);
 #else
   pLoader = new DllLoader(sName, m_bTrack, false, bLoadSymbols);
 #endif

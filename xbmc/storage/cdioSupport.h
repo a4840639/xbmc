@@ -27,9 +27,7 @@
 
 #pragma once
 
-#include "system.h" // for HAS_DVD_DRIVE
-
-#ifdef HAS_DVD_DRIVE
+#include "system.h" // for ssize_t typedef
 
 #include <cdio/cdio.h>
 #include "threads/CriticalSection.h"
@@ -279,8 +277,8 @@ public:
   CCdIoSupport();
   virtual ~CCdIoSupport();
 
-  HRESULT EjectTray();
-  HRESULT CloseTray();
+  bool EjectTray();
+  bool CloseTray();
 
   HANDLE OpenCDROM();
   HANDLE OpenIMAGE( std::string& strFilename );
@@ -337,5 +335,3 @@ private:
 };
 
 }
-
-#endif

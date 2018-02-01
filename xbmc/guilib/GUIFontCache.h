@@ -9,7 +9,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -113,7 +113,7 @@ struct CGUIFontCacheHash
       hash += key.m_text[i];
     if (key.m_colors.size())
       hash += key.m_colors[0];
-    hash += MatrixHashContribution(key);
+    hash += static_cast<size_t>(MatrixHashContribution(key)); // horrible
     return hash;
   }
 };
@@ -140,10 +140,13 @@ class CGUIFontCache
 {
   CGUIFontCacheImpl<Position, Value>* m_impl;
 
+  CGUIFontCache(const CGUIFontCache<Position,Value>&) = delete;
+  const CGUIFontCache<Position,Value>& operator=(const CGUIFontCache<Position,Value>&) = delete;
+
 public:
   const CGUIFontTTFBase &m_font;
 
-  CGUIFontCache(CGUIFontTTFBase &font);
+  explicit CGUIFontCache(CGUIFontTTFBase &font);
 
   ~CGUIFontCache();
  
@@ -190,7 +193,7 @@ struct CGUIFontCacheDynamicPosition
   float m_x;
   float m_y;
   float m_z;
-  CGUIFontCacheDynamicPosition() {}
+  CGUIFontCacheDynamicPosition() = default;
   CGUIFontCacheDynamicPosition(float x, float y, float z) : m_x(x), m_y(y), m_z(z) {}
   void UpdateWithOffsets(const CGUIFontCacheDynamicPosition &cached, bool scrolling)
   {

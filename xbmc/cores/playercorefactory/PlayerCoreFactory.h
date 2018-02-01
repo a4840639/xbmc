@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ class CPlayerCoreFactory : public ISettingsHandler
 public:
   static CPlayerCoreFactory& GetInstance();
 
-  virtual void OnSettingsLoaded() override;
+  void OnSettingsLoaded() override;
 
   IPlayer* CreatePlayer(const std::string& nameId, IPlayerCallback& callback) const;
   void GetPlayers(const CFileItem& item, std::vector<std::string>&players) const;   //Players supporting the specified file
@@ -61,9 +61,9 @@ public:
 
 protected:
   CPlayerCoreFactory();
-  CPlayerCoreFactory(const CPlayerCoreFactory&);
-  CPlayerCoreFactory& operator=(CPlayerCoreFactory const&);
-  virtual ~CPlayerCoreFactory();
+  CPlayerCoreFactory(const CPlayerCoreFactory&) = delete;
+  CPlayerCoreFactory& operator=(CPlayerCoreFactory const&) = delete;
+  ~CPlayerCoreFactory() override;
   int GetPlayerIndex(const std::string& strCoreName) const;
   std::string GetPlayerName(size_t idx) const;
 

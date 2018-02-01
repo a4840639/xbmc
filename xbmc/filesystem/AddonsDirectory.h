@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,11 +36,11 @@ namespace XFILE
   {
   public:
     CAddonsDirectory(void);
-    virtual ~CAddonsDirectory(void);
-    virtual bool GetDirectory(const CURL& url, CFileItemList &items);
-    virtual bool Create(const CURL& url) { return true; }
-    virtual bool Exists(const CURL& url) { return true; }
-    virtual bool AllowAll() const { return true; }
+    ~CAddonsDirectory(void) override;
+    bool GetDirectory(const CURL& url, CFileItemList &items) override;
+    bool Create(const CURL& url) override { return true; }
+    bool Exists(const CURL& url) override { return true; }
+    bool AllowAll() const override { return true; }
 
     /*! \brief Fetch script and plugin addons of a given content type
      \param content the content type to fetch

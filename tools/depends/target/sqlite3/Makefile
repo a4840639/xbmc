@@ -1,9 +1,9 @@
 include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+DEPS= ../../Makefile.include Makefile fix-32bits-on-64bits.patch sqlite3.c.patch
 
 # lib name, version
 LIBNAME=sqlite
-VERSION=3090200
+VERSION=3140200
 SOURCE=$(LIBNAME)-autoconf-$(VERSION)
 ARCHIVE=$(SOURCE).tar.gz
 

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 #include "AppParamParser.h"
 #include "PlayListPlayer.h"
 #include "Application.h"
-#include "messaging/ApplicationMessenger.h"
 #include "settings/AdvancedSettings.h"
 #include "utils/log.h"
 #include "utils/SystemInfo.h"
@@ -31,7 +30,7 @@
 #include "WIN32Util.h"
 #endif
 #ifndef TARGET_WINDOWS
-#include "linux/XTimeUtils.h"
+#include "platform/linux/XTimeUtils.h"
 #endif
 #include <stdlib.h>
 
@@ -42,7 +41,7 @@ CAppParamParser::CAppParamParser()
   m_testmode = false;
 }
 
-void CAppParamParser::Parse(const char* argv[], int nArgs)
+void CAppParamParser::Parse(const char* const* argv, int nArgs)
 {
   if (nArgs > 1)
   {
@@ -57,13 +56,13 @@ void CAppParamParser::Parse(const char* argv[], int nArgs)
         {
           if ((argv[next][0] != '-') && (argv[next][0] == '/'))
           {
-            CInputManager::GetInstance().SetRemoteControlName(argv[next]);
+            m_remoteControlName = argv[next];
             i++;
           }
         }
       }
       else if (strnicmp(argv[i], "-n", 2) == 0 || strnicmp(argv[i], "--nolirc", 8) == 0)
-        CInputManager::GetInstance().DisableRemoteControl();
+        m_remoteControlEnabled = false;
 
       if (stricmp(argv[i], "-d") == 0)
       {
@@ -77,7 +76,6 @@ void CAppParamParser::Parse(const char* argv[], int nArgs)
       }
     }
   }
-  PlayPlaylist();
 }
 
 void CAppParamParser::DisplayVersion()
@@ -143,19 +141,11 @@ void CAppParamParser::ParseArg(const std::string &arg)
   {
     if (m_testmode)
       g_application.SetEnableTestMode(true);
+
     CFileItemPtr pItem(new CFileItem(arg));
     pItem->SetPath(arg);
+
     m_playlist.Add(pItem);
   }
 }
 
-void CAppParamParser::PlayPlaylist()
-{
-  if (m_playlist.Size() > 0)
-  {
-    g_playlistPlayer.Add(0, m_playlist);
-    g_playlistPlayer.SetCurrentPlaylist(0);
-  }
-
-  CApplicationMessenger::GetInstance().PostMsg(TMSG_PLAYLISTPLAYER_PLAY, -1);
-}

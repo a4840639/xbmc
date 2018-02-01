@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,11 +20,10 @@
  */
 
 #include "DVDDemux.h"
+#include <vector>
 
 #ifdef TARGET_WINDOWS
 #define __attribute__(dummy_val)
-#else
-#include <config.h>
 #endif
 
 class CDemuxStreamAudioCDDA;
@@ -34,25 +33,25 @@ class CDVDDemuxCDDA : public CDVDDemux
 public:
 
   CDVDDemuxCDDA();
-  ~CDVDDemuxCDDA();
+  ~CDVDDemuxCDDA() override;
 
-  bool Open(CDVDInputStream* pInput);
+  bool Open(std::shared_ptr<CDVDInputStream> pInput);
   void Dispose();
-  void Reset();
-  void Abort();
-  void Flush();
-  DemuxPacket* Read();
-  bool SeekTime(int time, bool backwords = false, double* startpts = NULL);
-  void SetSpeed(int iSpeed) {};
-  int GetStreamLength() ;
-  CDemuxStream* GetStream(int iStreamId);
-  int GetNrOfStreams();
-  std::string GetFileName();
-  virtual std::string GetStreamCodecName(int iStreamId) override;
+  bool Reset() override;
+  void Abort() override;
+  void Flush() override;
+  DemuxPacket* Read() override;
+  bool SeekTime(double time, bool backwards = false, double* startpts = NULL) override;
+  int GetStreamLength() override;
+  CDemuxStream* GetStream(int iStreamId) const override;
+  std::vector<CDemuxStream*> GetStreams() const override;
+  int GetNrOfStreams() const override;
+  std::string GetFileName() override;
+  std::string GetStreamCodecName(int iStreamId) override;
 
 protected:
   friend class CDemuxStreamAudioCDDA;
-  CDVDInputStream* m_pInput;
+  std::shared_ptr<CDVDInputStream> m_pInput;
   int64_t m_bytes;
 
   CDemuxStreamAudioCDDA *m_stream;

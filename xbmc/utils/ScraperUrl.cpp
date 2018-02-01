@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -52,9 +52,7 @@ CScraperUrl::CScraperUrl()
   relevance = 0;
 }
 
-CScraperUrl::~CScraperUrl()
-{
-}
+CScraperUrl::~CScraperUrl() = default;
 
 void CScraperUrl::Clear()
 {
@@ -197,12 +195,12 @@ bool CScraperUrl::Get(const SUrlEntry& scrURL, std::string& strHTML, XFILE::CCur
   std::string strCachePath;
 
   if (scrURL.m_isgz)
-    http.SetContentEncoding("gzip");
+    http.SetAcceptEncoding("gzip");
 
   if (!scrURL.m_cache.empty())
   {
     strCachePath = URIUtils::AddFileToFolder(g_advancedSettings.m_cachePath,
-                              "scrapers/" + cacheContext + "/" + scrURL.m_cache);
+                              "scrapers", cacheContext, scrURL.m_cache);
     if (XFILE::CFile::Exists(strCachePath))
     {
       XFILE::CFile file;
@@ -232,7 +230,7 @@ bool CScraperUrl::Get(const SUrlEntry& scrURL, std::string& strHTML, XFILE::CCur
 
   strHTML = strHTML1;
 
-  std::string mimeType(http.GetMimeType());
+  std::string mimeType(http.GetProperty(XFILE::FILE_PROPERTY_MIME_TYPE));
   CMime::EFileType ftype = CMime::GetFileTypeFromMime(mimeType);
   if (ftype == CMime::FileTypeUnknown)
     ftype = CMime::GetFileTypeFromContent(strHTML);
@@ -251,7 +249,7 @@ bool CScraperUrl::Get(const SUrlEntry& scrURL, std::string& strHTML, XFILE::CCur
       CLog::Log(LOGWARNING, "%s: \"%s\" looks like archive, but cannot be unpacked", __FUNCTION__, scrURL.m_url.c_str());
   }
 
-  std::string reportedCharset(http.GetServerReportedCharset());
+  std::string reportedCharset(http.GetProperty(XFILE::FILE_PROPERTY_CONTENT_CHARSET));
   if (ftype == CMime::FileTypeHtml)
   {
     std::string realHtmlCharset, converted;
@@ -276,7 +274,7 @@ bool CScraperUrl::Get(const SUrlEntry& scrURL, std::string& strHTML, XFILE::CCur
       strHTML = converted;
     }
   }
-  else if (ftype == CMime::FileTypePlainText || StringUtils::CompareNoCase(mimeType.substr(0, 5), "text/") == 0)
+  else if (ftype == CMime::FileTypePlainText || StringUtils::EqualsNoCase(mimeType.substr(0, 5), "text/"))
   {
     std::string realTextCharset, converted;
     CCharsetDetection::ConvertPlainTextToUtf8(strHTML, converted, reportedCharset, realTextCharset);
@@ -302,7 +300,7 @@ bool CScraperUrl::Get(const SUrlEntry& scrURL, std::string& strHTML, XFILE::CCur
   if (!scrURL.m_cache.empty())
   {
     std::string strCachePath = URIUtils::AddFileToFolder(g_advancedSettings.m_cachePath,
-                              "scrapers/" + cacheContext + "/" + scrURL.m_cache);
+                              "scrapers", cacheContext, scrURL.m_cache);
     XFILE::CFile file;
     if (!file.OpenForWrite(strCachePath, true) || file.Write(strHTML.data(), strHTML.size()) != static_cast<ssize_t>(strHTML.size()))
       return false;
@@ -337,6 +335,43 @@ bool CScraperUrl::ParseEpisodeGuide(std::string strUrls)
     return false;
 
   return true;
+}
+
+void CScraperUrl::AddElement(std::string url, std::string aspect, std::string referrer, std::string cache, bool post, bool isgz, int season)
+{
+  TiXmlElement thumb("thumb");
+  thumb.SetAttribute("spoof", referrer);
+  thumb.SetAttribute("cache", cache);
+  if (post)
+    thumb.SetAttribute("post", "yes");
+  if (isgz)
+    thumb.SetAttribute("gzip", "yes");
+  if (season >= 0)
+  {
+    thumb.SetAttribute("season", StringUtils::Format("%i", season));
+    thumb.SetAttribute("type", "season");
+  }
+  thumb.SetAttribute("aspect", aspect);
+  TiXmlText text(url);
+  thumb.InsertEndChild(text);
+  m_xml << thumb;
+  SUrlEntry nUrl;
+  nUrl.m_url = url;
+  nUrl.m_spoof = referrer;
+  nUrl.m_post = post;
+  nUrl.m_isgz = isgz;
+  nUrl.m_cache = cache;
+  if (season >= 0)
+  {
+    nUrl.m_type = URL_TYPE_SEASON;
+    nUrl.m_season = season;
+  }
+  else
+    nUrl.m_type = URL_TYPE_GENERAL;
+  
+  nUrl.m_aspect = aspect;
+
+  m_url.push_back(nUrl);
 }
 
 std::string CScraperUrl::GetThumbURL(const CScraperUrl::SUrlEntry &entry)

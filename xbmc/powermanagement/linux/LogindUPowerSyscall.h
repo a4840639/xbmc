@@ -1,7 +1,7 @@
 /*
  *      Copyright (C) 2012 Denis Yantarev
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,8 +19,6 @@
  *
  */
 
-#ifdef HAS_DBUS
-
 #include "powermanagement/IPowerSyscall.h"
 #include "DBusUtil.h"
 
@@ -28,21 +26,21 @@ class CLogindUPowerSyscall : public CAbstractPowerSyscall
 {
 public:
   CLogindUPowerSyscall();
-  ~CLogindUPowerSyscall();
-  virtual bool Powerdown();
-  virtual bool Suspend();
-  virtual bool Hibernate();
-  virtual bool Reboot();
-  virtual bool CanPowerdown();
-  virtual bool CanSuspend();
-  virtual bool CanHibernate();
-  virtual bool CanReboot();
-  virtual int BatteryLevel();
-  virtual bool PumpPowerEvents(IPowerEventsCallback *callback);
+  ~CLogindUPowerSyscall() override;
+  bool Powerdown() override;
+  bool Suspend() override;
+  bool Hibernate() override;
+  bool Reboot() override;
+  bool CanPowerdown() override;
+  bool CanSuspend() override;
+  bool CanHibernate() override;
+  bool CanReboot() override;
+  int BatteryLevel() override;
+  bool PumpPowerEvents(IPowerEventsCallback *callback) override;
   // we don't require UPower because everything except the battery level works fine without it
-  static bool HasLogind();  
+  static bool HasLogind();
 private:
-  DBusConnection *m_connection;
+  CDBusConnection m_connection;
   bool m_canPowerdown;
   bool m_canSuspend;
   bool m_canHibernate;
@@ -57,5 +55,3 @@ private:
   static bool LogindSetPowerState(const char *state);
   static bool LogindCheckCapability(const char *capability);
 };
-
-#endif

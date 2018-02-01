@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -38,10 +38,10 @@ class CGUIDialogYesNo :
       public CGUIDialogBoxBase
 {
 public:
-  CGUIDialogYesNo(int overrideId = -1);
-  virtual ~CGUIDialogYesNo(void);
-  virtual bool OnMessage(CGUIMessage& message);
-  virtual bool OnBack(int actionID);
+  explicit CGUIDialogYesNo(int overrideId = -1);
+  ~CGUIDialogYesNo(void) override;
+  bool OnMessage(CGUIMessage& message) override;
+  bool OnBack(int actionID) override;
 
   enum TimeOut
   {
@@ -100,6 +100,17 @@ public:
    */
   static bool ShowAndGetInput(CVariant heading, CVariant text, bool &bCanceled, CVariant noLabel, CVariant yesLabel, unsigned int autoCloseTime);
 
+  /*! \brief Show a yes-no dialog with 3rd custom button, then wait for user to dismiss it.
+  \param heading Localized label id or string for the heading of the dialog
+  \param text Localized label id or string for the dialog message
+  \param noLabel Localized label id or string for the no button
+  \param yesLabel Localized label id or string for the yes button
+  \param customLabel Localized label id or string for the custom button
+  \param autoCloseTime Time in ms before the dialog becomes automatically closed
+  \return -1 for cancelled, 0 for No, 1 for Yes and 2 for custom button
+  */
+  static int ShowAndGetInput(CVariant heading, CVariant text, CVariant noLabel, CVariant yesLabel, CVariant customLabel, unsigned int autoCloseTime);
+
   /*!
     \brief Open a Yes/No dialog and wait for input
 
@@ -112,8 +123,9 @@ public:
   int ShowAndGetInput(const KODI::MESSAGING::HELPERS::DialogYesNoMessage& options);
 
 protected:
-  virtual void OnInitWindow();
-  virtual int GetDefaultLabelID(int controlId) const;
+  void OnInitWindow() override;
+  int GetDefaultLabelID(int controlId) const override;
 
   bool m_bCanceled;
+  bool m_bCustom;
 };

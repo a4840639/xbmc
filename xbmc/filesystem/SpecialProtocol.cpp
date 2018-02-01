@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
  */
 
 #include "SpecialProtocol.h"
+#include "ServiceBroker.h"
 #include "URL.h"
 #include "Util.h"
 #include "guilib/GraphicContext.h"
@@ -33,8 +34,6 @@
 #include <dirent.h>
 #include "utils/StringUtils.h"
 #endif
-
-std::map<std::string, std::string> CSpecialProtocol::m_pathMap;
 
 void CSpecialProtocol::SetProfilePath(const std::string &dir)
 {
@@ -52,6 +51,16 @@ void CSpecialProtocol::SetXBMCBinPath(const std::string &dir)
   SetPath("xbmcbin", dir);
 }
 
+void CSpecialProtocol::SetXBMCBinAddonPath(const std::string &dir)
+{
+  SetPath("xbmcbinaddons", dir);
+}
+
+void CSpecialProtocol::SetXBMCAltBinAddonPath(const std::string &dir)
+{
+  SetPath("xbmcaltbinaddons", dir);
+}
+
 void CSpecialProtocol::SetXBMCFrameworksPath(const std::string &dir)
 {
   SetPath("frameworks", dir);
@@ -65,6 +74,11 @@ void CSpecialProtocol::SetHomePath(const std::string &dir)
 void CSpecialProtocol::SetUserHomePath(const std::string &dir)
 {
   SetPath("userhome", dir);
+}
+
+void CSpecialProtocol::SetEnvHomePath(const std::string &dir)
+{
+  SetPath("envhome", dir);
 }
 
 void CSpecialProtocol::SetMasterProfilePath(const std::string &dir)
@@ -134,7 +148,7 @@ std::string CSpecialProtocol::TranslatePath(const CURL &url)
     RootDir = FullFileName;
 
   if (RootDir == "subtitles")
-    translatedPath = URIUtils::AddFileToFolder(CSettings::GetInstance().GetString(CSettings::SETTING_SUBTITLES_CUSTOMPATH), FileName);
+    translatedPath = URIUtils::AddFileToFolder(CServiceBroker::GetSettings().GetString(CSettings::SETTING_SUBTITLES_CUSTOMPATH), FileName);
   else if (RootDir == "userdata")
     translatedPath = URIUtils::AddFileToFolder(CProfilesManager::GetInstance().GetUserDataFolder(), FileName);
   else if (RootDir == "database")
@@ -142,9 +156,9 @@ std::string CSpecialProtocol::TranslatePath(const CURL &url)
   else if (RootDir == "thumbnails")
     translatedPath = URIUtils::AddFileToFolder(CProfilesManager::GetInstance().GetThumbnailsFolder(), FileName);
   else if (RootDir == "recordings" || RootDir == "cdrips")
-    translatedPath = URIUtils::AddFileToFolder(CSettings::GetInstance().GetString(CSettings::SETTING_AUDIOCDS_RECORDINGPATH), FileName);
+    translatedPath = URIUtils::AddFileToFolder(CServiceBroker::GetSettings().GetString(CSettings::SETTING_AUDIOCDS_RECORDINGPATH), FileName);
   else if (RootDir == "screenshots")
-    translatedPath = URIUtils::AddFileToFolder(CSettings::GetInstance().GetString(CSettings::SETTING_DEBUG_SCREENSHOTPATH), FileName);
+    translatedPath = URIUtils::AddFileToFolder(CServiceBroker::GetSettings().GetString(CSettings::SETTING_DEBUG_SCREENSHOTPATH), FileName);
   else if (RootDir == "musicplaylists")
     translatedPath = URIUtils::AddFileToFolder(CUtil::MusicPlaylistsLocation(), FileName);
   else if (RootDir == "videoplaylists")
@@ -155,7 +169,10 @@ std::string CSpecialProtocol::TranslatePath(const CURL &url)
   // from here on, we have our "real" special paths
   else if (RootDir == "xbmc" ||
            RootDir == "xbmcbin" ||
+           RootDir == "xbmcbinaddons" ||
+           RootDir == "xbmcaltbinaddons" ||
            RootDir == "home" ||
+           RootDir == "envhome" ||
            RootDir == "userhome" ||
            RootDir == "temp" ||
            RootDir == "profile" ||
@@ -248,7 +265,11 @@ void CSpecialProtocol::LogPaths()
 {
   CLog::Log(LOGNOTICE, "special://xbmc/ is mapped to: %s", GetPath("xbmc").c_str());
   CLog::Log(LOGNOTICE, "special://xbmcbin/ is mapped to: %s", GetPath("xbmcbin").c_str());
+  CLog::Log(LOGNOTICE, "special://xbmcbinaddons/ is mapped to: %s", GetPath("xbmcbinaddons").c_str());
   CLog::Log(LOGNOTICE, "special://masterprofile/ is mapped to: %s", GetPath("masterprofile").c_str());
+#if defined(TARGET_POSIX)
+  CLog::Log(LOGNOTICE, "special://envhome/ is mapped to: %s", GetPath("envhome").c_str());
+#endif
   CLog::Log(LOGNOTICE, "special://home/ is mapped to: %s", GetPath("home").c_str());
   CLog::Log(LOGNOTICE, "special://temp/ is mapped to: %s", GetPath("temp").c_str());
   CLog::Log(LOGNOTICE, "special://logpath/ is mapped to: %s", GetPath("logpath").c_str());

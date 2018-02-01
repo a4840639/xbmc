@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,13 +28,13 @@ class CDVDOverlayCodecTX3G : public CDVDOverlayCodec
 {
 public:
   CDVDOverlayCodecTX3G();
-  virtual ~CDVDOverlayCodecTX3G();
-  virtual bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options);
-  virtual void Dispose();
-  virtual int Decode(DemuxPacket *pPacket);
-  virtual void Reset();
-  virtual void Flush();
-  virtual CDVDOverlay* GetOverlay();
+  ~CDVDOverlayCodecTX3G() override;
+  bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options) override;
+  void Dispose() override;
+  int Decode(DemuxPacket *pPacket) override;
+  void Reset() override;
+  void Flush() override;
+  CDVDOverlay* GetOverlay() override;
 
 private:
   CDVDOverlayText* m_pOverlay;

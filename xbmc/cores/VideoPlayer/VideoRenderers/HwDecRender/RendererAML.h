@@ -20,41 +20,49 @@
 
 #pragma once
 
-#include "system.h"
+#include "cores/VideoPlayer/VideoRenderers/BaseRenderer.h"
 
-#if defined(HAS_LIBAMCODEC)
-
-#include "cores/VideoPlayer/VideoRenderers/LinuxRendererGLES.h"
-
-class CRendererAML : public CLinuxRendererGLES
+class CRendererAML : public CBaseRenderer
 {
 public:
   CRendererAML();
   virtual ~CRendererAML();
-  
-  virtual bool RenderCapture(CRenderCapture* capture);
-  virtual void AddVideoPictureHW(DVDVideoPicture &picture, int index);
-  virtual void ReleaseBuffer(int idx);
+
+  // Registration
+  static CBaseRenderer* Create(CVideoBuffer *buffer);
+  static bool Register();
+
+  virtual bool RenderCapture(CRenderCapture* capture) override;
+  virtual void AddVideoPicture(const VideoPicture &picture, int index, double currentClock) override;
+  virtual void ReleaseBuffer(int idx) override;
+  virtual bool Configure(const VideoPicture &picture, float fps, unsigned int orientation) override;
+  virtual bool IsConfigured() override { return m_bConfigured; };
+  virtual bool ConfigChanged(const VideoPicture &picture) { return false; };
+  virtual CRenderInfo GetRenderInfo() override;
+  virtual void UnInit() override {};
+  virtual void Update() override {};
+  virtual void RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha) override;
+  virtual bool SupportsMultiPassRendering()override { return false; };
 
   // Player functions
-  virtual bool IsGuiLayer();
+  virtual bool IsGuiLayer() override { return false; };
 
   // Feature support
-  virtual bool Supports(EINTERLACEMETHOD method);
-  virtual bool Supports(EDEINTERLACEMODE mode);
-  virtual bool Supports(ESCALINGMETHOD method);
-  virtual bool Supports(ERENDERFEATURE feature);
+  virtual bool Supports(ESCALINGMETHOD method) override { return false; };
+  virtual bool Supports(ERENDERFEATURE feature) override;
 
+private:
+  void Reset();
 
-  virtual EINTERLACEMETHOD AutoInterlaceMethod();
+  static const int m_numRenderBuffers = 4;
 
-protected:
+  struct BUFFER
+  {
+    BUFFER() : videoBuffer(nullptr) {};
+    CVideoBuffer *videoBuffer;
+    int duration;
+  } m_buffers[m_numRenderBuffers];
 
-  // hooks for hw dec renderer
-  virtual bool LoadShadersHook();
-  virtual bool RenderHook(int index);  
-  virtual int  GetImageHook(YV12Image *image, int source = AUTOSOURCE, bool readonly = false);
-  virtual bool RenderUpdateVideoHook(bool clear, DWORD flags = 0, DWORD alpha = 255);
+  int m_prevVPts;
+  bool m_bConfigured;
 };
-
-#endif

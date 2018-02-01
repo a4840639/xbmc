@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #include "DVDSubtitleStream.h"
 #include "DVDSubtitleLineCollection.h"
 
+#include <memory>
 #include <string>
 #include <stdio.h>
 
@@ -32,7 +33,7 @@ class CDVDStreamInfo;
 class CDVDSubtitleParser
 {
 public:
-  virtual ~CDVDSubtitleParser() {}
+  virtual ~CDVDSubtitleParser() = default;
   virtual bool Open(CDVDStreamInfo &hints) = 0;
   virtual void Dispose() = 0;
   virtual void Reset() = 0;
@@ -43,41 +44,37 @@ class CDVDSubtitleParserCollection
   : public CDVDSubtitleParser
 {
 public:
-  CDVDSubtitleParserCollection(const std::string& strFile) : m_filename(strFile) {}
-  virtual ~CDVDSubtitleParserCollection() { }
-  virtual CDVDOverlay* Parse(double iPts)
+  explicit CDVDSubtitleParserCollection(const std::string& strFile) : m_filename(strFile) {}
+  ~CDVDSubtitleParserCollection() override = default;
+  CDVDOverlay* Parse(double iPts) override
   {
     CDVDOverlay* o = m_collection.Get(iPts);
     if(o == NULL)
       return o;
     return o->Clone();
   }
-  virtual void         Reset()            { m_collection.Reset(); }
-  virtual void         Dispose()          { m_collection.Clear(); }
+  void Reset() override { m_collection.Reset(); }
+  void Dispose() override { m_collection.Clear(); }
 
 protected:
   CDVDSubtitleLineCollection m_collection;
-  std::string                m_filename;
+  std::string m_filename;
 };
 
 class CDVDSubtitleParserText
      : public CDVDSubtitleParserCollection
 {
 public:
-  CDVDSubtitleParserText(CDVDSubtitleStream* stream, const std::string& filename)
+  CDVDSubtitleParserText(std::unique_ptr<CDVDSubtitleStream> && stream, const std::string& filename)
     : CDVDSubtitleParserCollection(filename)
+		, m_pStream(std::move(stream)) 
   {
-    m_pStream  = stream;
   }
 
-  virtual ~CDVDSubtitleParserText()
-  {
-    if(m_pStream)
-      delete m_pStream;
-  }
+  ~CDVDSubtitleParserText() override = default;
 
 protected:
-
+  using CDVDSubtitleParserCollection::Open;
   bool Open()
   {
     if(m_pStream)
@@ -86,10 +83,10 @@ protected:
         return true;
     }
     else
-      m_pStream = new CDVDSubtitleStream();
+      m_pStream.reset(new CDVDSubtitleStream());
 
     return m_pStream->Open(m_filename);
   }
 
-  CDVDSubtitleStream* m_pStream;
+  std::unique_ptr<CDVDSubtitleStream> m_pStream;
 };

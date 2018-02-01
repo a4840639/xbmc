@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -83,7 +83,7 @@ JSONRPC_STATUS CPlaylistOperations::GetItems(const std::string &method, ITranspo
       break;
 
     case PLAYLIST_PICTURE:
-      slideshow = (CGUIWindowSlideShow*)g_windowManager.GetWindow(WINDOW_SLIDESHOW);
+      slideshow = g_windowManager.GetWindow<CGUIWindowSlideShow>(WINDOW_SLIDESHOW);
       if (slideshow)
         slideshow->GetSlideShowContents(list);
       break;
@@ -115,7 +115,7 @@ JSONRPC_STATUS CPlaylistOperations::Add(const std::string &method, ITransportLay
   CGUIWindowSlideShow *slideshow = NULL;
   if (playlist == PLAYLIST_PICTURE)
   {
-    slideshow = (CGUIWindowSlideShow*)g_windowManager.GetWindow(WINDOW_SLIDESHOW);
+    slideshow = g_windowManager.GetWindow<CGUIWindowSlideShow>(WINDOW_SLIDESHOW);
     if (slideshow == NULL)
       return FailedToExecute;
   }
@@ -180,7 +180,7 @@ JSONRPC_STATUS CPlaylistOperations::Remove(const std::string &method, ITransport
     return FailedToExecute;
   
   int position = (int)parameterObject["position"].asInteger();
-  if (g_playlistPlayer.GetCurrentPlaylist() == playlist && g_playlistPlayer.GetCurrentSong() == position)
+  if (CServiceBroker::GetPlaylistPlayer().GetCurrentPlaylist() == playlist && CServiceBroker::GetPlaylistPlayer().GetCurrentSong() == position)
     return InvalidParams;
 
   CApplicationMessenger::GetInstance().SendMsg(TMSG_PLAYLISTPLAYER_REMOVE, playlist, position);
@@ -201,7 +201,7 @@ JSONRPC_STATUS CPlaylistOperations::Clear(const std::string &method, ITransportL
       break;
 
     case PLAYLIST_PICTURE:
-      slideshow = (CGUIWindowSlideShow*)g_windowManager.GetWindow(WINDOW_SLIDESHOW);
+      slideshow = g_windowManager.GetWindow<CGUIWindowSlideShow>(WINDOW_SLIDESHOW);
       if (!slideshow)
         return FailedToExecute;
       CApplicationMessenger::GetInstance().SendMsg(TMSG_GUI_ACTION, WINDOW_SLIDESHOW, -1, static_cast<void*>(new CAction(ACTION_STOP)));
@@ -279,7 +279,7 @@ JSONRPC_STATUS CPlaylistOperations::GetPropertyValue(int playlist, const std::st
         break;
 
       case PLAYLIST_PICTURE:
-        slideshow = (CGUIWindowSlideShow*)g_windowManager.GetWindow(WINDOW_SLIDESHOW);
+        slideshow = g_windowManager.GetWindow<CGUIWindowSlideShow>(WINDOW_SLIDESHOW);
         if (slideshow)
           result = slideshow->NumSlides();
         else

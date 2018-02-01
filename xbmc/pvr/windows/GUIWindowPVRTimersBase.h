@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,9 +19,9 @@
  *
  */
 
-#include "GUIWindowPVRBase.h"
-
 #include <memory>
+
+#include "pvr/windows/GUIWindowPVRBase.h"
 
 class CFileItem;
 typedef std::shared_ptr<CFileItem> CFileItemPtr;
@@ -32,28 +32,15 @@ namespace PVR
   {
   public:
     CGUIWindowPVRTimersBase(bool bRadio, int id, const std::string &xmlFile);
-    virtual ~CGUIWindowPVRTimersBase(void) {};
+    ~CGUIWindowPVRTimersBase(void) override;
 
-    bool OnMessage(CGUIMessage& message);
-    bool OnAction(const CAction &action);
-    void GetContextButtons(int itemNumber, CContextButtons &buttons);
-    bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
-    bool Update(const std::string &strDirectory, bool updateFilterPath = true);
-    void UpdateButtons(void);
-    void UnregisterObservers(void);
-    void ResetObservers(void);
+    bool OnMessage(CGUIMessage& message) override;
+    bool OnAction(const CAction &action) override;
+    bool Update(const std::string &strDirectory, bool updateFilterPath = true) override;
+    void UpdateButtons(void) override;
 
   private:
-    bool ActionDeleteTimer(CFileItem *item);
-    bool ActionShowTimer(CFileItem *item);
-    bool ShowNewTimerDialog(void);
-
-    bool OnContextButtonActivate(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonAdd(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonDelete(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonStopRecord(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonRename(CFileItem *item, CONTEXT_BUTTON button);
-    bool OnContextButtonInfo(CFileItem *item, CONTEXT_BUTTON button);
+    bool ActionShowTimer(const CFileItemPtr &item);
 
     CFileItemPtr m_currentFileItem;
   };

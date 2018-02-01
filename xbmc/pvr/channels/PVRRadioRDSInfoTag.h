@@ -19,15 +19,14 @@
  *
  */
 
-#include "FileItem.h"
-#include "utils/IArchivable.h"
-#include "utils/ISerializable.h"
-#include "XBDateTime.h"
-
-#include <vector>
 #include <deque>
 #include <string>
-#include <stdint.h>
+
+#include "XBDateTime.h"
+#include "utils/IArchivable.h"
+#include "utils/ISerializable.h"
+
+#include "pvr/PVRTypes.h"
 
 namespace PVR
 {
@@ -46,37 +45,23 @@ private:
    */
   CPVRRadioRDSInfoTag(void);
 
-  /*!
-   * @brief Prevent copy construction, even for CEpgInfoTag instances and friends.
-   * Note: Only declared, but intentionally not implemented
-   *       to prevent compiler generated copy ctor and to force.
-   *       a linker error in case somebody tries to call it.
-   */
-  CPVRRadioRDSInfoTag(const CPVRRadioRDSInfoTag& tag);
-
-  /*!
-   * @brief Prevent copy construction, even for CEpgInfoTag instances and friends.
-   * Note: Only declared, but intentionally not implemented
-   *       to prevent compiler generated copy ctor and to force.
-   *       a linker error in case somebody tries to call it.
-   */
-  const CPVRRadioRDSInfoTag& operator =(const CPVRRadioRDSInfoTag& tag);
+  CPVRRadioRDSInfoTag(const CPVRRadioRDSInfoTag& tag) = delete;
+  const CPVRRadioRDSInfoTag& operator =(const CPVRRadioRDSInfoTag& tag) = delete;
   
 public:
-  virtual ~CPVRRadioRDSInfoTag();
+  ~CPVRRadioRDSInfoTag() override;
 
   bool operator ==(const CPVRRadioRDSInfoTag& tag) const;
   bool operator !=(const CPVRRadioRDSInfoTag& tag) const;
 
-  virtual void Archive(CArchive& ar);
-  virtual void Serialize(CVariant& value) const;
+  void Archive(CArchive& ar) override;
+  void Serialize(CVariant& value) const override;
 
   void Clear();
   void ResetSongInformation();
 
   /**! Basic RDS related information */
   void SetSpeechActive(bool active);
-  bool IsSpeechActive();
   void SetLanguage(const std::string& strLanguage);
   const std::string& GetLanguage() const;
   void SetCountry(const std::string& strCountry);
@@ -126,54 +111,34 @@ public:
   const std::string& GetSMSStudio() const;
 
   void SetInfoNews(const std::string& strNews);
-  void ClearInfoNews();
   const std::string GetInfoNews() const;
-  const std::deque<std::string>& GetInfoNewsDeque() const;
 
   void SetInfoNewsLocal(const std::string& strNews);
-  void ClearInfoNewsLocal();
   const std::string GetInfoNewsLocal() const;
-  const std::deque<std::string>& GetInfoNewsLocalDeque() const;
 
   void SetInfoSport(const std::string& strSport);
-  void ClearInfoSport();
   const std::string GetInfoSport() const;
-  const std::deque<std::string>& GetInfoSportDeque() const;
 
   void SetInfoStock(const std::string& strSport);
-  void ClearInfoStock();
   const std::string GetInfoStock() const;
-  const std::deque<std::string>& GetInfoStockDeque() const;
 
   void SetInfoWeather(const std::string& strWeather);
-  void ClearInfoWeather();
   const std::string GetInfoWeather() const;
-  const std::deque<std::string>& GetInfoWeatherDeque() const;
 
   void SetInfoHoroscope(const std::string& strHoroscope);
-  void ClearInfoHoroscope();
   const std::string GetInfoHoroscope() const;
-  const std::deque<std::string>& GetInfoHoroscopeDeque() const;
 
   void SetInfoCinema(const std::string& strCinema);
-  void ClearInfoCinema();
   const std::string GetInfoCinema() const;
-  const std::deque<std::string>& GetInfoCinemaDeque() const;
 
   void SetInfoLottery(const std::string& strLottery);
-  void ClearInfoLottery();
   const std::string GetInfoLottery() const;
-  const std::deque<std::string>& GetInfoLotteryDeque() const;
 
   void SetInfoOther(const std::string& strOther);
-  void ClearInfoOther();
   const std::string GetInfoOther() const;
-  const std::deque<std::string>& GetInfoOtherDeque() const;
 
   void SetEditorialStaff(const std::string& strEditorialStaff);
-  void ClearEditorialStaff();
   const std::string GetEditorialStaff() const;
-  const std::deque<std::string>& GetEditorialStaffDeque() const;
 
   void SetRadioStyle(const std::string& style) { m_strRadioStyle = style; }
   const std::string GetRadioStyle() const { return m_strRadioStyle; }

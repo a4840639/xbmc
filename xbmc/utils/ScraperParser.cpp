@@ -21,6 +21,7 @@
 #include "ScraperParser.h"
 
 #include "addons/AddonManager.h"
+#include "guilib/LocalizeStrings.h"
 #include "RegExp.h"
 #include "HTMLUtil.h"
 #include "addons/Scraper.h"
@@ -28,7 +29,9 @@
 #include "utils/StringUtils.h"
 #include "log.h"
 #include "CharsetConverter.h"
+#ifdef HAVE_LIBXSLT
 #include "utils/XSLTUtils.h"
+#endif
 #include "utils/XMLUtils.h"
 #include <sstream>
 #include <cstring>
@@ -338,6 +341,7 @@ void CScraperParser::ParseExpression(const std::string& input, std::string& dest
 
 void CScraperParser::ParseXSLT(const std::string& input, std::string& dest, TiXmlElement* element, bool bAppend)
 {
+#ifdef HAVE_LIBXSLT
   TiXmlElement* pSheet = element->FirstChildElement();
   if (pSheet)
   {
@@ -354,13 +358,18 @@ void CScraperParser::ParseXSLT(const std::string& input, std::string& dest, TiXm
 
     xsltUtils.XSLTTransform(dest);
   }
+#endif
 }
 
 TiXmlElement *FirstChildScraperElement(TiXmlElement *element)
 {
   for (TiXmlElement *child = element->FirstChildElement(); child; child = child->NextSiblingElement())
   {
-    if (child->ValueStr() == "RegExp" || child->ValueStr() == "XSLT")
+#ifdef HAVE_LIBXSLT
+    if (child->ValueStr() == "XSLT")
+      return child;
+#endif
+    if (child->ValueStr() == "RegExp")
       return child;
   }
   return NULL;
@@ -370,7 +379,11 @@ TiXmlElement *NextSiblingScraperElement(TiXmlElement *element)
 {
   for (TiXmlElement *next = element->NextSiblingElement(); next; next = next->NextSiblingElement())
   {
-    if (next->ValueStr() == "RegExp" || next->ValueStr() == "XSLT")
+#ifdef HAVE_LIBXSLT
+    if (next->ValueStr() == "XSLT")
+      return next;
+#endif
+    if (next->ValueStr() == "RegExp")
       return next;
   }
   return NULL;
@@ -432,9 +445,11 @@ void CScraperParser::ParseNext(TiXmlElement* element)
     {
       if (iDest-1 < MAX_SCRAPER_BUFFERS && iDest-1 > -1)
       {
+#ifdef HAVE_LIBXSLT
         if (pReg->ValueStr() == "XSLT")
           ParseXSLT(strInput, m_param[iDest - 1], pReg, bAppend);
         else
+#endif
           ParseExpression(strInput, m_param[iDest - 1],pReg,bAppend);
       }
       else

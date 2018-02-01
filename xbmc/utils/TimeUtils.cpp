@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,10 +22,6 @@
 #include "XBDateTime.h"
 #include "threads/SystemClock.h"
 #include "guilib/GraphicContext.h"
-
-#if (defined HAVE_CONFIG_H) && (!defined TARGET_WINDOWS)
-  #include "config.h"
-#endif
 
 #if   defined(TARGET_DARWIN)
 #include <mach/mach_time.h>

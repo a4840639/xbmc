@@ -5,7 +5,7 @@
  * - avifile includes this file from C++ code
  * and initializes it at the start of player!
  * it might sound like a hack and it really is - but
- * as aviplay is deconding video with more than just one
+ * as aviplay is decoding video with more than just one
  * thread currently it's necessary to do it this way
  * this might change in the future
  */
@@ -19,11 +19,20 @@
  */
 
 //#ifndef __powerpc__
-#if !defined(__powerpc__) && !defined(__ppc__) && !defined(__arm__) && !defined(__aarch64__) && !defined(__mips__)
+#if !defined(__powerpc__) && \
+    !defined(__ppc__) && \
+    !defined(__arm__) && \
+    !defined(__aarch64__) && \
+    !defined(__mips__) && \
+    !defined(__SH4__) && \
+    !defined(__sparc__) && \
+    !defined(__arc__) && \
+    !defined(__xtensa__)
 
 #include "ldt_keeper.h"
 
 #include <string.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -255,7 +264,7 @@ ldt_fs_t* Setup_LDT_Keeper(void)
   Setup_FS_Segment();
 
   ldt_fs->prev_struct = malloc(8);
-  *(void**)array.base_addr = ldt_fs->prev_struct;
+  array.base_addr = (uintptr_t)(ldt_fs->prev_struct);
 
   return ldt_fs;
 }

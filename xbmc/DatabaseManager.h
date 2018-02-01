@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <map>
 #include <string>
 #include "threads/CriticalSection.h"
@@ -44,7 +45,7 @@ public:
    */
   static CDatabaseManager &GetInstance();
 
-  /*! \brief Initalize the database manager
+  /*! \brief Initialize the database manager
    Checks that all databases are up to date, otherwise updates them.
    */
   void Initialize(bool addonsOnly = false);
@@ -63,17 +64,20 @@ public:
    \return true if the database can be opened, false otherwise.
    */ 
   bool CanOpen(const std::string &name);
+  std::atomic<bool> m_bIsUpgrading;
 
 private:
-  // private construction, and no assignements; use the provided singleton methods
+  // private construction, and no assignments; use the provided singleton methods
   CDatabaseManager();
-  CDatabaseManager(const CDatabaseManager&);
-  CDatabaseManager const& operator=(CDatabaseManager const&);
+  CDatabaseManager(const CDatabaseManager&) = delete;
+  CDatabaseManager const& operator=(CDatabaseManager const&) = delete;
   virtual ~CDatabaseManager();
 
   enum DB_STATUS { DB_CLOSED, DB_UPDATING, DB_READY, DB_FAILED };
   void UpdateStatus(const std::string &name, DB_STATUS status);
   void UpdateDatabase(CDatabase &db, DatabaseSettings *settings = NULL);
+  bool Update(CDatabase &db, const DatabaseSettings &settings);
+  bool UpdateVersion(CDatabase &db, const std::string &dbName);
 
   CCriticalSection            m_section;     ///< Critical section protecting m_dbStatus.
   std::map<std::string, DB_STATUS> m_dbStatus;    ///< Our database status map.

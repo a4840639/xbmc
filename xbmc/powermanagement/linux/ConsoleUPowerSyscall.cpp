@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,8 +22,6 @@
 #include "ConsoleUPowerSyscall.h"
 #include "utils/log.h"
 
-#ifdef HAS_DBUS
-
 CConsoleUPowerSyscall::CConsoleUPowerSyscall()
 {
   m_CanPowerdown = ConsoleKitMethodCall("CanStop");
@@ -44,30 +42,8 @@ bool CConsoleUPowerSyscall::Reboot()
 
 bool CConsoleUPowerSyscall::HasConsoleKitAndUPower()
 {
-  bool hasConsoleKitManager = false;
-  CDBusMessage consoleKitMessage("org.freedesktop.ConsoleKit", "/org/freedesktop/ConsoleKit/Manager", "org.freedesktop.ConsoleKit.Manager", "CanStop");
-
-  DBusError error;
-  dbus_error_init (&error);
-  DBusConnection *con = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
-
-  if (dbus_error_is_set(&error))
-  {
-    CLog::Log(LOGDEBUG, "ConsoleUPowerSyscall: %s - %s", error.name, error.message);
-    dbus_error_free(&error);
-    return false;
-  }
-
-  consoleKitMessage.Send(con, &error);
-
-  if (!dbus_error_is_set(&error))
-    hasConsoleKitManager = true;
-  else
-    CLog::Log(LOGDEBUG, "ConsoleKit.Manager: %s - %s", error.name, error.message);
-
-  dbus_error_free (&error);
-
-  return HasUPower() && hasConsoleKitManager;
+  return CDBusUtil::TryMethodCall(DBUS_BUS_SYSTEM, "org.freedesktop.ConsoleKit", "/org/freedesktop/ConsoleKit/Manager", "org.freedesktop.ConsoleKit.Manager", "CanStop")
+    && HasUPower();
 }
 
 bool CConsoleUPowerSyscall::ConsoleKitMethodCall(const char *method)
@@ -84,4 +60,3 @@ bool CConsoleUPowerSyscall::ConsoleKitMethodCall(const char *method)
 
   return false;
 }
-#endif

@@ -27,6 +27,8 @@
 #include <taglib/apetag.h>
 #include <taglib/xiphcomment.h>
 #include <taglib/id3v1genres.h>
+#include <taglib/asftag.h>
+#include <taglib/mp4tag.h>
 
 using namespace TagLib;
 using namespace MUSIC_INFO;
@@ -147,8 +149,8 @@ TYPED_TEST(TestTagParser, FooProperties) {
   EXPECT_EQ("foo", tag.GetTitle());
 }
 
-class TestCTagLoaderTagLib : public ::testing::Test, public CTagLoaderTagLib {};
-TEST_F(TestCTagLoaderTagLib, SetGenre)
+class TestTagLoaderTagLib : public ::testing::Test, public CTagLoaderTagLib {};
+TEST_F(TestTagLoaderTagLib, SetGenre)
 {
   CMusicInfoTag tag, tag2;
   const char *genre_nr[] = {"0", "2", "4"};
@@ -169,7 +171,7 @@ TEST_F(TestCTagLoaderTagLib, SetGenre)
 
 }
 
-TEST(TestTagLoaderTagLib, SplitMBID)
+TEST_F(TestTagLoaderTagLib, SplitMBID)
 {
   CTagLoaderTagLib lib;
 

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,10 +27,10 @@ namespace XbmcThreads
    */
   class NonCopyable
   {
-    inline NonCopyable(const NonCopyable& ) {}
-    inline NonCopyable& operator=(const NonCopyable& ) { return *this; }
+    inline NonCopyable(const NonCopyable&) = default;
+    inline NonCopyable& operator=(const NonCopyable&) { return *this; }
   public:
-    inline NonCopyable() {}
+    inline NonCopyable() = default;
   };
 
   /**
@@ -43,7 +43,7 @@ namespace XbmcThreads
     P predicate;
 
   public:
-    inline InversePredicate(P predicate_) : predicate(predicate_) {}
+    inline explicit InversePredicate(P predicate_) : predicate(predicate_) {}
     inline InversePredicate(const InversePredicate<P>& other) : predicate(other.predicate) {}
     inline InversePredicate<P>& operator=(InversePredicate<P>& other) { predicate = other.predicate; }
 

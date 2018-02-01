@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,12 +18,9 @@
  *
  */
 
-#include "system.h"
-
-#ifdef HAS_CDDA_RIPPER
-
 #include "CDDARipper.h"
 #include "CDDARipJob.h"
+#include "ServiceBroker.h"
 #include "utils/StringUtils.h"
 #include "Util.h"
 #include "filesystem/CDDADirectory.h"
@@ -31,7 +28,7 @@
 #include "utils/LabelFormatter.h"
 #include "music/tags/MusicInfoTag.h"
 #include "guilib/GUIWindowManager.h"
-#include "dialogs/GUIDialogOK.h"
+#include "guilib/LocalizeStrings.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/SettingPath.h"
 #include "settings/Settings.h"
@@ -44,12 +41,14 @@
 #include "settings/MediaSourceSettings.h"
 #include "Application.h"
 #include "music/MusicDatabase.h"
-#include "addons/AddonManager.h"
 #include "addons/AudioEncoder.h"
+#include "addons/binary-addons/BinaryAddonBase.h"
+#include "messaging/helpers/DialogOKHelper.h"
 
 using namespace ADDON;
 using namespace XFILE;
 using namespace MUSIC_INFO;
+using namespace KODI::MESSAGING;
 
 CCDDARipper& CCDDARipper::GetInstance()
 {
@@ -62,9 +61,7 @@ CCDDARipper::CCDDARipper()
 {
 }
 
-CCDDARipper::~CCDDARipper()
-{
-}
+CCDDARipper::~CCDDARipper() = default;
 
 // rip a single track from cd
 bool CCDDARipper::RipTrack(CFileItem* pItem)
@@ -87,7 +84,7 @@ bool CCDDARipper::RipTrack(CFileItem* pItem)
 
   AddJob(new CCDDARipJob(pItem->GetPath(),strFile,
                          *pItem->GetMusicInfoTag(),
-                         CSettings::GetInstance().GetInt(CSettings::SETTING_AUDIOCDS_ENCODER)));
+                         CServiceBroker::GetSettings().GetInt(CSettings::SETTING_AUDIOCDS_ENCODER)));
 
   return true;
 }
@@ -139,11 +136,11 @@ bool CCDDARipper::RipCD()
     if (item->GetPath().find(".cdda") == std::string::npos)
       continue;
 
-    bool eject = CSettings::GetInstance().GetBool(CSettings::SETTING_AUDIOCDS_EJECTONRIP) && 
+    bool eject = CServiceBroker::GetSettings().GetBool(CSettings::SETTING_AUDIOCDS_EJECTONRIP) && 
                  i == vecItems.Size()-1;
     AddJob(new CCDDARipJob(item->GetPath(),strFile,
                            *item->GetMusicInfoTag(),
-                           CSettings::GetInstance().GetInt(CSettings::SETTING_AUDIOCDS_ENCODER), eject));
+                           CServiceBroker::GetSettings().GetInt(CSettings::SETTING_AUDIOCDS_ENCODER), eject));
   }
 
   return true;
@@ -151,13 +148,13 @@ bool CCDDARipper::RipCD()
 
 bool CCDDARipper::CreateAlbumDir(const MUSIC_INFO::CMusicInfoTag& infoTag, std::string& strDirectory, int& legalType)
 {
-  CSettingPath *recordingpathSetting = (CSettingPath*)CSettings::GetInstance().GetSetting(CSettings::SETTING_AUDIOCDS_RECORDINGPATH);
+  std::shared_ptr<CSettingPath> recordingpathSetting = std::static_pointer_cast<CSettingPath>(CServiceBroker::GetSettings().GetSetting(CSettings::SETTING_AUDIOCDS_RECORDINGPATH));
   if (recordingpathSetting != NULL)
   {
     strDirectory = recordingpathSetting->GetValue();
     if (strDirectory.empty())
     {
-      if (CGUIControlButtonSetting::GetPath(recordingpathSetting))
+      if (CGUIControlButtonSetting::GetPath(recordingpathSetting, &g_localizeStrings))
         strDirectory = recordingpathSetting->GetValue();
     }
   }
@@ -167,9 +164,7 @@ bool CCDDARipper::CreateAlbumDir(const MUSIC_INFO::CMusicInfoTag& infoTag, std::
   {
     // no rip path has been set, show error
     CLog::Log(LOGERROR, "Error: CDDARipPath has not been set");
-    g_graphicsContext.Lock();
-    CGUIDialogOK::ShowAndGetInput(CVariant{257}, CVariant{608});
-    g_graphicsContext.Unlock();
+    HELPERS::ShowOKDialogText(CVariant{257}, CVariant{608});
     return false;
   }
 
@@ -209,7 +204,7 @@ std::string CCDDARipper::GetAlbumDirName(const MUSIC_INFO::CMusicInfoTag& infoTa
   // use audiocds.trackpathformat setting to format
   // directory name where CD tracks will be stored,
   // use only format part ending at the last '/'
-  strAlbumDir = CSettings::GetInstance().GetString(CSettings::SETTING_AUDIOCDS_TRACKPATHFORMAT);
+  strAlbumDir = CServiceBroker::GetSettings().GetString(CSettings::SETTING_AUDIOCDS_TRACKPATHFORMAT);
   size_t pos = strAlbumDir.find_last_of("/\\");
   if (pos == std::string::npos)
     return ""; // no directory
@@ -276,7 +271,7 @@ std::string CCDDARipper::GetTrackName(CFileItem *item)
 
   // get track file name format from audiocds.trackpathformat setting,
   // use only format part starting from the last '/'
-  std::string strFormat = CSettings::GetInstance().GetString(CSettings::SETTING_AUDIOCDS_TRACKPATHFORMAT);
+  std::string strFormat = CServiceBroker::GetSettings().GetString(CSettings::SETTING_AUDIOCDS_TRACKPATHFORMAT);
   size_t pos = strFormat.find_last_of("/\\");
   if (pos != std::string::npos)
     strFormat.erase(0, pos+1);
@@ -289,13 +284,9 @@ std::string CCDDARipper::GetTrackName(CFileItem *item)
   if (track.empty())
     track = StringUtils::Format("%s%02i", "Track-", trackNumber);
 
-  AddonPtr addon;
-  CAddonMgr::GetInstance().GetAddon(CSettings::GetInstance().GetString(CSettings::SETTING_AUDIOCDS_ENCODER), addon);
-  if (addon)
-  {
-    std::shared_ptr<CAudioEncoder> enc = std::static_pointer_cast<CAudioEncoder>(addon);
-    track += enc->extension;
-  }
+ const BinaryAddonBasePtr addonInfo = CServiceBroker::GetBinaryAddonManager().GetInstalledAddonInfo(CServiceBroker::GetSettings().GetString(CSettings::SETTING_AUDIOCDS_ENCODER), ADDON_AUDIOENCODER);
+  if (addonInfo)
+    track += addonInfo->Type(ADDON_AUDIOENCODER)->GetValue("@extension").asString();
 
   return track;
 }
@@ -306,7 +297,7 @@ void CCDDARipper::OnJobComplete(unsigned int jobID, bool success, CJob* job)
   {
     if(CJobQueue::QueueEmpty())
     {
-      std::string dir = URIUtils::GetDirectory(((CCDDARipJob*)job)->GetOutput());
+      std::string dir = URIUtils::GetDirectory(static_cast<CCDDARipJob*>(job)->GetOutput());
       bool unimportant;
       int source = CUtil::GetMatchingSource(dir, *CMediaSourceSettings::GetInstance().CMediaSourceSettings::GetSources("music"), unimportant);
 
@@ -321,5 +312,3 @@ void CCDDARipper::OnJobComplete(unsigned int jobID, bool success, CJob* job)
 
   CancelJobs();
 }
-
-#endif

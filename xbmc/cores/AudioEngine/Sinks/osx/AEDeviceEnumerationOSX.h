@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,10 @@
  *
  */
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "cores/AudioEngine/Utils/AEDeviceInfo.h"
 #include "cores/AudioEngine/Sinks/osx/CoreAudioDevice.h"
 
@@ -30,7 +34,7 @@ struct CADeviceInstance
 };
 typedef std::vector< std::pair<struct CADeviceInstance, CAEDeviceInfo> > CADeviceList;
 
-//Hirarchy:
+//Hierarchy:
 // Device
 //       - 1..n streams
 //            1..n formats
@@ -174,7 +178,7 @@ private:
   bool              hasDataType(const AEDataTypeList &list, CAEStreamInfo::DataType type) const;
 
   /*!
-  * @brief Converts a CA format description to a list of AEFormat desciptions (as one format can result
+  * @brief Converts a CA format description to a list of AEFormat descriptions (as one format can result
   *        in more then 1 AE format - e.x. AC3 ca format results in AC3 and DTS AE format
   *
   * @param formatDesc [in] - The CA format description to be converted
@@ -187,7 +191,7 @@ private:
 
 
   /*!
-  * @brief Convet a CA channel label to an AE channel.
+  * @brief Convert a CA channel label to an AE channel.
   * @param CAChannelLabel - the CA channel label to be converted
   * @return the corresponding AEChannel
   */

@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -27,11 +27,10 @@ namespace ADDON
 class CUISoundsResource : public CResource
 {
 public:
-  CUISoundsResource(AddonProps props) : CResource(std::move(props)) {};
-  virtual AddonPtr Clone() const;
-  virtual bool IsAllowed(const std::string &file) const;
-  virtual bool IsInUse() const;
-  virtual void OnPostInstall(bool update, bool modal);
+  explicit CUISoundsResource(CAddonInfo addonInfo) : CResource(std::move(addonInfo)) {}
+  bool IsAllowed(const std::string &file) const override;
+  bool IsInUse() const override;
+  void OnPostInstall(bool update, bool modal) override;
 };
 
 }

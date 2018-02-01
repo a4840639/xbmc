@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,13 +29,9 @@
 
 namespace XFILE
 {
-  CStackDirectory::CStackDirectory()
-  {
-  }
+  CStackDirectory::CStackDirectory() = default;
 
-  CStackDirectory::~CStackDirectory()
-  {
-  }
+  CStackDirectory::~CStackDirectory() = default;
 
   bool CStackDirectory::GetDirectory(const CURL& url, CFileItemList& items)
   {
@@ -186,7 +182,7 @@ namespace XFILE
     if (vecPaths.empty())
       return false;
 
-    // because " , " is used as a seperator any "," in the real paths are double escaped
+    // because " , " is used as a separator any "," in the real paths are double escaped
     for (std::vector<std::string>::iterator itPath = vecPaths.begin(); itPath != vecPaths.end(); ++itPath)
       StringUtils::Replace(*itPath, ",,", ",");
 

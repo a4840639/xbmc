@@ -18,16 +18,18 @@
  *
  */
 
+#include "GUIDialogPVRRadioRDSInfo.h"
+
 #include "Application.h"
 #include "FileItem.h"
-#include "GUIDialogPVRRadioRDSInfo.h"
 #include "GUIUserMessages.h"
-#include "guilib/GUIWindowManager.h"
-#include "guilib/GUISpinControl.h"
 #include "guilib/GUIMessage.h"
+#include "guilib/GUISpinControl.h"
 #include "guilib/GUITextBox.h"
+#include "guilib/GUIWindowManager.h"
 #include "guilib/LocalizeStrings.h"
 #include "messaging/ApplicationMessenger.h"
+
 #include "pvr/channels/PVRRadioRDSInfoTag.h"
 
 using namespace PVR;
@@ -77,10 +79,10 @@ bool CGUIDialogPVRRadioRDSInfo::OnMessage(CGUIMessage& message)
     }
     else if (iControl == SPIN_CONTROL_INFO)
     {
-      CGUISpinControl *spin = (CGUISpinControl *)GetControl(SPIN_CONTROL_INFO);
+      CGUISpinControl *spin = static_cast<CGUISpinControl*>(GetControl(SPIN_CONTROL_INFO));
       if (!spin) return true;
 
-      CGUITextBox *textbox = (CGUITextBox *)GetControl(TEXT_INFO);
+      CGUITextBox *textbox = static_cast<CGUITextBox*>(GetControl(TEXT_INFO));
       if (!textbox) return true;
 
       PVR::CPVRRadioRDSInfoTagPtr currentRDS = g_application.CurrentFileItem().GetPVRRadioRDSInfoTag();
@@ -121,12 +123,12 @@ bool CGUIDialogPVRRadioRDSInfo::OnMessage(CGUIMessage& message)
   else if (message.GetMessage() == GUI_MSG_NOTIFY_ALL)
   {
     if (IsActive() && message.GetParam1() == GUI_MSG_UPDATE_RADIOTEXT &&
-        g_application.m_pPlayer->IsPlaying() &&
+        g_application.GetAppPlayer().IsPlaying() &&
         g_application.CurrentFileItem().HasPVRRadioRDSInfoTag())
     {
       PVR::CPVRRadioRDSInfoTagPtr currentRDS = g_application.CurrentFileItem().GetPVRRadioRDSInfoTag();
-      CGUISpinControl *spin = (CGUISpinControl *)GetControl(SPIN_CONTROL_INFO);
-      CGUITextBox *textbox = (CGUITextBox *)GetControl(TEXT_INFO);
+      CGUISpinControl *spin = static_cast<CGUISpinControl*>(GetControl(SPIN_CONTROL_INFO));
+      CGUITextBox *textbox = static_cast<CGUITextBox*>(GetControl(TEXT_INFO));
 
       if (currentRDS->GetInfoNews().size())
       {
@@ -300,11 +302,11 @@ void CGUIDialogPVRRadioRDSInfo::OnInitWindow()
 
   PVR::CPVRRadioRDSInfoTagPtr currentRDS = g_application.CurrentFileItem().GetPVRRadioRDSInfoTag();
 
-  CGUISpinControl *spin = (CGUISpinControl *)GetControl(SPIN_CONTROL_INFO);
+  CGUISpinControl *spin = static_cast<CGUISpinControl*>(GetControl(SPIN_CONTROL_INFO));
   if (!spin) return;
   spin->Clear();
 
-  CGUITextBox *textbox = (CGUITextBox *)GetControl(TEXT_INFO);
+  CGUITextBox *textbox = static_cast<CGUITextBox*>(GetControl(TEXT_INFO));
   if (!textbox) return;
 
   if (currentRDS->GetInfoNews().size())
@@ -413,11 +415,6 @@ void CGUIDialogPVRRadioRDSInfo::OnInitWindow()
 void CGUIDialogPVRRadioRDSInfo::OnDeinitWindow(int nextWindowID)
 {
   CGUIDialog::OnDeinitWindow(nextWindowID);
-}
-
-void CGUIDialogPVRRadioRDSInfo::SetRadioRDS(const CFileItem *item)
-{
-  *m_rdsItem = *item;
 }
 
 CFileItemPtr CGUIDialogPVRRadioRDSInfo::GetCurrentListItem(int offset)

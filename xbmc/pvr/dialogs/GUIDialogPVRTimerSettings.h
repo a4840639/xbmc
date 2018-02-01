@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,47 +19,44 @@
  *
  */
 
-#include "pvr/channels/PVRChannel.h" // PVR_INVALID_CHANNEL_UID
-#include "settings/dialogs/GUIDialogSettingsManualBase.h"
-
 #include <map>
-#include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
-class CFileItem;
+#include "addons/kodi-addon-dev-kit/include/kodi/xbmc_pvr_types.h" // PVR_CHANNEL_INVALID_UID
+#include "settings/SettingConditions.h"
+#include "settings/dialogs/GUIDialogSettingsManualBase.h"
+#include "settings/lib/SettingDependency.h"
+
+#include "pvr/PVRTypes.h"
+
 class CSetting;
 
 namespace PVR
 {
-  class CPVRTimerInfoTag;
-  typedef std::shared_ptr<CPVRTimerInfoTag> CPVRTimerInfoTagPtr;
-
-  class CPVRTimerType;
-  typedef std::shared_ptr<CPVRTimerType> CPVRTimerTypePtr;
-
   class CGUIDialogPVRTimerSettings : public CGUIDialogSettingsManualBase
   {
   public:
     CGUIDialogPVRTimerSettings();
-    virtual ~CGUIDialogPVRTimerSettings();
+    ~CGUIDialogPVRTimerSettings() override;
 
-    virtual bool CanBeActivated() const;
+    bool CanBeActivated() const override;
 
-    void SetTimer(CFileItem *item);
+    void SetTimer(const CPVRTimerInfoTagPtr &timer);
 
   protected:
     // implementation of ISettingCallback
-    virtual void OnSettingChanged(const CSetting *setting);
-    virtual void OnSettingAction(const CSetting *setting);
+    void OnSettingChanged(std::shared_ptr<const CSetting> setting) override;
+    void OnSettingAction(std::shared_ptr<const CSetting> setting) override;
 
     // specialization of CGUIDialogSettingsBase
-    virtual bool AllowResettingSettings() const { return false; }
-    virtual void Save();
-    virtual void SetupView();
+    bool AllowResettingSettings() const override { return false; }
+    void Save() override;
+    void SetupView() override;
 
     // specialization of CGUIDialogSettingsManualBase
-    virtual void InitializeSettings();
+    void InitializeSettings() override;
     
   private:
     void InitializeTypesList();
@@ -70,49 +67,49 @@ namespace PVR
     static void SetDateFromIndex(CDateTime &datetime, int date);
     static void SetTimeFromSystemTime(CDateTime &datetime, const SYSTEMTIME &time);
 
-    static int GetWeekdaysFromSetting(const CSetting *setting);
+    static int GetWeekdaysFromSetting(std::shared_ptr<const CSetting> setting);
 
     static void TypesFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void ChannelsFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void DaysFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void DupEpisodesFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void WeekdaysFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void PrioritiesFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void LifetimesFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void MaxRecordingsFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void RecordingGroupFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
     static void MarginTimeFiller(
-      const CSetting *setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
+      std::shared_ptr<const CSetting> setting, std::vector< std::pair<std::string, int> > &list, int &current, void *data);
 
-    static std::string WeekdaysValueFormatter(const CSetting *setting);
+    static std::string WeekdaysValueFormatter(std::shared_ptr<const CSetting> setting);
 
     void AddCondition(
-      CSetting *setting, const std::string &identifier, SettingConditionCheck condition,
+      std::shared_ptr<CSetting> setting, const std::string &identifier, SettingConditionCheck condition,
       SettingDependencyType depType, const std::string &settingId);
 
-    void AddTypeDependentEnableCondition(CSetting *setting, const std::string &identifier);
+    void AddTypeDependentEnableCondition(std::shared_ptr<CSetting> setting, const std::string &identifier);
     static bool TypeReadOnlyCondition(
-      const std::string &condition, const std::string &value, const CSetting *setting, void *data);
+      const std::string &condition, const std::string &value, std::shared_ptr<const CSetting> setting, void *data);
 
-    void AddTypeDependentVisibilityCondition(CSetting *setting, const std::string &identifier);
+    void AddTypeDependentVisibilityCondition(std::shared_ptr<CSetting> setting, const std::string &identifier);
     static bool TypeSupportsCondition(
-      const std::string &condition, const std::string &value, const CSetting *setting, void *data);
+      const std::string &condition, const std::string &value, std::shared_ptr<const CSetting> setting, void *data);
 
-    void AddStartAnytimeDependentVisibilityCondition(CSetting *setting, const std::string &identifier);
+    void AddStartAnytimeDependentVisibilityCondition(std::shared_ptr<CSetting> setting, const std::string &identifier);
     static bool StartAnytimeSetCondition(
-      const std::string &condition, const std::string &value, const CSetting *setting, void *data);
-    void AddEndAnytimeDependentVisibilityCondition(CSetting *setting, const std::string &identifier);
+      const std::string &condition, const std::string &value, std::shared_ptr<const CSetting> setting, void *data);
+    void AddEndAnytimeDependentVisibilityCondition(std::shared_ptr<CSetting> setting, const std::string &identifier);
     static bool EndAnytimeSetCondition(
-      const std::string &condition, const std::string &value, const CSetting *setting, void *data);
+      const std::string &condition, const std::string &value, std::shared_ptr<const CSetting> setting, void *data);
 
     typedef std::map<int, CPVRTimerTypePtr>  TypeEntriesMap;
 
@@ -122,7 +119,7 @@ namespace PVR
       int         clientId;
       std::string description;
 
-      ChannelDescriptor(int _channelUid = PVR_INVALID_CHANNEL_UID,
+      ChannelDescriptor(int _channelUid = PVR_CHANNEL_INVALID_UID,
                         int _clientId   = -1,
                         const std::string& _description = "")
       : channelUid(_channelUid),

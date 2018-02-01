@@ -40,9 +40,9 @@
 #include "music/MusicThumbLoader.h"
 #include "Util.h"
 #include "pvr/channels/PVRChannel.h"
+#include "pvr/epg/Epg.h"
 #include "pvr/recordings/PVRRecording.h"
 #include "pvr/timers/PVRTimerInfoTag.h"
-#include "epg/Epg.h"
 
 using namespace MUSIC_INFO;
 using namespace JSONRPC;
@@ -278,8 +278,6 @@ void CFileItemHandler::HandleFileItem(const char *ID, bool allowFile, const char
           object["file"] = item->GetVideoInfoTag()->GetPath().c_str();
         if (item->HasMusicInfoTag() && !item->GetMusicInfoTag()->GetURL().empty())
           object["file"] = item->GetMusicInfoTag()->GetURL().c_str();
-        if (item->HasPVRRecordingInfoTag() && !item->GetPVRRecordingInfoTag()->GetPath().empty())
-          object["file"] = item->GetPVRRecordingInfoTag()->GetPath().c_str();
         if (item->HasPVRTimerInfoTag() && !item->GetPVRTimerInfoTag()->m_strFileNameAndPath.empty())
           object["file"] = item->GetPVRTimerInfoTag()->m_strFileNameAndPath.c_str();
 
@@ -293,7 +291,7 @@ void CFileItemHandler::HandleFileItem(const char *ID, bool allowFile, const char
     {
       if (item->HasPVRChannelInfoTag() && item->GetPVRChannelInfoTag()->ChannelID() > 0)
          object[ID] = item->GetPVRChannelInfoTag()->ChannelID();
-      else if (item->HasEPGInfoTag() && item->GetEPGInfoTag()->UniqueBroadcastID() > 0)
+      else if (item->HasEPGInfoTag() && item->GetEPGInfoTag()->UniqueBroadcastID() > EPG_TAG_INVALID_UID)
          object[ID] = item->GetEPGInfoTag()->UniqueBroadcastID();
       else if (item->HasPVRRecordingInfoTag() && item->GetPVRRecordingInfoTag()->m_iRecordingId > 0)
          object[ID] = item->GetPVRRecordingInfoTag()->m_iRecordingId;
@@ -399,7 +397,7 @@ bool CFileItemHandler::FillFileItemList(const CVariant &parameterObject, CFileIt
     bool added = false;
     for (int index = 0; index < list.Size(); index++)
     {
-      if (list[index]->GetPath() == file)
+      if (list[index]->GetPath() == file || list[index]->GetMusicInfoTag()->GetURL() == file || list[index]->GetVideoInfoTag()->GetPath() == file)
       {
         added = true;
         break;

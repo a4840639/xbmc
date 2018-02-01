@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,26 +20,106 @@
 
 #include "swighelper.h"
 
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
 namespace XBMCAddon
 {
   namespace xbmcgui
   {
-    /**
-     * getCurrentWindowId() -- Returns the id for the current 'active' window as an integer.
-     * 
-     * example:
-     *   - wid = xbmcgui.getCurrentWindowId()
-     */
+#endif /* DOXYGEN_SHOULD_SKIP_THIS */
+
+    //
+    /// \defgroup python_xbmcgui Library - xbmcgui
+    /// @{
+    /// @brief **GUI functions on Kodi.**
+    ///
+    /// Offers classes and functions that manipulate the Graphical User
+    /// Interface through windows, dialogs, and various control widgets.
+    //
+
+#ifdef DOXYGEN_SHOULD_USE_THIS
+    ///
+    /// \ingroup python_xbmcgui
+    /// @brief \python_func{ xbmcgui.getCurrentWindowId() }
+    ///-------------------------------------------------------------------------
+    /// Returns the id for the current 'active' window as an integer.
+    ///
+    /// @return                        The currently active window Id
+    ///
+    ///
+    ///--------------------------------------------------------------------------
+    ///
+    /// **Example:**
+    /// ~~~~~~~~~~~~~{.py}
+    /// ..
+    /// wid = xbmcgui.getCurrentWindowId()
+    /// ..
+    /// ~~~~~~~~~~~~~
+    ///
+    getCurrentWindowId();
+#else
     long getCurrentWindowId();
+#endif
 
-    /**
-     * getCurrentWindowDialogId() -- Returns the id for the current 'active' dialog as an integer.
-     * 
-     * example:
-     *   - wid = xbmcgui.getCurrentWindowDialogId()
-     */
+#ifdef DOXYGEN_SHOULD_USE_THIS
+    ///
+    /// \ingroup python_xbmcgui
+    /// @brief \python_func{ xbmcgui.getCurrentWindowDialogId() }
+    ///-------------------------------------------------------------------------
+    /// Returns the id for the current 'active' dialog as an integer.
+    ///
+    /// @return                        The currently active dialog Id
+    ///
+    ///
+    ///--------------------------------------------------------------------------
+    ///
+    /// **Example:**
+    /// ~~~~~~~~~~~~~{.py}
+    /// ..
+    /// wid = xbmcgui.getCurrentWindowDialogId()
+    /// ..
+    /// ~~~~~~~~~~~~~
+    ///
+    getCurrentWindowDialogId();
+#else
     long getCurrentWindowDialogId();
+#endif
 
+#ifdef DOXYGEN_SHOULD_USE_THIS
+    ///
+    /// \ingroup python_xbmcgui_window
+    /// @brief \python_func{ getScreenHeight() }
+    ///-------------------------------------------------------------------------
+    /// Returns the height of this screen.
+    ///
+    /// @return                       Screen height
+    ///
+    ///-------------------------------------------------------------------------
+    /// @python_v18 New function added.
+    ///
+    getScreenHeight();
+#else
+    long getScreenHeight();
+#endif
+
+#ifdef DOXYGEN_SHOULD_USE_THIS
+    ///
+    /// \ingroup python_xbmcgui_window
+    /// @brief \python_func{ getScreenWidth() }
+    ///-------------------------------------------------------------------------
+    /// Returns the width of this screen.
+    ///
+    /// @return                       Screen width
+    ///
+    ///-------------------------------------------------------------------------
+    /// @python_v18 New function added.
+    ///
+    getScreenWidth();
+#else
+    long getScreenWidth();
+#endif
+    ///@}
+
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
     SWIG_CONSTANT2(int,ICON_OVERLAY_NONE, CGUIListItem::ICON_OVERLAY_NONE);
     SWIG_CONSTANT2(int,ICON_OVERLAY_RAR, CGUIListItem::ICON_OVERLAY_RAR);
     SWIG_CONSTANT2(int,ICON_OVERLAY_ZIP, CGUIListItem::ICON_OVERLAY_ZIP);
@@ -59,8 +139,12 @@ namespace XBMCAddon
     SWIG_CONSTANT(int,INPUT_IPADDRESS);
     SWIG_CONSTANT(int,INPUT_PASSWORD);
 
+    SWIG_CONSTANT(int, HORIZONTAL);
+    SWIG_CONSTANT(int, VERTICAL);
+
     SWIG_CONSTANT(int,PASSWORD_VERIFY);
     SWIG_CONSTANT(int,ALPHANUM_HIDE_INPUT);
 
   }
 }
+#endif /* DOXYGEN_SHOULD_SKIP_THIS */

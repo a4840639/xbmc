@@ -23,9 +23,7 @@
 #include "WinEventsIOS.h"
 #include "input/InputManager.h"
 #include "input/XBMC_vkeys.h"
-#include "input/SDLJoystick.h"
 #include "Application.h"
-#include "windowing/WindowingFactory.h"
 #include "threads/CriticalSection.h"
 #include "guilib/GUIWindowManager.h"
 #include "utils/log.h"
@@ -34,17 +32,10 @@ static CCriticalSection g_inputCond;
 
 static std::list<XBMC_Event> events;
 
-void CWinEventsIOS::MessagePush(XBMC_Event *newEvent)
-{
-  CSingleLock lock(g_inputCond);
-
-  events.push_back(*newEvent);
-}
-
 bool CWinEventsIOS::MessagePump()
 {
   bool ret = false;
-  
+
   // Do not always loop, only pump the initial queued count events. else if ui keep pushing
   // events the loop won't finish then it will block xbmc main message loop.
   for (size_t pumpEventCount = GetQueueSize(); pumpEventCount > 0; --pumpEventCount)
@@ -58,7 +49,7 @@ bool CWinEventsIOS::MessagePump()
         return ret;
       pumpEvent = events.front();
       events.pop_front();
-    }  
+    }
     ret = g_application.OnEvent(pumpEvent);
   }
   return ret;

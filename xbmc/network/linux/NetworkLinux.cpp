@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -63,7 +63,6 @@
 #include "PlatformDefs.h"
 #include "NetworkLinux.h"
 #include "Util.h"
-#include "utils/StringUtils.h"
 #include "utils/log.h"
 #include "utils/StringUtils.h"
 
@@ -81,9 +80,7 @@ CNetworkInterfaceLinux::CNetworkInterfaceLinux(CNetworkLinux* network, std::stri
    memcpy(m_interfaceMacAddrRaw, interfaceMacAddrRaw, sizeof(m_interfaceMacAddrRaw));
 }
 
-CNetworkInterfaceLinux::~CNetworkInterfaceLinux(void)
-{
-}
+CNetworkInterfaceLinux::~CNetworkInterfaceLinux(void) = default;
 
 std::string& CNetworkInterfaceLinux::GetName(void)
 {
@@ -201,7 +198,7 @@ std::string CNetworkInterfaceLinux::GetCurrentDefaultGateway(void)
 
 #if defined(TARGET_DARWIN)
   FILE* pipe = popen("echo \"show State:/Network/Global/IPv4\" | scutil | grep Router", "r");
-  Sleep(100);
+  usleep(100000);
   if (pipe)
   {
     std::string tmpStr;
@@ -333,10 +330,11 @@ std::vector<CNetworkInterface*>& CNetworkLinux::GetInterfaceList(void)
    return m_interfaces;
 }
 
-// Overwrite the GetFirstConnectedInterface and requery
-// the interface list if no connected device is found
-// this fixes a bug when no network is available after first start of xbmc
-// and the interface comes up during runtime
+//! @bug
+//! Overwrite the GetFirstConnectedInterface and requery
+//! the interface list if no connected device is found
+//! this fixes a bug when no network is available after first start of xbmc
+//! and the interface comes up during runtime
 CNetworkInterface* CNetworkLinux::GetFirstConnectedInterface(void)
 {
     CNetworkInterface *pNetIf=CNetwork::GetFirstConnectedInterface();
@@ -473,7 +471,7 @@ std::vector<std::string> CNetworkLinux::GetNameServers(void)
 
 #if defined(TARGET_DARWIN)
   FILE* pipe = popen("scutil --dns | grep \"nameserver\" | tail -n2", "r");
-  Sleep(100);
+  usleep(100000);
   if (pipe)
   {
     std::vector<std::string> tmpStr;
@@ -531,7 +529,7 @@ void CNetworkLinux::SetNameServers(const std::vector<std::string>& nameServers)
    }
    else
    {
-      // TODO:
+      //! @todo implement
    }
 #endif
 }
@@ -543,16 +541,16 @@ bool CNetworkLinux::PingHost(unsigned long remote_ip, unsigned int timeout_ms)
   struct in_addr host_ip; 
   host_ip.s_addr = remote_ip;
 
-#if defined (TARGET_DARWIN_IOS) // no timeout option available
-  sprintf(cmd_line, "ping -c 1 %s", inet_ntoa(host_ip));
-#elif defined (TARGET_DARWIN) || defined (TARGET_FREEBSD)
+#if defined (TARGET_DARWIN) || defined (TARGET_FREEBSD)
   sprintf(cmd_line, "ping -c 1 -t %d %s", timeout_ms / 1000 + (timeout_ms % 1000) != 0, inet_ntoa(host_ip));
 #else
   sprintf(cmd_line, "ping -c 1 -w %d %s", timeout_ms / 1000 + (timeout_ms % 1000) != 0, inet_ntoa(host_ip));
 #endif
 
-  int status = system (cmd_line);
-
+  int status = -1;
+#if !defined (TARGET_DARWIN_IOS) // no system calls allowed since ios11
+  status = system (cmd_line);
+#endif
   int result = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 
   // http://linux.about.com/od/commands/l/blcmdl8_ping.htm ;
@@ -905,7 +903,7 @@ void CNetworkInterfaceLinux::GetSettings(NetworkAssignment& assignment, std::str
    FILE* fp = fopen("/etc/network/interfaces", "r");
    if (!fp)
    {
-      // TODO
+      //! @todo implement
       return;
    }
 
@@ -982,14 +980,14 @@ void CNetworkInterfaceLinux::SetSettings(NetworkAssignment& assignment, std::str
    FILE* fr = fopen("/etc/network/interfaces", "r");
    if (!fr)
    {
-      // TODO
+      //! @todo implement
       return;
    }
 
    FILE* fw = fopen("/tmp/interfaces.temp", "w");
    if (!fw)
    {
-      // TODO
+      //! @todo implement
       fclose(fr);
       return;
    }
@@ -1059,7 +1057,7 @@ void CNetworkInterfaceLinux::SetSettings(NetworkAssignment& assignment, std::str
    // Rename the file
    if (rename("/tmp/interfaces.temp", "/etc/network/interfaces") < 0)
    {
-      // TODO
+      //! @todo implement
       return;
    }
 

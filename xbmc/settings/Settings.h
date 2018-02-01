@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,24 +19,14 @@
  *
  */
 
-#include <set>
 #include <string>
-#include <vector>
-
-#include <memory>
 
 #include "settings/SettingControl.h"
 #include "settings/SettingCreator.h"
-#include "settings/lib/ISettingCallback.h"
-#include "threads/CriticalSection.h"
+#include "settings/SettingsBase.h"
 
-class CSetting;
 class CSettingList;
-class CSettingSection;
-class CSettingsManager;
-class TiXmlElement;
 class TiXmlNode;
-class CVariant;
 
 /*!
  \brief Wrapper around CSettingsManager responsible for properly setting up
@@ -44,7 +34,7 @@ class CVariant;
  setting types.
  \sa CSettingsManager
  */
-class CSettings : public CSettingCreator, public CSettingControlCreator
+class CSettings : public CSettingsBase, public CSettingCreator, public CSettingControlCreator
 {
 public:
   static const std::string SETTING_LOOKANDFEEL_SKIN;
@@ -53,6 +43,7 @@ public:
   static const std::string SETTING_LOOKANDFEEL_SKINCOLORS;
   static const std::string SETTING_LOOKANDFEEL_FONT;
   static const std::string SETTING_LOOKANDFEEL_SKINZOOM;
+  static const std::string SETTING_LOOKANDFEEL_STARTUPACTION;
   static const std::string SETTING_LOOKANDFEEL_STARTUPWINDOW;
   static const std::string SETTING_LOOKANDFEEL_SOUNDSKIN;
   static const std::string SETTING_LOOKANDFEEL_ENABLERSSFEEDS;
@@ -62,6 +53,7 @@ public:
   static const std::string SETTING_LOCALE_COUNTRY;
   static const std::string SETTING_LOCALE_CHARSET;
   static const std::string SETTING_LOCALE_KEYBOARDLAYOUTS;
+  static const std::string SETTING_LOCALE_ACTIVEKEYBOARDLAYOUT;
   static const std::string SETTING_LOCALE_TIMEZONECOUNTRY;
   static const std::string SETTING_LOCALE_TIMEZONE;
   static const std::string SETTING_LOCALE_SHORTDATEFORMAT;
@@ -88,7 +80,6 @@ public:
   static const std::string SETTING_VIDEOLIBRARY_ACTORTHUMBS;
   static const std::string SETTING_MYVIDEOS_FLATTEN;
   static const std::string SETTING_VIDEOLIBRARY_FLATTENTVSHOWS;
-  static const std::string SETTING_VIDEOLIBRARY_REMOVE_DUPLICATES;
   static const std::string SETTING_VIDEOLIBRARY_TVSHOWSSELECTFIRSTUNWATCHEDITEM;
   static const std::string SETTING_VIDEOLIBRARY_TVSHOWSINCLUDEALLSEASONSANDSPECIALS;
   static const std::string SETTING_VIDEOLIBRARY_SHOWALLITEMS;
@@ -106,7 +97,6 @@ public:
   static const std::string SETTING_VIDEOPLAYER_SEEKSTEPS;
   static const std::string SETTING_VIDEOPLAYER_SEEKDELAY;
   static const std::string SETTING_VIDEOPLAYER_ADJUSTREFRESHRATE;
-  static const std::string SETTING_VIDEOPLAYER_PAUSEAFTERREFRESHCHANGE;
   static const std::string SETTING_VIDEOPLAYER_USEDISPLAYASCLOCK;
   static const std::string SETTING_VIDEOPLAYER_ERRORINASPECT;
   static const std::string SETTING_VIDEOPLAYER_STRETCH43;
@@ -117,6 +107,9 @@ public:
   static const std::string SETTING_VIDEOPLAYER_RENDERMETHOD;
   static const std::string SETTING_VIDEOPLAYER_HQSCALERS;
   static const std::string SETTING_VIDEOPLAYER_USEAMCODEC;
+  static const std::string SETTING_VIDEOPLAYER_USEAMCODECMPEG2;
+  static const std::string SETTING_VIDEOPLAYER_USEAMCODECMPEG4;
+  static const std::string SETTING_VIDEOPLAYER_USEAMCODECH264;
   static const std::string SETTING_VIDEOPLAYER_USEMEDIACODEC;
   static const std::string SETTING_VIDEOPLAYER_USEMEDIACODECSURFACE;
   static const std::string SETTING_VIDEOPLAYER_USEVDPAU;
@@ -131,14 +124,13 @@ public:
   static const std::string SETTING_VIDEOPLAYER_PREFERVAAPIRENDER;
   static const std::string SETTING_VIDEOPLAYER_USEDXVA2;
   static const std::string SETTING_VIDEOPLAYER_USEOMXPLAYER;
-  static const std::string SETTING_VIDEOPLAYER_USEOMX;
-  static const std::string SETTING_VIDEOPLAYER_USEVIDEOTOOLBOX;
-  static const std::string SETTING_VIDEOPLAYER_USEVDA;
+  static const std::string SETTING_VIDEOPLAYER_USEVTB;
   static const std::string SETTING_VIDEOPLAYER_USEMMAL;
   static const std::string SETTING_VIDEOPLAYER_USESTAGEFRIGHT;
   static const std::string SETTING_VIDEOPLAYER_LIMITGUIUPDATE;
   static const std::string SETTING_VIDEOPLAYER_SUPPORTMVC;
   static const std::string SETTING_MYVIDEOS_SELECTACTION;
+  static const std::string SETTING_MYVIDEOS_USETAGS;
   static const std::string SETTING_MYVIDEOS_EXTRACTFLAGS;
   static const std::string SETTING_MYVIDEOS_EXTRACTCHAPTERTHUMBS;
   static const std::string SETTING_MYVIDEOS_REPLACELABELS;
@@ -172,40 +164,37 @@ public:
   static const std::string SETTING_SCRAPERS_MOVIESDEFAULT;
   static const std::string SETTING_SCRAPERS_TVSHOWSDEFAULT;
   static const std::string SETTING_SCRAPERS_MUSICVIDEOSDEFAULT;
-  static const std::string SETTING_PVRMANAGER_ENABLED;
-  static const std::string SETTING_PVRMANAGER_HIDECONNECTIONLOSTWARNING;
+  static const std::string SETTING_PVRMANAGER_PRESELECTPLAYINGCHANNEL;
   static const std::string SETTING_PVRMANAGER_SYNCCHANNELGROUPS;
   static const std::string SETTING_PVRMANAGER_BACKENDCHANNELORDER;
   static const std::string SETTING_PVRMANAGER_USEBACKENDCHANNELNUMBERS;
+  static const std::string SETTING_PVRMANAGER_CLIENTPRIORITIES;
   static const std::string SETTING_PVRMANAGER_CHANNELMANAGER;
   static const std::string SETTING_PVRMANAGER_GROUPMANAGER;
   static const std::string SETTING_PVRMANAGER_CHANNELSCAN;
   static const std::string SETTING_PVRMANAGER_RESETDB;
   static const std::string SETTING_PVRMENU_DISPLAYCHANNELINFO;
-  static const std::string SETTING_PVRMENU_CLOSECHANNELOSDONSWITCH;
   static const std::string SETTING_PVRMENU_ICONPATH;
   static const std::string SETTING_PVRMENU_SEARCHICONS;
-  static const std::string SETTING_EPG_DAYSTODISPLAY;
+  static const std::string SETTING_EPG_PAST_DAYSTODISPLAY;
+  static const std::string SETTING_EPG_FUTURE_DAYSTODISPLAY;
   static const std::string SETTING_EPG_SELECTACTION;
   static const std::string SETTING_EPG_HIDENOINFOAVAILABLE;
   static const std::string SETTING_EPG_EPGUPDATE;
   static const std::string SETTING_EPG_PREVENTUPDATESWHILEPLAYINGTV;
   static const std::string SETTING_EPG_IGNOREDBFORCLIENT;
   static const std::string SETTING_EPG_RESETEPG;
-  static const std::string SETTING_PVRPLAYBACK_PLAYMINIMIZED;
-  static const std::string SETTING_PVRPLAYBACK_STARTLAST;
+  static const std::string SETTING_PVRPLAYBACK_SWITCHTOFULLSCREEN;
   static const std::string SETTING_PVRPLAYBACK_SIGNALQUALITY;
-  static const std::string SETTING_PVRPLAYBACK_SCANTIME;
   static const std::string SETTING_PVRPLAYBACK_CONFIRMCHANNELSWITCH;
   static const std::string SETTING_PVRPLAYBACK_CHANNELENTRYTIMEOUT;
   static const std::string SETTING_PVRPLAYBACK_FPS;
+  static const std::string SETTING_PVRRECORD_INSTANTRECORDACTION;
   static const std::string SETTING_PVRRECORD_INSTANTRECORDTIME;
-  static const std::string SETTING_PVRRECORD_DEFAULTPRIORITY;
-  static const std::string SETTING_PVRRECORD_DEFAULTLIFETIME;
   static const std::string SETTING_PVRRECORD_MARGINSTART;
   static const std::string SETTING_PVRRECORD_MARGINEND;
-  static const std::string SETTING_PVRRECORD_PREVENTDUPLICATEEPISODES;
   static const std::string SETTING_PVRRECORD_TIMERNOTIFICATIONS;
+  static const std::string SETTING_PVRRECORD_GROUPRECORDINGS;
   static const std::string SETTING_PVRPOWERMANAGEMENT_ENABLED;
   static const std::string SETTING_PVRPOWERMANAGEMENT_BACKENDIDLETIME;
   static const std::string SETTING_PVRPOWERMANAGEMENT_SETWAKEUPCMD;
@@ -219,6 +208,7 @@ public:
   static const std::string SETTING_PVRTIMERS_HIDEDISABLEDTIMERS;
   static const std::string SETTING_MUSICLIBRARY_SHOWCOMPILATIONARTISTS;
   static const std::string SETTING_MUSICLIBRARY_DOWNLOADINFO;
+  static const std::string SETTING_MUSICLIBRARY_ARTISTSFOLDER;
   static const std::string SETTING_MUSICLIBRARY_ALBUMSSCRAPER;
   static const std::string SETTING_MUSICLIBRARY_ARTISTSSCRAPER;
   static const std::string SETTING_MUSICLIBRARY_OVERRIDETAGS;
@@ -227,6 +217,13 @@ public:
   static const std::string SETTING_MUSICLIBRARY_BACKGROUNDUPDATE;
   static const std::string SETTING_MUSICLIBRARY_CLEANUP;
   static const std::string SETTING_MUSICLIBRARY_EXPORT;
+  static const std::string SETTING_MUSICLIBRARY_EXPORT_FILETYPE;
+  static const std::string SETTING_MUSICLIBRARY_EXPORT_FOLDER;
+  static const std::string SETTING_MUSICLIBRARY_EXPORT_ITEMS;
+  static const std::string SETTING_MUSICLIBRARY_EXPORT_UNSCRAPED;
+  static const std::string SETTING_MUSICLIBRARY_EXPORT_OVERWRITE;
+  static const std::string SETTING_MUSICLIBRARY_EXPORT_ARTWORK;
+  static const std::string SETTING_MUSICLIBRARY_EXPORT_SKIPNFO;
   static const std::string SETTING_MUSICLIBRARY_IMPORT;
   static const std::string SETTING_MUSICPLAYER_AUTOPLAYNEXTITEM;
   static const std::string SETTING_MUSICPLAYER_QUEUEBYDEFAULT;
@@ -251,19 +248,21 @@ public:
   static const std::string SETTING_AUDIOCDS_ENCODER;
   static const std::string SETTING_AUDIOCDS_SETTINGS;
   static const std::string SETTING_AUDIOCDS_EJECTONRIP;
-  static const std::string SETTING_MYMUSIC_STARTWINDOW;
   static const std::string SETTING_MYMUSIC_SONGTHUMBINVIS;
   static const std::string SETTING_MYMUSIC_DEFAULTLIBVIEW;
+  static const std::string SETTING_PICTURES_USETAGS;
   static const std::string SETTING_PICTURES_GENERATETHUMBS;
   static const std::string SETTING_PICTURES_SHOWVIDEOS;
   static const std::string SETTING_PICTURES_DISPLAYRESOLUTION;
   static const std::string SETTING_SLIDESHOW_STAYTIME;
   static const std::string SETTING_SLIDESHOW_DISPLAYEFFECTS;
   static const std::string SETTING_SLIDESHOW_SHUFFLE;
+  static const std::string SETTING_SLIDESHOW_HIGHQUALITYDOWNSCALING;
   static const std::string SETTING_WEATHER_CURRENTLOCATION;
   static const std::string SETTING_WEATHER_ADDON;
   static const std::string SETTING_WEATHER_ADDONSETTINGS;
   static const std::string SETTING_SERVICES_DEVICENAME;
+  static const std::string SETTING_SERVICES_UPNP;
   static const std::string SETTING_SERVICES_UPNPSERVER;
   static const std::string SETTING_SERVICES_UPNPANNOUNCE;
   static const std::string SETTING_SERVICES_UPNPLOOKFOREXTERNALSUBTITLES;
@@ -273,6 +272,7 @@ public:
   static const std::string SETTING_SERVICES_WEBSERVERPORT;
   static const std::string SETTING_SERVICES_WEBSERVERUSERNAME;
   static const std::string SETTING_SERVICES_WEBSERVERPASSWORD;
+  static const std::string SETTING_SERVICES_WEBSERVERSSL;
   static const std::string SETTING_SERVICES_WEBSKIN;
   static const std::string SETTING_SERVICES_ESENABLED;
   static const std::string SETTING_SERVICES_ESPORT;
@@ -289,6 +289,9 @@ public:
   static const std::string SETTING_SERVICES_AIRPLAYVIDEOSUPPORT;
   static const std::string SETTING_SMB_WINSSERVER;
   static const std::string SETTING_SMB_WORKGROUP;
+  static const std::string SETTING_SMB_MINPROTOCOL;
+  static const std::string SETTING_SMB_MAXPROTOCOL;
+  static const std::string SETTING_SMB_LEGACYSECURITY;
   static const std::string SETTING_VIDEOSCREEN_MONITOR;
   static const std::string SETTING_VIDEOSCREEN_SCREEN;
   static const std::string SETTING_VIDEOSCREEN_RESOLUTION;
@@ -297,7 +300,9 @@ public:
   static const std::string SETTING_VIDEOSCREEN_BLANKDISPLAYS;
   static const std::string SETTING_VIDEOSCREEN_STEREOSCOPICMODE;
   static const std::string SETTING_VIDEOSCREEN_PREFEREDSTEREOSCOPICMODE;
-  static const std::string SETTING_VIDEOSCREEN_VSYNC;
+  static const std::string SETTING_VIDEOSCREEN_NOOFBUFFERS;
+  static const std::string SETTING_VIDEOSCREEN_3DLUT;
+  static const std::string SETTING_VIDEOSCREEN_DISPLAYPROFILE;
   static const std::string SETTING_VIDEOSCREEN_GUICALIBRATION;
   static const std::string SETTING_VIDEOSCREEN_TESTPATTERN;
   static const std::string SETTING_VIDEOSCREEN_LIMITEDRANGE;
@@ -308,9 +313,10 @@ public:
   static const std::string SETTING_AUDIOOUTPUT_SAMPLERATE;
   static const std::string SETTING_AUDIOOUTPUT_STEREOUPMIX;
   static const std::string SETTING_AUDIOOUTPUT_MAINTAINORIGINALVOLUME;
-  static const std::string SETTING_AUDIOOUTPUT_NORMALIZELEVELS;
   static const std::string SETTING_AUDIOOUTPUT_PROCESSQUALITY;
+  static const std::string SETTING_AUDIOOUTPUT_ATEMPOTHRESHOLD;
   static const std::string SETTING_AUDIOOUTPUT_STREAMSILENCE;
+  static const std::string SETTING_AUDIOOUTPUT_STREAMNOISE;
   static const std::string SETTING_AUDIOOUTPUT_DSPADDONSENABLED;
   static const std::string SETTING_AUDIOOUTPUT_DSPSETTINGS;
   static const std::string SETTING_AUDIOOUTPUT_DSPRESETDB;
@@ -323,9 +329,15 @@ public:
   static const std::string SETTING_AUDIOOUTPUT_DTSPASSTHROUGH;
   static const std::string SETTING_AUDIOOUTPUT_TRUEHDPASSTHROUGH;
   static const std::string SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH;
+  static const std::string SETTING_AUDIOOUTPUT_VOLUMESTEPS;
   static const std::string SETTING_INPUT_PERIPHERALS;
+  static const std::string SETTING_INPUT_PERIPHERALLIBRARIES;
   static const std::string SETTING_INPUT_ENABLEMOUSE;
-  static const std::string SETTING_INPUT_ENABLEJOYSTICK;
+  static const std::string SETTING_INPUT_ASKNEWCONTROLLERS;
+  static const std::string SETTING_INPUT_CONTROLLERCONFIG;
+  static const std::string SETTING_INPUT_RUMBLENOTIFY;
+  static const std::string SETTING_INPUT_TESTRUMBLE;
+  static const std::string SETTING_INPUT_CONTROLLERPOWEROFF;
   static const std::string SETTING_INPUT_APPLEREMOTEMODE;
   static const std::string SETTING_INPUT_APPLEREMOTEALWAYSON;
   static const std::string SETTING_INPUT_APPLEREMOTESEQUENCETIME;
@@ -340,6 +352,7 @@ public:
   static const std::string SETTING_POWERMANAGEMENT_SHUTDOWNTIME;
   static const std::string SETTING_POWERMANAGEMENT_SHUTDOWNSTATE;
   static const std::string SETTING_POWERMANAGEMENT_WAKEONACCESS;
+  static const std::string SETTING_POWERMANAGEMENT_WAITFORNETWORK;
   static const std::string SETTING_DEBUG_SHOWLOGINFO;
   static const std::string SETTING_DEBUG_EXTRALOGGING;
   static const std::string SETTING_DEBUG_SETEXTRALOGLEVEL;
@@ -368,6 +381,21 @@ public:
   static const std::string SETTING_ADDONS_ALLOW_UNKNOWN_SOURCES;
   static const std::string SETTING_GENERAL_ADDONFOREIGNFILTER;
   static const std::string SETTING_GENERAL_ADDONBROKENFILTER;
+  static const std::string SETTING_SOURCE_VIDEOS;
+  static const std::string SETTING_SOURCE_MUSIC;
+  static const std::string SETTING_SOURCE_PICTURES;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERS;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_1;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_2;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_3;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_4;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_5;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_6;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_7;
+  static const std::string SETTING_GAMES_KEYBOARD_PLAYERCONFIG_8;
+  static const std::string SETTING_GAMES_ENABLE;
+  static const std::string SETTING_GAMES_ENABLEREWIND;
+  static const std::string SETTING_GAMES_REWINDTIME;
 
   /*!
    \brief Creates a new settings wrapper around a new settings manager.
@@ -375,31 +403,18 @@ public:
    For access to the "global" settings wrapper the static GetInstance() method should
    be used.
    */
-  CSettings();
-  virtual ~CSettings();
-
-  /*!
-   \brief Returns a "global" settings wrapper which can be used from anywhere.
-
-   \return "global" settings wrapper
-   */
-  static CSettings& GetInstance();
+  CSettings() = default;
+  ~CSettings() override = default;
 
   CSettingsManager* GetSettingsManager() const { return m_settingsManager; }
 
-  /*!
-   \brief Initializes the setting system with the generic
-   settings definition and platform specific setting definitions.
+  // specialization of CSettingsBase
+  bool Initialize() override;
 
-   \return True if the initialization was successful, false otherwise
-   */
-  bool Initialize();
-  /*!
-   \brief Loads the setting values.
+  // implementations of CSettingsBase
+  bool Load() override;
+  bool Save() override;
 
-   \return True if the setting values are successfully loaded, false otherwise
-   */
-  bool Load();
   /*!
    \brief Loads setting values from the given (XML) file.
 
@@ -408,27 +423,21 @@ public:
    */
   bool Load(const std::string &file);
   /*!
+  \brief Loads setting values from the given XML element.
+
+  \param root XML element containing setting values
+  \return True if the setting values were successfully loaded, false otherwise
+  */
+  bool Load(const TiXmlElement *root) { bool updated; return CSettingsBase::LoadValuesFromXml(root, updated); }
+  /*!
    \brief Loads setting values from the given XML element.
 
    \param root XML element containing setting values
    \param hide Whether to hide the loaded settings or not
    \return True if the setting values were successfully loaded, false otherwise
    */
-  bool Load(const TiXmlElement *root, bool hide = false);
-  /*!
-   \brief Tells the settings system that all setting values
-   have been loaded.
+  bool LoadHidden(const TiXmlElement *root) { return CSettingsBase::LoadHiddenValuesFromXml(root); }
 
-   This manual trigger is necessary to enable the ISettingCallback methods
-   being executed.
-   */
-  void SetLoaded();
-  /*!
-   \brief Saves the setting values.
-
-   \return True if the setting values were successfully saved, false otherwise
-   */
-  bool Save();
   /*!
    \brief Saves the setting values to the given (XML) file.
 
@@ -436,139 +445,6 @@ public:
    \return True if the setting values were successfully saved, false otherwise
    */
   bool Save(const std::string &file);
-  /*!
-   \brief Unloads the previously loaded setting values.
-
-   The values of all the settings are reset to their default values.
-   */
-  void Unload();
-  /*!
-   \brief Uninitializes the settings system.
-
-   Unregisters all previously registered callbacks and destroys all setting
-   objects.
-   */
-  void Uninitialize();
-
-  /*!
-   \brief Registers the given ISettingCallback implementation for the given
-   set of settings.
-
-   \param callback ISettingCallback implementation
-   \param settingList List of setting identifiers for which the given callback shall be triggered
-   */
-  void RegisterCallback(ISettingCallback *callback, const std::set<std::string> &settingList);
-  /*!
-   \brief Unregisters the given ISettingCallback implementation.
-
-   \param callback ISettingCallback implementation
-   */
-  void UnregisterCallback(ISettingCallback *callback);
-
-  /*!
-   \brief Gets the setting with the given identifier.
-
-   \param id Setting identifier
-   \return Setting object with the given identifier or NULL if the identifier is unknown
-   */
-  CSetting* GetSetting(const std::string &id) const;
-  /*!
-   \brief Gets the full list of setting sections.
-
-   \return List of setting sections
-   */
-  std::vector<CSettingSection*> GetSections() const;
-  /*!
-   \brief Gets the setting section with the given identifier.
-
-   \param section Setting section identifier
-   \return Setting section with the given identifier or NULL if the identifier is unknown
-   */
-  CSettingSection* GetSection(const std::string &section) const;
-
-  /*!
-   \brief Gets the boolean value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \return Boolean value of the setting with the given identifier
-   */
-  bool GetBool(const std::string &id) const;
-  /*!
-   \brief Gets the integer value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \return Integer value of the setting with the given identifier
-   */
-  int GetInt(const std::string &id) const;
-  /*!
-   \brief Gets the real number value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \return Real number value of the setting with the given identifier
-   */
-  double GetNumber(const std::string &id) const;
-  /*!
-   \brief Gets the string value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \return String value of the setting with the given identifier
-   */
-  std::string GetString(const std::string &id) const;
-  /*!
-   \brief Gets the values of the list setting with the given identifier.
-
-   \param id Setting identifier
-   \return List of values of the setting with the given identifier
-   */
-  std::vector<CVariant> GetList(const std::string &id) const;
-
-  /*!
-   \brief Sets the boolean value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \param value Boolean value to set
-   \return True if setting the value was successful, false otherwise
-   */
-  bool SetBool(const std::string &id, bool value);
-  /*!
-   \brief Toggles the boolean value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \return True if toggling the boolean value was successful, false otherwise
-   */
-  bool ToggleBool(const std::string &id);
-  /*!
-   \brief Sets the integer value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \param value Integer value to set
-   \return True if setting the value was successful, false otherwise
-   */
-  bool SetInt(const std::string &id, int value);
-  /*!
-   \brief Sets the real number value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \param value Real number value to set
-   \return True if setting the value was successful, false otherwise
-   */
-  bool SetNumber(const std::string &id, double value);
-  /*!
-   \brief Sets the string value of the setting with the given identifier.
-
-   \param id Setting identifier
-   \param value String value to set
-   \return True if setting the value was successful, false otherwise
-   */
-  bool SetString(const std::string &id, const std::string &value);
-  /*!
-   \brief Sets the values of the list setting with the given identifier.
-
-   \param id Setting identifier
-   \param value Values to set
-   \return True if setting the values was successful, false otherwise
-   */
-  bool SetList(const std::string &id, const std::vector<CVariant> &value);
 
   /*!
    \brief Loads the setting being represented by the given XML node with the
@@ -579,24 +455,33 @@ public:
    \return True if the setting was successfully loaded from the given XML node, false otherwise
    */
   bool LoadSetting(const TiXmlNode *node, const std::string &settingId);
+
+  // overwrite (not override) from CSettingsBase
+  bool GetBool(const std::string& id) const;
+
+protected:
+  // specializations of CSettingsBase
+  void InitializeSettingTypes() override;
+  void InitializeControls() override;
+  void InitializeOptionFillers() override;
+  void UninitializeOptionFillers() override;
+  void InitializeConditions() override;
+  void InitializeVisibility() override;
+  void InitializeDefaults() override;
+  void InitializeISettingsHandlers() override;
+  void UninitializeISettingsHandlers() override;
+  void InitializeISubSettings() override;
+  void UninitializeISubSettings() override;
+  void InitializeISettingCallbacks() override;
+  void UninitializeISettingCallbacks() override;
+
+  // implementation of CSettingsBase
+  bool InitializeDefinitions() override;
+
 private:
-  CSettings(const CSettings&);
-  CSettings const& operator=(CSettings const&);
+  CSettings(const CSettings&) = delete;
+  CSettings const& operator=(CSettings const&) = delete;
 
   bool Initialize(const std::string &file);
-  bool InitializeDefinitions();
-  void InitializeSettingTypes();
-  void InitializeControls();
-  void InitializeVisibility();
-  void InitializeDefaults();
-  void InitializeOptionFillers();
-  void InitializeConditions();
-  void InitializeISettingsHandlers();
-  void InitializeISubSettings();
-  void InitializeISettingCallbacks();
   bool Reset();
-
-  bool m_initialized;
-  CSettingsManager *m_settingsManager;
-  CCriticalSection m_critical;
 };

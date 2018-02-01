@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -51,7 +51,5 @@ namespace JSONRPC
   private:
     static JSONRPC_STATUS GetPropertyValue(const std::string &property, CVariant &result);
     static void FillChannelGroupDetails(const PVR::CPVRChannelGroupPtr &channelGroup, const CVariant &parameterObject, CVariant &result, bool append = false);
-
-    static CFileItemPtr GetBroadcastFromBroadcastid(unsigned int broadcastid);
   };
 }

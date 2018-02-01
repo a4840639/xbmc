@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,20 +18,33 @@
  *
  */
 
-#include "utils/StringUtils.h"
-#include "pvr/timers/PVRTimers.h"
-
 #include "GUIWindowPVRTimerRules.h"
+
+#include "FileItem.h"
+#include "utils/URIUtils.h"
+
+#include "pvr/timers/PVRTimers.h"
 
 using namespace PVR;
 
-CGUIWindowPVRTimerRules::CGUIWindowPVRTimerRules(bool bRadio) :
-  CGUIWindowPVRTimersBase(bRadio, bRadio ? WINDOW_RADIO_TIMER_RULES : WINDOW_TV_TIMER_RULES, "MyPVRTimers.xml")
+CGUIWindowPVRTVTimerRules::CGUIWindowPVRTVTimerRules() :
+  CGUIWindowPVRTimersBase(false, WINDOW_TV_TIMER_RULES, "MyPVRTimers.xml")
 {
 }
 
-std::string CGUIWindowPVRTimerRules::GetDirectoryPath(void)
+std::string CGUIWindowPVRTVTimerRules::GetDirectoryPath()
 {
-  const std::string basePath(CPVRTimersPath(m_bRadio, true).GetPath());
-  return StringUtils::StartsWith(m_vecItems->GetPath(), basePath) ? m_vecItems->GetPath() : basePath;
+  const std::string basePath(CPVRTimersPath(false, true).GetPath());
+  return URIUtils::PathHasParent(m_vecItems->GetPath(), basePath) ? m_vecItems->GetPath() : basePath;
+}
+
+CGUIWindowPVRRadioTimerRules::CGUIWindowPVRRadioTimerRules() :
+CGUIWindowPVRTimersBase(true, WINDOW_RADIO_TIMER_RULES, "MyPVRTimers.xml")
+{
+}
+
+std::string CGUIWindowPVRRadioTimerRules::GetDirectoryPath()
+{
+  const std::string basePath(CPVRTimersPath(true, true).GetPath());
+  return URIUtils::PathHasParent(m_vecItems->GetPath(), basePath) ? m_vecItems->GetPath() : basePath;
 }

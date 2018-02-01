@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,8 +22,8 @@
 #include "utils/ISerializable.h"
 #include "utils/ISortable.h"
 #include "utils/IArchivable.h"
-#include "DllLibExif.h"
 #include "XBDateTime.h"
+#include "libexif.h"
 
 #define SLIDE_FILE_NAME             900         // Note that not all image tags will be present for each image
 #define SLIDE_FILE_PATH             901
@@ -97,9 +97,9 @@ class CPictureInfoTag : public IArchivable, public ISerializable, public ISortab
 public:
   CPictureInfoTag() { Reset(); };
   void Reset();
-  virtual void Archive(CArchive& ar);
-  virtual void Serialize(CVariant& value) const;
-  virtual void ToSortable(SortItem& sortable, Field field) const;
+  void Archive(CArchive& ar) override;
+  void Serialize(CVariant& value) const override;
+  void ToSortable(SortItem& sortable, Field field) const override;
   const CPictureInfoTag& operator=(const CPictureInfoTag& item);
   const std::string GetInfo(int info) const;
 

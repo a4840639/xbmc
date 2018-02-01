@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,11 +25,11 @@
 namespace XBMCAddon
 {
   // just need a place for the vtab
-  LanguageHook::~LanguageHook() {}
+  LanguageHook::~LanguageHook() = default;
 
   static XbmcThreads::ThreadLocal<LanguageHook> addonLanguageHookTls;
-  static bool threadLocalInitilialized = false;
-  static xbmcutil::InitFlag initer(threadLocalInitilialized);
+  static bool threadLocalInitialized = false;
+  static xbmcutil::InitFlag initer(threadLocalInitialized);
 
   void LanguageHook::SetLanguageHook(LanguageHook* languageHook)
   {
@@ -40,7 +40,7 @@ namespace XBMCAddon
 
   LanguageHook* LanguageHook::GetLanguageHook()
   {
-    return threadLocalInitilialized ? addonLanguageHookTls.get() : NULL;
+    return threadLocalInitialized ? addonLanguageHookTls.get() : NULL;
   }
 
   void LanguageHook::ClearLanguageHook()

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +20,6 @@
 
 #pragma once
 
-#ifdef HAS_DBUS
 #include "powermanagement/IPowerSyscall.h"
 #include "DBusUtil.h"
 
@@ -47,17 +46,16 @@ class CUPowerSyscall : public CAbstractPowerSyscall
 {
 public:
   CUPowerSyscall();
-  virtual ~CUPowerSyscall();
-  virtual bool Powerdown();
-  virtual bool Suspend();
-  virtual bool Hibernate();
-  virtual bool Reboot();
-  virtual bool CanPowerdown();
-  virtual bool CanSuspend();
-  virtual bool CanHibernate();
-  virtual bool CanReboot();
-  virtual int  BatteryLevel();
-  virtual bool PumpPowerEvents(IPowerEventsCallback *callback);
+  bool Powerdown() override;
+  bool Suspend() override;
+  bool Hibernate() override;
+  bool Reboot() override;
+  bool CanPowerdown() override;
+  bool CanSuspend() override;
+  bool CanHibernate() override;
+  bool CanReboot() override;
+  int  BatteryLevel() override;
+  bool PumpPowerEvents(IPowerEventsCallback *callback) override;
   static bool HasUPower();
 protected:
   bool m_CanPowerdown;
@@ -68,11 +66,8 @@ protected:
   void UpdateCapabilities();
 private:
   std::list<CUPowerSource> m_powerSources;
-  DBusConnection *m_connection;
-  DBusError m_error;
+  CDBusConnection m_connection;
 
   bool m_lowBattery;
   void EnumeratePowerSources();
 };
-
-#endif

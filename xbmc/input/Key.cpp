@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,8 +26,7 @@ CKey::CKey(void)
   Reset();
 }
 
-CKey::~CKey(void)
-{}
+CKey::~CKey(void) = default;
 
 CKey::CKey(uint32_t buttonCode, uint8_t leftTrigger, uint8_t rightTrigger, float leftThumbX, float leftThumbY, float rightThumbX, float rightThumbY, float repeat)
 {
@@ -49,7 +48,7 @@ CKey::CKey(uint32_t buttonCode, unsigned int held)
   m_held = held;
 }
 
-CKey::CKey(uint8_t vkey, wchar_t unicode, char ascii, uint32_t modifiers, unsigned int held)
+CKey::CKey(uint32_t keycode, uint8_t vkey, wchar_t unicode, char ascii, uint32_t modifiers, unsigned int held)
 {
   Reset();
   if (vkey) // FIXME: This needs cleaning up - should we always use the unicode key where available?
@@ -57,6 +56,7 @@ CKey::CKey(uint8_t vkey, wchar_t unicode, char ascii, uint32_t modifiers, unsign
   else
     m_buttonCode = KEY_UNICODE;
   m_buttonCode |= modifiers;
+  m_keycode = keycode;
   m_vkey = vkey;
   m_unicode = unicode;
   m_ascii = ascii;
@@ -80,6 +80,7 @@ void CKey::Reset()
   m_repeat = 0.0f;
   m_fromService = false;
   m_buttonCode = KEY_INVALID;
+  m_keycode = 0;
   m_vkey = 0;
   m_unicode = 0;
   m_ascii = 0;
@@ -99,6 +100,7 @@ CKey& CKey::operator=(const CKey& key)
   m_repeat       = key.m_repeat;
   m_fromService  = key.m_fromService;
   m_buttonCode   = key.m_buttonCode;
+  m_keycode      = key.m_keycode;
   m_vkey         = key.m_vkey;
   m_unicode     = key.m_unicode;
   m_ascii       = key.m_ascii;
@@ -169,101 +171,4 @@ void CKey::SetFromService(bool fromService)
     m_unicode = m_buttonCode - KEY_ASCII;
     
   m_fromService = fromService;
-}
-
-CAction::CAction(int actionID, float amount1 /* = 1.0f */, float amount2 /* = 0.0f */, const std::string &name /* = "" */, unsigned int holdTime /*= 0*/)
-{
-  m_id = actionID;
-  m_amount[0] = amount1;
-  m_amount[1] = amount2;
-  for (unsigned int i = 2; i < max_amounts; i++)
-    m_amount[i] = 0;  
-  m_name = name;
-  m_repeat = 0;
-  m_buttonCode = 0;
-  m_unicode = 0;
-  m_holdTime = holdTime;
-}
-
-CAction::CAction(int actionID, unsigned int state, float posX, float posY, float offsetX, float offsetY, const std::string &name):
-  m_name(name)
-{
-  m_id = actionID;
-  m_amount[0] = posX;
-  m_amount[1] = posY;
-  m_amount[2] = offsetX;
-  m_amount[3] = offsetY;
-  for (unsigned int i = 4; i < max_amounts; i++)
-    m_amount[i] = 0;
-  m_repeat = 0;
-  m_buttonCode = 0;
-  m_unicode = 0;
-  m_holdTime = state;
-}
-
-CAction::CAction(int actionID, wchar_t unicode)
-{
-  m_id = actionID;
-  for (unsigned int i = 0; i < max_amounts; i++)
-    m_amount[i] = 0;  
-  m_repeat = 0;
-  m_buttonCode = 0;
-  m_unicode = unicode;
-  m_holdTime = 0;
-}
-
-CAction::CAction(int actionID, const std::string &name, const CKey &key):
-  m_name(name)
-{
-  m_id = actionID;
-  m_amount[0] = 1; // digital button (could change this for repeat acceleration)
-  for (unsigned int i = 1; i < max_amounts; i++)
-    m_amount[i] = 0;
-  m_repeat = key.GetRepeat();
-  m_buttonCode = key.GetButtonCode();
-  m_unicode = 0;
-  m_holdTime = key.GetHeld();
-  // get the action amounts of the analog buttons
-  if (key.GetButtonCode() == KEY_BUTTON_LEFT_ANALOG_TRIGGER)
-    m_amount[0] = (float)key.GetLeftTrigger() / 255.0f;
-  else if (key.GetButtonCode() == KEY_BUTTON_RIGHT_ANALOG_TRIGGER)
-    m_amount[0] = (float)key.GetRightTrigger() / 255.0f;
-  else if (key.GetButtonCode() == KEY_BUTTON_LEFT_THUMB_STICK)
-  {
-    m_amount[0] = key.GetLeftThumbX();
-    m_amount[1] = key.GetLeftThumbY();
-  }
-  else if (key.GetButtonCode() == KEY_BUTTON_RIGHT_THUMB_STICK)
-  {
-    m_amount[0] = key.GetRightThumbX();
-    m_amount[1] = key.GetRightThumbY();
-  }
-  else if (key.GetButtonCode() == KEY_BUTTON_LEFT_THUMB_STICK_UP)
-    m_amount[0] = key.GetLeftThumbY();
-  else if (key.GetButtonCode() == KEY_BUTTON_LEFT_THUMB_STICK_DOWN)
-    m_amount[0] = -key.GetLeftThumbY();
-  else if (key.GetButtonCode() == KEY_BUTTON_LEFT_THUMB_STICK_LEFT)
-    m_amount[0] = -key.GetLeftThumbX();
-  else if (key.GetButtonCode() == KEY_BUTTON_LEFT_THUMB_STICK_RIGHT)
-    m_amount[0] = key.GetLeftThumbX();
-  else if (key.GetButtonCode() == KEY_BUTTON_RIGHT_THUMB_STICK_UP)
-    m_amount[0] = key.GetRightThumbY();
-  else if (key.GetButtonCode() == KEY_BUTTON_RIGHT_THUMB_STICK_DOWN)
-    m_amount[0] = -key.GetRightThumbY();
-  else if (key.GetButtonCode() == KEY_BUTTON_RIGHT_THUMB_STICK_LEFT)
-    m_amount[0] = -key.GetRightThumbX();
-  else if (key.GetButtonCode() == KEY_BUTTON_RIGHT_THUMB_STICK_RIGHT)
-    m_amount[0] = key.GetRightThumbX();
-}
-
-CAction::CAction(int actionID, const std::string &name):
-  m_name(name)
-{
-  m_id = actionID;
-  for (unsigned int i = 0; i < max_amounts; i++)
-    m_amount[i] = 0;
-  m_repeat = 0;
-  m_buttonCode = 0;
-  m_unicode = 0;
-  m_holdTime = 0;
 }

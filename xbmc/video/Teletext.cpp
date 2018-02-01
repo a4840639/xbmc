@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,28 +32,12 @@
 #include "filesystem/SpecialProtocol.h"
 #include "guilib/GraphicContext.h"
 
-#if HAVE_SDL_VERSION == 1
-#include <SDL/SDL_stdinc.h>
-#elif HAVE_SDL_VERSION == 2
-#include <SDL2/SDL_stdinc.h>
-#else
-#define SDL_memset4(dst, val, len)		\
-do {						\
-	uint32_t _count = (len);		\
-	uint32_t _n = (_count + 3) / 4;		\
-	uint32_t *_p = static_cast<uint32_t *>(dst);	\
-	uint32_t _val = (val);			\
-	if (len == 0) break;			\
-        switch (_count % 4) {			\
-        case 0: do {    *_p++ = _val;		\
-        case 3:         *_p++ = _val;		\
-        case 2:         *_p++ = _val;		\
-        case 1:         *_p++ = _val;		\
-		} while ( --_n );		\
-	}					\
-} while(0)
+static inline void SDL_memset4(uint32_t* dst, uint32_t val, size_t len)
+{
+  for (; len > 0; --len)
+    *dst++ = val;
+}
 #define SDL_memcpy4(dst, src, len) memcpy(dst, src, (len) << 2)
-#endif
 
 static const char *TeletextFont = "special://xbmc/media/Fonts/teletext.ttf";
 
@@ -467,9 +451,7 @@ CTeletextDecoder::CTeletextDecoder()
   m_YOffset = 0;
 }
 
-CTeletextDecoder::~CTeletextDecoder()
-{
-}
+CTeletextDecoder::~CTeletextDecoder() = default;
 
 bool CTeletextDecoder::HandleAction(const CAction &action)
 {
@@ -619,7 +601,7 @@ bool CTeletextDecoder::InitDecoder()
 {
   int error;
 
-  m_txtCache = g_application.m_pPlayer->GetTeletextCache();
+  m_txtCache = g_application.GetAppPlayer().GetTeletextCache();
   if (m_txtCache == NULL)
   {
     CLog::Log(LOGERROR, "%s: called without teletext cache", __FUNCTION__);
@@ -1557,7 +1539,7 @@ void CTeletextDecoder::Decode_BTT()
   if (m_txtCache->SubPageTable[0x1f0] == 0xff || 0 == m_txtCache->astCachetable[0x1f0][m_txtCache->SubPageTable[0x1f0]]) /* not yet received */
     return;
 
-  g_application.m_pPlayer->LoadPage(0x1f0, m_txtCache->SubPageTable[0x1f0],btt);
+  g_application.GetAppPlayer().LoadPage(0x1f0, m_txtCache->SubPageTable[0x1f0],btt);
   if (btt[799] == ' ') /* not completely received or error */
     return;
 
@@ -1623,7 +1605,7 @@ void CTeletextDecoder::Decode_ADIP() /* additional information table */
     if (!p || m_txtCache->SubPageTable[p] == 0xff || 0 == m_txtCache->astCachetable[p][m_txtCache->SubPageTable[p]]) /* not cached (avoid segfault) */
       continue;
 
-    g_application.m_pPlayer->LoadPage(p,m_txtCache->SubPageTable[p],padip);
+    g_application.GetAppPlayer().LoadPage(p,m_txtCache->SubPageTable[p],padip);
     for (j = 0; j < 44; j++)
     {
       b1 = dehamming[padip[20*j+0]];
@@ -1647,7 +1629,7 @@ void CTeletextDecoder::Decode_ADIP() /* additional information table */
         return;
       }
 
-      if (b1>8 || b2>9 || b3>9) /* ignore extries with invalid or hex page numbers */
+      if (b1>8 || b2>9 || b3>9) /* ignore entries with invalid or hex page numbers */
       {
         continue;
       }
@@ -2562,7 +2544,7 @@ int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer
     if (pcache)
     {
       unsigned char drcs_data[23*40];
-      g_application.m_pPlayer->LoadPage((Attribute->charset & 0x10) ? m_txtCache->drcs : m_txtCache->gdrcs, Attribute->charset & 0x0f, drcs_data);
+      g_application.GetAppPlayer().LoadPage((Attribute->charset & 0x10) ? m_txtCache->drcs : m_txtCache->gdrcs, Attribute->charset & 0x0f, drcs_data);
       unsigned char *p;
       if (Char < 23*2)
         p = drcs_data + 20*Char;
@@ -2747,7 +2729,7 @@ int CTeletextDecoder::RenderChar(color_t *buffer,    // pointer to render buffer
 
 TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=decode Level2.5-graphics
                                             unsigned char* PageChar,  // page buffer, min. 25*40
-                                            TextPageAttr_t *PageAtrb, // attribut buffer, min 25*40
+                                            TextPageAttr_t *PageAtrb, // attribute buffer, min 25*40
                                             bool HintMode,            // 1=show hidden information
                                             bool showflof)            // 1=decode FLOF-line
 {
@@ -2768,7 +2750,7 @@ TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=deco
   if (!pCachedPage)  /* not cached: do nothing */
     return NULL;
 
-  g_application.m_pPlayer->LoadPage(m_txtCache->Page, m_txtCache->SubPage, &PageChar[40]);
+  g_application.GetAppPlayer().LoadPage(m_txtCache->Page, m_txtCache->SubPage, &PageChar[40]);
 
   memcpy(&PageChar[8], pCachedPage->p0, 24); /* header line without TimeString */
 
@@ -2899,7 +2881,7 @@ TextPageinfo_t* CTeletextDecoder::DecodePage(bool showl25,             // 1=deco
     held_mosaic  = ' ';
     dhset        = 0;
     IgnoreAtBlackBgSubst = 0;
-    mosaic_pending = esc_pending = 0; // we need to render at least one mosaic char if 'esc' is received immediatly after mosac charset switch on
+    mosaic_pending = esc_pending = 0; // we need to render at least one mosaic char if 'esc' is received immediately after mosaic charset switch on
 
     if (boxed && memchr(&PageChar[row*40], start_box, 40) == 0)
     {
@@ -3276,7 +3258,7 @@ void CTeletextDecoder::Eval_l25(unsigned char* PageChar, TextPageAttr_t *PageAtr
     if (pmot)
     {
       unsigned char pmot_data[23*40];
-      g_application.m_pPlayer->LoadPage((m_txtCache->Page & 0xf00) | 0xfe, 0, pmot_data);
+      g_application.GetAppPlayer().LoadPage((m_txtCache->Page & 0xf00) | 0xfe, 0, pmot_data);
 
       unsigned char *p  = pmot_data;      /* start of link data */
       int o             = 2 * (((m_txtCache->Page & 0xf0) >> 4) * 10 + (m_txtCache->Page & 0x0f));  /* offset of links for current page */
@@ -3482,7 +3464,7 @@ void CTeletextDecoder::Eval_NumberedObject(int p, int s, int packet, int triplet
     return;
 
   unsigned char pagedata[23*40];
-  g_application.m_pPlayer->LoadPage(p, s,pagedata);
+  g_application.GetAppPlayer().LoadPage(p, s,pagedata);
 
   int idata = CDVDTeletextTools::deh24(pagedata + 40*(packet-1) + 1 + 3*triplet);
   int iONr;

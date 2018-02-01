@@ -35,7 +35,8 @@ enum class DialogResponse
 {
   CANCELLED,
   YES,
-  NO
+  NO,
+  CUSTOM
 };
 
 /*! \struct DialogYesNoMessage DialogHelper.h "messaging/helpers/DialogHelper.h"
@@ -51,6 +52,7 @@ struct DialogYesNoMessage
   std::array<CVariant, 3> lines;  //!< Body text to be displayed, specified as three lines. This is mutually exclusive with the text above
   CVariant yesLabel;  //!< Text to show on the yes button
   CVariant noLabel; //!< Text to show on the no button
+  CVariant customLabel; //!< Text to show on the 3rd custom button
   uint32_t autoclose{0}; //!< Time in milliseconds before autoclosing the dialog, 0 means don't autoclose
 };
 
@@ -70,7 +72,29 @@ struct DialogYesNoMessage
   \sa CGUIDialogYesNo::ShowAndGetInput
   \sa DialogYesNoMessage
 */
-DialogResponse ShowYesNoDialogText(CVariant heading, CVariant text, CVariant noLabel = "", CVariant yesLabel = "", uint32_t autoCloseTimeout = 0);
+DialogResponse ShowYesNoDialogText(CVariant heading, CVariant text, CVariant noLabel = CVariant(),
+                                   CVariant yesLabel = CVariant(), uint32_t autoCloseTimeout = 0);
+
+/*!
+\brief This is a helper method to send a threadmessage to open a Yes/No dialog box with a cutom button
+
+\param[in]  heading           The text to display as the dialog box header
+\param[in]  text              The text to display in the dialog body
+\param[in]  noLabel           The text to display on the No button
+                              defaults to No
+\param[in]  yesLabel          The text to display on the Yes button
+                              defaults to Yes
+\param[in]  customLabel       The text to display on the optional 3rd custom button
+                              defaults to empty and button not shown
+\param[in]  autoCloseTimeout  The time before the dialog closes
+                              defaults to 0 show indefinitely
+\return -1 on cancelled, 0 on no, 1 on yes and 2 on 3rd custom response
+\sa ShowYesNoDialogLines
+\sa CGUIDialogYesNo::ShowAndGetInput
+\sa DialogYesNoMessage
+*/
+DialogResponse ShowYesNoCustomDialog(CVariant heading, CVariant text, CVariant noLabel = CVariant(), CVariant yesLabel = CVariant(),
+                                        CVariant customLabel = CVariant(), uint32_t autoCloseTimeout = 0);
 
 /*!
   \brief This is a helper method to send a threadmessage to open a Yes/No dialog box
@@ -90,8 +114,9 @@ DialogResponse ShowYesNoDialogText(CVariant heading, CVariant text, CVariant noL
   \sa CGUIDialogYesNo::ShowAndGetInput
   \sa DialogYesNoMessage
 */
-DialogResponse ShowYesNoDialogLines(CVariant heading, CVariant line0, CVariant line1 = "",
-  CVariant line2 = "", CVariant noLabel = "", CVariant yesLabel = "", uint32_t autoCloseTimeout = 0);
+DialogResponse ShowYesNoDialogLines(CVariant heading, CVariant line0, CVariant line1 = CVariant(),
+                                    CVariant line2 = CVariant(), CVariant noLabel = CVariant(),
+                                    CVariant yesLabel = CVariant(), uint32_t autoCloseTimeout = 0);
 
 }
 }

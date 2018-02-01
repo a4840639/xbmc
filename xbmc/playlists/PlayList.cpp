@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,11 +20,11 @@
 
 #include "PlayList.h"
 #include "PlayListFactory.h"
-#include <sstream>
 #include "video/VideoInfoTag.h"
 #include "music/tags/MusicInfoTag.h"
 #include "filesystem/File.h"
 #include "utils/log.h"
+#include "utils/Random.h"
 #include "utils/URIUtils.h"
 #include "utils/Variant.h"
 #include "utils/StringUtils.h"
@@ -94,10 +94,6 @@ void CPlayList::Add(const CFileItemPtr &item, int iPosition, int iOrder)
   else
     item->m_iprogramCount = iOrder;
 
-  // videodb files are not supported by the filesystem as yet
-  if (item->IsVideoDb())
-    item->SetPath(item->GetVideoInfoTag()->m_strFileNameAndPath);
-
   // increment the playable counter
   item->ClearProperty("unplayable");
   if (m_iPlayableItems < 0)
@@ -127,19 +123,19 @@ void CPlayList::Add(const CFileItemPtr &item)
   Add(item, -1, -1);
 }
 
-void CPlayList::Add(CPlayList& playlist)
+void CPlayList::Add(const CPlayList& playlist)
 {
   for (int i = 0; i < (int)playlist.size(); i++)
     Add(playlist[i], -1, -1);
 }
 
-void CPlayList::Add(CFileItemList& items)
+void CPlayList::Add(const CFileItemList& items)
 {
   for (int i = 0; i < (int)items.Size(); i++)
     Add(items[i]);
 }
 
-void CPlayList::Insert(CPlayList& playlist, int iPosition /* = -1 */)
+void CPlayList::Insert(const CPlayList& playlist, int iPosition /* = -1 */)
 {
   // out of bounds so just add to the end
   int iSize = size();
@@ -155,7 +151,7 @@ void CPlayList::Insert(CPlayList& playlist, int iPosition /* = -1 */)
   }
 }
 
-void CPlayList::Insert(CFileItemList& items, int iPosition /* = -1 */)
+void CPlayList::Insert(const CFileItemList& items, int iPosition /* = -1 */)
 {
   // out of bounds so just add to the end
   int iSize = size();
@@ -280,7 +276,7 @@ void CPlayList::Shuffle(int iPosition)
     CLog::Log(LOGDEBUG,"%s shuffling at pos:%i", __FUNCTION__, iPosition);
 
     ivecItems it = m_vecItems.begin() + iPosition;
-    std::random_shuffle(it, m_vecItems.end());
+    KODI::UTILS::RandomShuffle(it, m_vecItems.end());
 
     // the list is now shuffled!
     m_bShuffled = true;
@@ -291,7 +287,7 @@ struct SSortPlayListItem
 {
   static bool PlaylistSort(const CFileItemPtr &left, const CFileItemPtr &right)
   {
-    return (left->m_iprogramCount <= right->m_iprogramCount);
+    return (left->m_iprogramCount < right->m_iprogramCount);
   }
 };
 

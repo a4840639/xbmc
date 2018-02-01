@@ -24,11 +24,9 @@
 
 using namespace HTML;
 
-CHTMLUtil::CHTMLUtil(void)
-{}
+CHTMLUtil::CHTMLUtil(void) = default;
 
-CHTMLUtil::~CHTMLUtil(void)
-{}
+CHTMLUtil::~CHTMLUtil(void) = default;
 
 void CHTMLUtil::RemoveTags(std::string& strHTML)
 {
@@ -195,7 +193,7 @@ static const HTMLMapping mappings[] =
 
 void CHTMLUtil::ConvertHTMLToW(const std::wstring& strHTML, std::wstring& strStripped)
 {
-  /* TODO:STRING_CLEANUP */
+  //! @todo STRING_CLEANUP
   if (strHTML.empty())
   {
     strStripped.clear();

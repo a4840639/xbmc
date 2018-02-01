@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,10 +19,20 @@
  */
 
 #include "RenderCapture.h"
+#include "ServiceBroker.h"
 #include "utils/log.h"
-#include "windowing/WindowingFactory.h"
+#include "windowing/WinSystem.h"
 #include "settings/AdvancedSettings.h"
 #include "cores/IPlayer.h"
+#include "rendering/RenderSystem.h"
+#ifdef TARGET_WINDOWS
+#include "rendering/dx/DeviceResources.h"
+#include "rendering/dx/RenderContext.h"
+#endif
+
+extern "C" {
+#include "libavutil/mem.h"
+}
 
 CRenderCaptureBase::CRenderCaptureBase()
 {
@@ -37,9 +47,7 @@ CRenderCaptureBase::CRenderCaptureBase()
   m_asyncChecked   = false;
 }
 
-CRenderCaptureBase::~CRenderCaptureBase()
-{
-}
+CRenderCaptureBase::~CRenderCaptureBase() = default;
 
 bool CRenderCaptureBase::UseOcclusionQuery()
 {
@@ -47,67 +55,27 @@ bool CRenderCaptureBase::UseOcclusionQuery()
     return false;
   else if ((g_advancedSettings.m_videoCaptureUseOcclusionQuery == 0) ||
            (g_advancedSettings.m_videoCaptureUseOcclusionQuery == -1 &&
-            g_Windowing.GetRenderQuirks() & RENDER_QUIRKS_BROKEN_OCCLUSION_QUERY))
+            CServiceBroker::GetRenderSystem().GetRenderQuirks() & RENDER_QUIRKS_BROKEN_OCCLUSION_QUERY))
     return false;
   else
     return true;
 }
 
-
-#if defined(HAS_IMXVPU)
-CRenderCaptureIMX::CRenderCaptureIMX()
-{
-}
-
-CRenderCaptureIMX::~CRenderCaptureIMX()
-{
-}
-
-int CRenderCaptureIMX::GetCaptureFormat()
-{
-    return CAPTUREFORMAT_BGRA;
-}
-
-void CRenderCaptureIMX::BeginRender()
-{
-  m_asyncChecked = true;
-  m_asyncSupported = true;
-}
-
-void CRenderCaptureIMX::EndRender()
-{
-  if (m_flags & CAPTUREFLAG_IMMEDIATELY)
-    ReadOut();
-  else
-    SetState(CAPTURESTATE_NEEDSREADOUT);
-}
-
-void* CRenderCaptureIMX::GetRenderBuffer()
-{
-    return m_pixels;
-}
-
-void CRenderCaptureIMX::ReadOut()
-{
-  g_IMXContext.WaitCapture();
-  m_pixels = reinterpret_cast<uint8_t*>(g_IMXContext.GetCaptureBuffer());
-  SetState(CAPTURESTATE_DONE);
-}
-
-#elif defined(TARGET_RASPBERRY_PI)
+#if defined(TARGET_RASPBERRY_PI)
 
 CRenderCaptureDispmanX::CRenderCaptureDispmanX()
 {
+  m_pixels = nullptr;
 }
 
 CRenderCaptureDispmanX::~CRenderCaptureDispmanX()
 {
-	delete[] m_pixels;
+  delete[] m_pixels;
 }
 
 int CRenderCaptureDispmanX::GetCaptureFormat()
 {
-	return CAPTUREFORMAT_BGRA;
+  return CAPTUREFORMAT_BGRA;
 }
 
 void CRenderCaptureDispmanX::BeginRender()
@@ -116,14 +84,15 @@ void CRenderCaptureDispmanX::BeginRender()
 
 void CRenderCaptureDispmanX::EndRender()
 {
-	m_pixels = g_RBP.CaptureDisplay(m_width, m_height, NULL, true);
+  delete[] m_pixels;
+  m_pixels = g_RBP.CaptureDisplay(m_width, m_height, NULL, true);
 
-	SetState(CAPTURESTATE_DONE);
+  SetState(CAPTURESTATE_DONE);
 }
 
 void* CRenderCaptureDispmanX::GetRenderBuffer()
 {
-    return m_pixels;
+  return m_pixels;
 }
 
 void CRenderCaptureDispmanX::ReadOut()
@@ -170,14 +139,14 @@ void CRenderCaptureGL::BeginRender()
   if (!m_asyncChecked)
   {
 #ifndef HAS_GLES
-    m_asyncSupported = g_Windowing.IsExtSupported("GL_ARB_pixel_buffer_object");
-    m_occlusionQuerySupported = g_Windowing.IsExtSupported("GL_ARB_occlusion_query");
+    m_asyncSupported = CServiceBroker::GetRenderSystem().IsExtSupported("GL_ARB_pixel_buffer_object");
+    m_occlusionQuerySupported = CServiceBroker::GetRenderSystem().IsExtSupported("GL_ARB_occlusion_query");
 
     if (m_flags & CAPTUREFLAG_CONTINUOUS)
     {
       if (!m_occlusionQuerySupported)
         CLog::Log(LOGWARNING, "CRenderCaptureGL: GL_ARB_occlusion_query not supported, performance might suffer");
-      if (!g_Windowing.IsExtSupported("GL_ARB_pixel_buffer_object"))
+      if (!CServiceBroker::GetRenderSystem().IsExtSupported("GL_ARB_pixel_buffer_object"))
         CLog::Log(LOGWARNING, "CRenderCaptureGL: GL_ARB_pixel_buffer_object not supported, performance might suffer");
       if (UseOcclusionQuery())
         CLog::Log(LOGWARNING, "CRenderCaptureGL: GL_ARB_occlusion_query disabled, performance might suffer");
@@ -315,22 +284,17 @@ void CRenderCaptureGL::PboToBuffer()
 
 CRenderCaptureDX::CRenderCaptureDX()
 {
-  m_renderTexture = nullptr;
-  m_renderSurface = nullptr;
-  m_copySurface   = nullptr;
   m_query         = nullptr;
   m_surfaceWidth  = 0;
   m_surfaceHeight = 0;
-
-  g_Windowing.Register(this);
+  DX::Windowing().Register(this);
 }
 
 CRenderCaptureDX::~CRenderCaptureDX()
 {
   CleanupDX();
-  delete[] m_pixels;
-
-  g_Windowing.Unregister(this);
+  av_freep(&m_pixels);
+  DX::Windowing().Unregister(this);
 }
 
 int CRenderCaptureDX::GetCaptureFormat()
@@ -340,21 +304,20 @@ int CRenderCaptureDX::GetCaptureFormat()
 
 void CRenderCaptureDX::BeginRender()
 {
-  ID3D11DeviceContext* pContext = g_Windowing.Get3D11Context();
-  ID3D11Device* pDevice = g_Windowing.Get3D11Device();
-  CD3D11_QUERY_DESC queryDesc(D3D11_QUERY_OCCLUSION);
+  ID3D11DeviceContext* pContext = DX::DeviceResources::Get()->GetD3DContext();
+  ID3D11Device* pDevice = DX::DeviceResources::Get()->GetD3DDevice();
+  CD3D11_QUERY_DESC queryDesc(D3D11_QUERY_EVENT);
 
   if (!m_asyncChecked)
   {
-    m_asyncSupported = S_OK == pDevice->CreateQuery(&queryDesc, nullptr);
+    m_asyncSupported = SUCCEEDED(pDevice->CreateQuery(&queryDesc, nullptr));
     if (m_flags & CAPTUREFLAG_CONTINUOUS)
     {
       if (!m_asyncSupported)
-        CLog::Log(LOGWARNING, "CRenderCaptureDX: D3D11_QUERY_OCCLUSION not supported, performance might suffer");
+        CLog::Log(LOGWARNING, "%s: D3D11_QUERY_OCCLUSION not supported, performance might suffer.", __FUNCTION__);
       if (!UseOcclusionQuery())
-        CLog::Log(LOGWARNING, "CRenderCaptureDX: D3D11_QUERY_OCCLUSION disabled, performance might suffer");
+        CLog::Log(LOGWARNING, "%s: D3D11_QUERY_OCCLUSION disabled, performance might suffer.", __FUNCTION__);
     }
-
     m_asyncChecked = true;
   }
 
@@ -362,47 +325,19 @@ void CRenderCaptureDX::BeginRender()
 
   if (m_surfaceWidth != m_width || m_surfaceHeight != m_height)
   {
-    if (m_renderSurface)
-    {
-      while(m_renderSurface->Release() > 0) {}
-      m_renderSurface = nullptr;
-    }
+    m_renderTex.Release();
+    m_copyTex.Release();
 
-    if (m_copySurface)
+    if (!m_renderTex.Create(m_width, m_height, 1, D3D11_USAGE_DEFAULT, DXGI_FORMAT_B8G8R8A8_UNORM))
     {
-      while (m_copySurface->Release() > 0) {}
-      m_copySurface = nullptr;
-    }
-
-    CD3D11_TEXTURE2D_DESC texDesc(DXGI_FORMAT_B8G8R8A8_UNORM, m_width, m_height, 1, 1, D3D11_BIND_RENDER_TARGET);
-    result = pDevice->CreateTexture2D(&texDesc, nullptr, &m_renderTexture);
-    if (S_OK != result)
-    {
-      CLog::Log(LOGERROR, "CRenderCaptureDX::BeginRender: CreateTexture2D (RENDER_TARGET) failed %s",
-                g_Windowing.GetErrorDescription(result).c_str());
+      CLog::LogF(LOGERROR, "CreateTexture2D (RENDER_TARGET) failed.");
       SetState(CAPTURESTATE_FAILED);
       return;
     }
 
-    CD3D11_RENDER_TARGET_VIEW_DESC rtDesc(D3D11_RTV_DIMENSION_TEXTURE2D);
-    result = pDevice->CreateRenderTargetView(m_renderTexture, &rtDesc, &m_renderSurface);
-    if (S_OK != result)
+    if (!m_copyTex.Create(m_width, m_height, 1, D3D11_USAGE_STAGING, DXGI_FORMAT_B8G8R8A8_UNORM))
     {
-      CLog::Log(LOGERROR, "CRenderCaptureDX::BeginRender: CreateRenderTargetView failed %s",
-        g_Windowing.GetErrorDescription(result).c_str());
-      SetState(CAPTURESTATE_FAILED);
-      return;
-    }
-
-    texDesc.BindFlags = 0;
-    texDesc.Usage = D3D11_USAGE_STAGING;
-    texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-
-    result = pDevice->CreateTexture2D(&texDesc, nullptr, &m_copySurface);
-    if (S_OK != result)
-    {
-      CLog::Log(LOGERROR, "CRenderCaptureDX::BeginRender: CreateTexture2D (USAGE_STAGING) failed %s",
-                g_Windowing.GetErrorDescription(result).c_str());
+      CLog::LogF(LOGERROR, "CreateRenderTargetView failed.");
       SetState(CAPTURESTATE_FAILED);
       return;
     }
@@ -414,11 +349,9 @@ void CRenderCaptureDX::BeginRender()
   if (m_bufferSize != m_width * m_height * 4)
   {
     m_bufferSize = m_width * m_height * 4;
-    delete[] m_pixels;
-    m_pixels = new uint8_t[m_bufferSize];
+    av_freep(&m_pixels);
+    m_pixels = (uint8_t*)av_malloc(m_bufferSize);
   }
-
-  pContext->OMSetRenderTargets(1, &m_renderSurface, nullptr);
 
   if (m_asyncSupported && UseOcclusionQuery())
   {
@@ -426,44 +359,34 @@ void CRenderCaptureDX::BeginRender()
     if (!m_query)
     {
       result = pDevice->CreateQuery(&queryDesc, &m_query);
-      if (S_OK != result)
+      if (FAILED(result))
       {
-        CLog::Log(LOGERROR, "CRenderCaptureDX::BeginRender: CreateQuery failed %s",
-                  g_Windowing.GetErrorDescription(result).c_str());
+        CLog::LogF(LOGERROR, "CreateQuery failed %s",
+                            DX::GetErrorDescription(result).c_str());
         m_asyncSupported = false;
-        if (m_query)
-        {
-          while (m_query->Release() > 0) {}
-          m_query = nullptr;
-        }
+        SAFE_RELEASE(m_query);
       }
     }
   }
   else
   {
     //don't use an occlusion query, clean up any old one
-    if (m_query)
-    {
-      while (m_query->Release() > 0) {}
-      m_query = nullptr;
-    }
+    SAFE_RELEASE(m_query);
   }
-
-  if (m_query)
-    g_Windowing.GetImmediateContext()->Begin(m_query);
 }
 
 void CRenderCaptureDX::EndRender()
 {
-  g_Windowing.FinishCommandList();
-  ID3D11DeviceContext* pContext = g_Windowing.GetImmediateContext();
+  // send commands to the GPU queue
+  auto deviceResources = DX::DeviceResources::Get();
+  deviceResources->FinishCommandList();
+  ID3D11DeviceContext* pContext = deviceResources->GetImmediateContext();
 
-  pContext->CopyResource(m_copySurface, m_renderTexture);
+  pContext->CopyResource(m_copyTex.Get(), m_renderTex.Get());
 
   if (m_query)
   {
     pContext->End(m_query);
-    pContext->GetData(m_query, nullptr, 0, 0); //flush the query request
   }
 
   if (m_flags & CAPTUREFLAG_IMMEDIATELY)
@@ -477,14 +400,15 @@ void CRenderCaptureDX::ReadOut()
   if (m_query)
   {
     //if the result of the occlusion query is available, the data is probably also written into m_copySurface
-    HRESULT result = g_Windowing.GetImmediateContext()->GetData(m_query, nullptr, 0, 0);
-    if (S_OK == result)
+    HRESULT result = DX::DeviceResources::Get()->GetImmediateContext()->GetData(m_query, nullptr, 0, 0);
+    if (SUCCEEDED(result))
     {
-      SurfaceToBuffer();
+      if (S_OK == result)
+        SurfaceToBuffer();
     }
-    else if (S_FALSE != result)
+    else
     {
-      CLog::Log(LOGERROR, "CRenderCaptureDX::ReadOut: GetData failed");
+      CLog::Log(LOGERROR, "%s: GetData failed.", __FUNCTION__);
       SurfaceToBuffer();
     }
   }
@@ -496,10 +420,8 @@ void CRenderCaptureDX::ReadOut()
 
 void CRenderCaptureDX::SurfaceToBuffer()
 {
-  ID3D11DeviceContext* pContext = g_Windowing.GetImmediateContext();
-
   D3D11_MAPPED_SUBRESOURCE lockedRect;
-  if (pContext->Map(m_copySurface, 0, D3D11_MAP_READ, 0, &lockedRect) == S_OK)
+  if (m_copyTex.LockRect(0, &lockedRect, D3D11_MAP_READ))
   {
     //if pitch is same, do a direct copy, otherwise copy one line at a time
     if (lockedRect.RowPitch == m_width * 4)
@@ -511,23 +433,17 @@ void CRenderCaptureDX::SurfaceToBuffer()
       for (unsigned int y = 0; y < m_height; y++)
         memcpy(m_pixels + y * m_width * 4, (uint8_t*)lockedRect.pData + y * lockedRect.RowPitch, m_width * 4);
     }
-    pContext->Unmap(m_copySurface, 0);
+    m_copyTex.UnlockRect(0);
     SetState(CAPTURESTATE_DONE);
   }
   else
   {
-    CLog::Log(LOGERROR, "CRenderCaptureDX::SurfaceToBuffer: locking m_copySurface failed");
+    CLog::Log(LOGERROR, "%s: locking m_copySurface failed.", __FUNCTION__);
     SetState(CAPTURESTATE_FAILED);
   }
 }
 
-void CRenderCaptureDX::OnLostDevice()
-{
-  CleanupDX();
-  SetState(CAPTURESTATE_FAILED);
-}
-
-void CRenderCaptureDX::OnDestroyDevice()
+void CRenderCaptureDX::OnDestroyDevice(bool fatal)
 {
   CleanupDX();
   SetState(CAPTURESTATE_FAILED);
@@ -535,30 +451,9 @@ void CRenderCaptureDX::OnDestroyDevice()
 
 void CRenderCaptureDX::CleanupDX()
 {
-  if (m_renderSurface)
-  {
-    while (m_renderSurface->Release() > 0) {}
-    m_renderSurface = nullptr;
-  }
-
-  if (m_renderTexture)
-  {
-    while (m_renderTexture->Release() > 0) {}
-    m_renderTexture = nullptr;
-  }
-
-  if (m_copySurface)
-  {
-    while (m_copySurface->Release() > 0) {}
-    m_copySurface = nullptr;
-  }
-
-  if (m_query)
-  {
-    while (m_query->Release() > 0) {}
-    m_query = nullptr;
-  }
-
+  m_renderTex.Release();
+  m_copyTex.Release();
+  SAFE_RELEASE(m_query);
   m_surfaceWidth = 0;
   m_surfaceHeight = 0;
 }

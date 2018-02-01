@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,13 +25,13 @@
 #include "DVDClock.h"
 #include "DVDSubtitles/DVDSubtitleParser.h"
 #include "DVDCodecs/DVDFactoryCodec.h"
+#include "cores/VideoPlayer/Interface/Addon/DemuxPacket.h"
+#include "cores/VideoPlayer/Interface/Addon/TimingConstants.h"
 #include "utils/log.h"
 #include "threads/SingleLock.h"
-#ifdef TARGET_POSIX
-#include "config.h"
-#endif
 
-CVideoPlayerSubtitle::CVideoPlayerSubtitle(CDVDOverlayContainer* pOverlayContainer)
+CVideoPlayerSubtitle::CVideoPlayerSubtitle(CDVDOverlayContainer* pOverlayContainer, CProcessInfo &processInfo)
+: IDVDStreamPlayer(processInfo)
 {
   m_pOverlayContainer = pOverlayContainer;
 
@@ -58,7 +58,7 @@ void CVideoPlayerSubtitle::SendMessage(CDVDMsg* pMsg, int priority)
 
   if (pMsg->IsType(CDVDMsg::DEMUXER_PACKET))
   {
-    CDVDMsgDemuxerPacket* pMsgDemuxerPacket = (CDVDMsgDemuxerPacket*)pMsg;
+    CDVDMsgDemuxerPacket* pMsgDemuxerPacket = static_cast<CDVDMsgDemuxerPacket*>(pMsg);
     DemuxPacket* pPacket = pMsgDemuxerPacket->GetPacket();
 
     if (m_pOverlayCodec)
@@ -90,7 +90,7 @@ void CVideoPlayerSubtitle::SendMessage(CDVDMsg* pMsg, int priority)
   }
   else if( pMsg->IsType(CDVDMsg::SUBTITLE_CLUTCHANGE) )
   {
-    CDVDMsgSubtitleClutChange* pData = (CDVDMsgSubtitleClutChange*)pMsg;
+    CDVDMsgSubtitleClutChange* pData = static_cast<CDVDMsgSubtitleClutChange*>(pMsg);
     for (int i = 0; i < 16; i++)
     {
       uint8_t* color = m_dvdspus.m_clut[i];

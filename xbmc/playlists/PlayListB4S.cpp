@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -50,11 +50,9 @@ using namespace PLAYLIST;
   </playlist>
  </WinampXML>
 ------------------------ end of example b4s playlist file ---------------------------------*/
-CPlayListB4S::CPlayListB4S(void)
-{}
+CPlayListB4S::CPlayListB4S(void) = default;
 
-CPlayListB4S::~CPlayListB4S(void)
-{}
+CPlayListB4S::~CPlayListB4S(void) = default;
 
 
 bool CPlayListB4S::LoadData(std::istream& stream)
@@ -127,7 +125,7 @@ void CPlayListB4S::Save(const std::string& strFileName) const
   std::string write;
   write += StringUtils::Format("<?xml version=%c1.0%c encoding='UTF-8' standalone=%cyes%c?>\n", 34, 34, 34, 34);
   write += StringUtils::Format("<WinampXML>\n");
-  write += StringUtils::Format("  <playlist num_entries=%c%" PRIuS"%c label=%c%s%c>\n", 34, m_vecItems.size(), 34, 34, m_strPlayListName.c_str(), 34);
+  write += StringUtils::Format("  <playlist num_entries=\"{0}\" label=\"{1}\">\n", m_vecItems.size(),m_strPlayListName.c_str());
   for (int i = 0; i < (int)m_vecItems.size(); ++i)
   {
     const CFileItemPtr item = m_vecItems[i];

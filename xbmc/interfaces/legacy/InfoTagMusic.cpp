@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -42,6 +42,11 @@ namespace XBMCAddon
       delete infoTag;
     }
 
+    int InfoTagMusic::getDbId()
+    {
+      return infoTag->GetDatabaseId();
+    }
+
     String InfoTagMusic::getURL()
     {
       return infoTag->GetURL();
@@ -50,6 +55,11 @@ namespace XBMCAddon
     String InfoTagMusic::getTitle()
     {
       return infoTag->GetTitle();
+    }
+
+    String InfoTagMusic::getMediaType()
+    {
+      return infoTag->GetType();
     }
 
     String InfoTagMusic::getArtist()
@@ -75,6 +85,16 @@ namespace XBMCAddon
     int InfoTagMusic::getDuration()
     {
       return infoTag->GetDuration();
+    }
+
+    int InfoTagMusic::getRating()
+    {
+      return infoTag->GetRating();
+    }
+
+    int InfoTagMusic::getUserRating()
+    {
+      return infoTag->GetUserrating();
     }
 
     int InfoTagMusic::getTrack()

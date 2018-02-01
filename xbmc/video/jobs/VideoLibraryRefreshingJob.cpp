@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,19 +23,25 @@
 #include "TextureDatabase.h"
 #include "addons/Scraper.h"
 #include "dialogs/GUIDialogExtendedProgressBar.h"
-#include "dialogs/GUIDialogOK.h"
 #include "dialogs/GUIDialogProgress.h"
 #include "dialogs/GUIDialogSelect.h"
 #include "dialogs/GUIDialogYesNo.h"
 #include "guilib/GUIKeyboardFactory.h"
 #include "guilib/GUIWindowManager.h"
+#include "guilib/LocalizeStrings.h"
 #include "media/MediaType.h"
+#include "messaging/helpers/DialogOKHelper.h"
 #include "utils/log.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "video/VideoDatabase.h"
 #include "video/VideoInfoDownloader.h"
 #include "video/VideoInfoScanner.h"
+#include "video/tags/IVideoInfoTagLoader.h"
+#include "video/tags/VideoInfoTagLoaderFactory.h"
+
+using namespace KODI::MESSAGING;
+using namespace VIDEO;
 
 CVideoLibraryRefreshingJob::CVideoLibraryRefreshingJob(CFileItemPtr item, bool forceRefresh, bool refreshAll, bool ignoreNfo /* = false */, const std::string& searchTitle /* = "" */)
   : CVideoLibraryProgressJob(nullptr),
@@ -46,8 +52,7 @@ CVideoLibraryRefreshingJob::CVideoLibraryRefreshingJob(CFileItemPtr item, bool f
     m_searchTitle(searchTitle)
 { }
 
-CVideoLibraryRefreshingJob::~CVideoLibraryRefreshingJob()
-{ }
+CVideoLibraryRefreshingJob::~CVideoLibraryRefreshingJob() = default;
 
 bool CVideoLibraryRefreshingJob::operator==(const CJob* job) const
 {
@@ -81,7 +86,6 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
     itemTitle = m_item->GetMovieName(scanSettings.parent_name);
 
   CScraperUrl scraperUrl;
-  VIDEO::CVideoInfoScanner scanner;
   bool needsRefresh = m_forceRefresh;
   bool hasDetails = false;
   bool ignoreNfo = m_ignoreNfo;
@@ -92,18 +96,28 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
   {
     if (!ignoreNfo)
     {
+      std::unique_ptr<IVideoInfoTagLoader> loader;
+      loader.reset(CVideoInfoTagLoaderFactory::CreateLoader(*m_item, scraper,
+                                                            scanSettings.parent_name_root));
       // check if there's an NFO for the item
-      CNfoFile::NFOResult nfoResult = scanner.CheckForNFOFile(m_item.get(), scanSettings.parent_name_root, scraper, scraperUrl);
+      CInfoScanner::INFO_TYPE nfoResult = CInfoScanner::NO_NFO;
+      if (loader)
+      {
+        CVideoInfoTag dummy;
+        nfoResult = loader->Load(dummy, false);
+        if (nfoResult == CInfoScanner::URL_NFO)
+          scraperUrl = loader->ScraperUrl();
+      }
+
       // if there's no NFO remember it in case we have to refresh again
-      if (nfoResult == CNfoFile::ERROR_NFO)
+      if (nfoResult == CInfoScanner::ERROR_NFO)
         ignoreNfo = true;
-      else if (nfoResult != CNfoFile::NO_NFO)
+      else if (nfoResult != CInfoScanner::NO_NFO)
         hasDetails = true;
 
-
       // if we are performing a forced refresh ask the user to choose between using a valid NFO and a valid scraper
-      if (needsRefresh && IsModal() && !scraper->IsNoop() &&
-         (nfoResult == CNfoFile::URL_NFO || nfoResult == CNfoFile::COMBINED_NFO || nfoResult == CNfoFile::FULL_NFO))
+      if (needsRefresh && IsModal() && !scraper->IsNoop()
+          && nfoResult != CInfoScanner::ERROR_NFO)
       {
         int heading = 20159;
         if (scraper->Content() == CONTENT_MOVIES)
@@ -157,7 +171,7 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
           else
           {
             // ask the user what to do
-            CGUIDialogSelect* selectDialog = static_cast<CGUIDialogSelect*>(g_windowManager.GetWindow(WINDOW_DIALOG_SELECT));
+            CGUIDialogSelect* selectDialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
             selectDialog->Reset();
             selectDialog->SetHeading(scraper->Content() == CONTENT_TVSHOWS ? 20356 : 196);
             for (const auto& itemResult : itemResultList)
@@ -292,14 +306,18 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
     }
 
     // finally download the information for the item
-    if (!scanner.RetrieveVideoInfo(items, scanSettings.parent_name, scraper->Content(), !ignoreNfo, &scraperUrl, m_refreshAll, GetProgressDialog()))
+    CVideoInfoScanner scanner;
+    if (!scanner.RetrieveVideoInfo(items, scanSettings.parent_name,
+                                   scraper->Content(), !ignoreNfo,
+                                   scraperUrl.m_url.empty() ? NULL : &scraperUrl,
+                                   m_refreshAll, GetProgressDialog()))
     {
       // something went wrong
       MarkFinished();
 
       // check if the user cancelled
       if (!IsCancelled() && IsModal())
-        CGUIDialogOK::ShowAndGetInput(195, itemTitle);
+        HELPERS::ShowOKDialogText(CVariant{195}, CVariant{itemTitle});
 
       return false;
     }
@@ -324,7 +342,7 @@ bool CVideoLibraryRefreshingJob::Work(CVideoDatabase &db)
   } while (needsRefresh);
 
   if (failure && IsModal())
-    CGUIDialogOK::ShowAndGetInput(195, itemTitle);
+    HELPERS::ShowOKDialogText(CVariant{195}, CVariant{itemTitle});
 
   return true;
 }

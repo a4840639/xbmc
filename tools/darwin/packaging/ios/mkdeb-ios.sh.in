@@ -1,19 +1,21 @@
 #!/bin/sh
 
+set -ex
+
 # usage: ./mkdeb-ios.sh release/debug (case insensitive)
 # Allows us to run mkdeb-ios.sh from anywhere in the three, rather than the tools/darwin/packaging/ios folder only
-XBMC_DEPENDS_ROOT=@DEPENDS_ROOT_FOR_XCODE@
+NATIVEPREFIX=@NATIVEPREFIX@
 SWITCH=`echo $1 | tr [A-Z] [a-z]`
 DIRNAME=`dirname $0`
 DSYM_TARGET_DIR=/Users/Shared/xbmc-depends/dSyms
 DSYM_FILENAME=@APP_NAME@.app.dSYM
 ARM64=false
 
-if [ ${SWITCH:-""} = "debug" ]; then
+if [ "${SWITCH#*debug}" != "${SWITCH}" ]; then
   echo "Packaging Debug target for iOS"
   APP="$DIRNAME/../../../../build/Debug-iphoneos/@APP_NAME@.app"
   DSYM="$DIRNAME/../../../../build/Debug-iphoneos/$DSYM_FILENAME"  
-elif [ ${SWITCH:-""} = "release" ]; then
+elif [ "${SWITCH#*release}" != "${SWITCH}" ]; then
   echo "Packaging Release target for iOS"
   APP="$DIRNAME/../../../../build/Release-iphoneos/@APP_NAME@.app"
   DSYM="$DIRNAME/../../../../build/Release-iphoneos/$DSYM_FILENAME"   
@@ -39,16 +41,17 @@ if [ ! -d $APP ]; then
   echo "@APP_NAME@.app not found! are you sure you built $1 target?"
   exit 1
 fi
-if [ -f "${XBMC_DEPENDS_ROOT}/buildtools-native/bin/fakeroot" ]; then
-  SUDO="${XBMC_DEPENDS_ROOT}/buildtools-native/bin/fakeroot"
-elif [ -f "/usr/libexec/fauxsu/libfauxsu.dylib" ]; then
-  export DYLD_INSERT_LIBRARIES=/usr/libexec/fauxsu/libfauxsu.dylib
+
+# also check for SIP (System Integrity Protection) here (via csrutil) - fakeroot et al are not working when it is enabled
+# fall back to oldschool sudo in that case
+if [ -f "${NATIVEPREFIX}/bin/fakeroot" -a "`csrutil status | grep enabled`"x == "x" ]; then
+  SUDO="${NATIVEPREFIX}/bin/fakeroot"
 elif [ -f "/usr/bin/sudo" ]; then
   SUDO="/usr/bin/sudo"
 fi
-if [ -f "${XBMC_DEPENDS_ROOT}/buildtools-native/bin/dpkg-deb" ]; then
+if [ -f "${NATIVEPREFIX}/bin/dpkg-deb" ]; then
   # make sure we pickup our tar, gnutar will fail when dpkg -i
-  bin_path=$(cd ${XBMC_DEPENDS_ROOT}/buildtools-native/bin; pwd)
+  bin_path=$(cd ${NATIVEPREFIX}/bin; pwd)
   export PATH=${bin_path}:${PATH}
 fi
 
@@ -77,7 +80,7 @@ ${SUDO} rm -rf $DIRNAME/$ARCHIVE
 
 # create debian control file.
 mkdir -p $DIRNAME/$PACKAGE/DEBIAN
-if [ $ARM64 ]; then
+if $ARM64; then
   echo "Package: $PACKAGE_ARM64"                  >  $DIRNAME/$PACKAGE/DEBIAN/control
   echo "Name: @APP_NAME@-iOS (64-bit)"            >> $DIRNAME/$PACKAGE/DEBIAN/control
   echo "Depends: firmware (>= 7.0)"               >> $DIRNAME/$PACKAGE/DEBIAN/control

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #include "ResourceFile.h"
 #include "URL.h"
 #include "Util.h"
+#include "ServiceBroker.h"
 #include "addons/AddonManager.h"
 #include "addons/Resource.h"
 #include "utils/URIUtils.h"
@@ -32,8 +33,7 @@ CResourceFile::CResourceFile()
   : COverrideFile(false)
 { }
 
-CResourceFile::~CResourceFile()
-{ }
+CResourceFile::~CResourceFile() = default;
 
 bool CResourceFile::TranslatePath(const std::string &path, std::string &translatedPath)
 {
@@ -58,7 +58,7 @@ bool CResourceFile::TranslatePath(const CURL &url, std::string &translatedPath)
     return false;
 
   AddonPtr addon;
-  if (!CAddonMgr::GetInstance().GetAddon(addonId, addon, ADDON_UNKNOWN, true) || addon == NULL)
+  if (!CServiceBroker::GetAddonMgr().GetAddon(addonId, addon, ADDON_UNKNOWN, true) || addon == NULL)
     return false;
 
   std::shared_ptr<CResource> resource = std::dynamic_pointer_cast<ADDON::CResource>(addon);

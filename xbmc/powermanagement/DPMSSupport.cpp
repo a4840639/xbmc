@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2009-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,11 +21,11 @@
 #include "system.h"
 #include "DPMSSupport.h"
 #include "utils/log.h"
-#include "windowing/WindowingFactory.h"
 #include <assert.h>
 #include <string>
 #ifdef TARGET_WINDOWS
 #include "guilib/GraphicContext.h"
+#include "rendering/dx/RenderContext.h"
 #endif
 
 //////// Generic, non-platform-specific code
@@ -104,6 +104,8 @@ bool DPMSSupport::DisablePowerSaving()
 ///////// Platform-specific support
 
 #if defined(HAVE_X11)
+#include "ServiceBroker.h"
+#include "windowing/X11/WinSystemX11.h"
 //// X Windows
 
 // Here's a sad story: our Windows-inspired BOOL type from linux/PlatformDefs.h
@@ -129,8 +131,10 @@ static const CARD16 X_DPMS_MODES[] =
 
 void DPMSSupport::PlatformSpecificInit()
 {
-  Display* dpy = g_Windowing.GetDisplay();
-  if (dpy == NULL) return;
+  CWinSystemX11 &winSystem = dynamic_cast<CWinSystemX11&>(CServiceBroker::GetWinSystem());
+  Display* dpy = winSystem.GetDisplay();
+  if (dpy == NULL)
+    return;
 
   int event_base, error_base;   // we ignore these
   if (!DPMSQueryExtension(dpy, &event_base, &error_base)) {
@@ -152,8 +156,10 @@ void DPMSSupport::PlatformSpecificInit()
 
 bool DPMSSupport::PlatformSpecificEnablePowerSaving(PowerSavingMode mode)
 {
-  Display* dpy = g_Windowing.GetDisplay();
-  if (dpy == NULL) return false;
+  CWinSystemX11 &winSystem = dynamic_cast<CWinSystemX11&>(CServiceBroker::GetWinSystem());
+  Display* dpy = winSystem.GetDisplay();
+  if (dpy == NULL)
+    return false;
 
   // This is not needed on my ATI Radeon, but the docs say that DPMSForceLevel
   // after a DPMSDisable (from SDL) should not normally work.
@@ -167,14 +173,16 @@ bool DPMSSupport::PlatformSpecificEnablePowerSaving(PowerSavingMode mode)
 
 bool DPMSSupport::PlatformSpecificDisablePowerSaving()
 {
-  Display* dpy = g_Windowing.GetDisplay();
-  if (dpy == NULL) return false;
+  CWinSystemX11 &winSystem = dynamic_cast<CWinSystemX11&>(CServiceBroker::GetWinSystem());
+  Display* dpy = winSystem.GetDisplay();
+  if (dpy == NULL)
+    return false;
 
   DPMSForceLevel(dpy, DPMSModeOn);
   DPMSDisable(dpy);
   XFlush(dpy);
 
-  g_Windowing.RecreateWindow();
+  winSystem.RecreateWindow();
 
   return true;
 }
@@ -183,9 +191,13 @@ bool DPMSSupport::PlatformSpecificDisablePowerSaving()
 #elif defined(TARGET_WINDOWS)
 void DPMSSupport::PlatformSpecificInit()
 {
+#ifdef TARGET_WINDOWS_DESKTOP
   // Assume we support DPMS. Is there a way to test it?
   m_supportedModes.push_back(OFF);
   m_supportedModes.push_back(STANDBY);
+#else
+  CLog::Log(LOGINFO, "DPMS: not supported on this platform");
+#endif
 }
 
 bool DPMSSupport::PlatformSpecificEnablePowerSaving(PowerSavingMode mode)
@@ -197,12 +209,14 @@ bool DPMSSupport::PlatformSpecificEnablePowerSaving(PowerSavingMode mode)
   }
   switch(mode)
   {
+#ifdef TARGET_WINDOWS_DESKTOP
   case OFF:
     // Turn off display
-    return SendMessage(g_Windowing.GetHwnd(), WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM) 2) == 0;
+    return SendMessage(DX::Windowing().GetHwnd(), WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM) 2) == 0;
   case STANDBY:
     // Set display to low power
-    return SendMessage(g_Windowing.GetHwnd(), WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM) 1) == 0;
+    return SendMessage(DX::Windowing().GetHwnd(), WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM) 1) == 0;
+#endif
   default:
     return true;
   }
@@ -210,8 +224,12 @@ bool DPMSSupport::PlatformSpecificEnablePowerSaving(PowerSavingMode mode)
 
 bool DPMSSupport::PlatformSpecificDisablePowerSaving()
 {
+#ifdef TARGET_WINDOWS_STORE
+  return false;
+#else
   // Turn display on
-  return SendMessage(g_Windowing.GetHwnd(), WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM) -1) == 0;
+  return SendMessage(DX::Windowing().GetHwnd(), WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM) -1) == 0;
+#endif
 }
 
 #elif defined(TARGET_DARWIN_OSX)

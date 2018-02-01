@@ -1,7 +1,7 @@
 /*
  *      Initial code sponsored by: Voddler Inc (voddler.com)
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,23 +29,21 @@ class CDVDOverlaySpu;
 class CDVDOverlaySSA;
 typedef struct ass_image ASS_Image;
 
-#if defined(HAS_GL) || HAS_GLES == 2
-
 namespace OVERLAY {
 
   class COverlayTextureGL : public COverlay
   {
   public:
-     COverlayTextureGL(CDVDOverlayImage* o);
-     COverlayTextureGL(CDVDOverlaySpu* o);
-    virtual ~COverlayTextureGL();
+     explicit COverlayTextureGL(CDVDOverlayImage* o);
+     explicit COverlayTextureGL(CDVDOverlaySpu* o);
+    ~COverlayTextureGL() override;
 
-    void Render(SRenderState& state);
+    void Render(SRenderState& state) override;
 
     GLuint m_texture;
     float  m_u;
     float  m_v;
-    bool   m_pma; /*< is alpha in texture premultipled in the values */
+    bool   m_pma; /*< is alpha in texture premultiplied in the values */
   };
 
   class COverlayGlyphGL : public COverlay
@@ -53,9 +51,9 @@ namespace OVERLAY {
   public:
    COverlayGlyphGL(ASS_Image* images, int width, int height);
 
-   virtual ~COverlayGlyphGL();
+   ~COverlayGlyphGL() override;
 
-   void Render(SRenderState& state);
+   void Render(SRenderState& state) override;
 
     struct VERTEX
     {
@@ -73,6 +71,3 @@ namespace OVERLAY {
   };
 
 }
-
-#endif
-

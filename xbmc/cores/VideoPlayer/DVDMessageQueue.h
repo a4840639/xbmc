@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
  */
 
 #include "DVDMessage.h"
+#include <atomic>
 #include <string>
 #include <list>
 #include <algorithm>
@@ -39,33 +40,14 @@ struct DVDMessageListItem
     message = NULL;
     priority = 0;
   }
-  DVDMessageListItem(const DVDMessageListItem& item)
-  {
-    if (item.message)
-      message = item.message->Acquire();
-    else
-      message = NULL;
-
-    priority = item.priority;
-  }
+  DVDMessageListItem(const DVDMessageListItem&) = delete;
  ~DVDMessageListItem()
   {
     if(message)
       message->Release();
   }
 
-  DVDMessageListItem& operator=(const DVDMessageListItem& item)
-  {
-    if (message)
-      message->Release();
-    if (item.message)
-      message = item.message->Acquire();
-    else
-      message = NULL;
-
-    priority = item.priority;
-    return *this;
-  }
+  DVDMessageListItem& operator=(const DVDMessageListItem&) = delete;
 
   CDVDMsg* message;
   int priority;
@@ -86,7 +68,7 @@ enum MsgQueueReturnCode
 class CDVDMessageQueue
 {
 public:
-  CDVDMessageQueue(const std::string &owner);
+  explicit CDVDMessageQueue(const std::string &owner);
   virtual ~CDVDMessageQueue();
 
   void Init();
@@ -95,6 +77,7 @@ public:
   void End();
 
   MsgQueueReturnCode Put(CDVDMsg* pMsg, int priority = 0);
+  MsgQueueReturnCode PutBack(CDVDMsg* pMsg, int priority = 0);
 
   /**
    * msg,       message type from DVDMessage.h
@@ -127,11 +110,16 @@ public:
 
 private:
 
+  MsgQueueReturnCode Put(CDVDMsg* pMsg, int priority, bool front);
+  void UpdateTimeFront();
+  void UpdateTimeBack();
+
   CEvent m_hEvent;
   mutable CCriticalSection m_section;
 
-  bool m_bAbortRequest;
+  std::atomic<bool> m_bAbortRequest;
   bool m_bInitialized;
+  bool m_drain = false;
 
   int m_iDataSize;
   double m_TimeFront;
@@ -141,7 +129,7 @@ private:
   int m_iMaxDataSize;
   std::string m_owner;
 
-  typedef std::list<DVDMessageListItem> SList;
-  SList m_list;
+  std::list<DVDMessageListItem> m_messages;
+  std::list<DVDMessageListItem> m_prioMessages;
 };
 

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,9 +18,13 @@
  *
  */
 
+#include <interface/mmal/util/mmal_util.h>
+#include <interface/mmal/util/mmal_default_components.h>
+#include <interface/mmal/util/mmal_util_params.h>
+
 #include "Util.h"
-#include "threads/Atomics.h"
 #include "MMALRenderer.h"
+#include "ServiceBroker.h"
 #include "cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodec.h"
 #include "filesystem/File.h"
 #include "settings/AdvancedSettings.h"
@@ -30,104 +34,393 @@
 #include "threads/SingleLock.h"
 #include "utils/log.h"
 #include "utils/MathUtils.h"
-#include "windowing/WindowingFactory.h"
 #include "cores/VideoPlayer/DVDCodecs/Video/MMALCodec.h"
+#include "cores/VideoPlayer/DVDCodecs/Video/MMALFFmpeg.h"
 #include "xbmc/Application.h"
+#include "platform/linux/RBP.h"
+#include "cores/VideoPlayer/VideoRenderers/RenderFactory.h"
+#include "cores/VideoPlayer/Interface/Addon/TimingConstants.h"
 
-#define CLASSNAME "CMMALRenderer"
-
-#ifdef _DEBUG
-#define MMAL_DEBUG_VERBOSE
-#endif
-
-
-CYUVVideoBuffer::CYUVVideoBuffer()
-{
-  m_refs = 0;
-  mmal_buffer = 0;
+extern "C" {
+#include "libavutil/imgutils.h"
 }
 
-CYUVVideoBuffer::~CYUVVideoBuffer()
+#define VERBOSE 0
+
+using namespace MMAL;
+
+#define CLASSNAME "CMMALBuffer"
+
+CMMALBuffer::CMMALBuffer(int id) : CVideoBuffer(id)
 {
-  m_refs = 0;
-  mmal_buffer = 0;
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s %p", CLASSNAME, __func__, this);
 }
 
-CYUVVideoBuffer *CYUVVideoBuffer::Acquire()
+CMMALBuffer::~CMMALBuffer()
 {
-  long count = AtomicIncrement(&m_refs);
-#ifdef MMAL_DEBUG_VERBOSE
-  CLog::Log(LOGDEBUG, "%s::%s omvb:%p mmal:%p ref:%ld", CLASSNAME, __func__, this, mmal_buffer, count);
-#endif
-  (void)count;
-  return this;
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s %p", CLASSNAME, __func__, this);
 }
 
-long CYUVVideoBuffer::Release()
+void CMMALBuffer::Unref()
 {
-  long count = AtomicDecrement(&m_refs);
-#ifdef MMAL_DEBUG_VERBOSE
-  CLog::Log(LOGDEBUG, "%s::%s omvb:%p mmal:%p ref:%ld", CLASSNAME, __func__, this, mmal_buffer, count);
-#endif
-  if (count == 0)
+  if (mmal_buffer)
   {
     mmal_buffer_header_release(mmal_buffer);
-    delete this;
+    mmal_buffer = nullptr;
   }
-  else assert(count > 0);
-  return count;
 }
+
+void CMMALBuffer::Update()
+{
+  if (mmal_buffer)
+  {
+    CMMALYUVBuffer *yuv = dynamic_cast<CMMALYUVBuffer *>(this);
+    if (yuv)
+    {
+      int size = 0;
+      std::shared_ptr<CMMALPool> pool = std::dynamic_pointer_cast<CMMALPool>(m_pool);
+      if (pool)
+        size = pool->Size();
+      mmal_buffer->alloc_size = size;
+      mmal_buffer->length = size;
+      CGPUMEM *gmem = yuv->GetMem();
+      if (gmem)
+        mmal_buffer->data = (uint8_t *)gmem->m_vc_handle;
+    }
+  }
+}
+
+void CMMALBuffer::SetVideoDeintMethod(std::string method)
+{
+  std::shared_ptr<CMMALPool> pool = std::dynamic_pointer_cast<CMMALPool>(m_pool);
+  if (pool)
+    pool->SetVideoDeintMethod(method);
+}
+
+
+#undef CLASSNAME
+#define CLASSNAME "CMMALPool"
+
+
+void CMMALPool::Return(int id)
+{
+  CSingleLock lock(m_critSection);
+
+  m_all[id]->Unref();
+  auto it = m_used.begin();
+  while (it != m_used.end())
+  {
+    if (*it == id)
+    {
+      m_used.erase(it);
+      break;
+    }
+    else
+      ++it;
+  }
+  m_free.push_back(id);
+  Prime();
+}
+
+CMMALPool::CMMALPool(const char *component_name, bool input, uint32_t num_buffers, uint32_t buffer_size, uint32_t encoding, MMALState state)
+ :  m_mmal_format(encoding), m_state(state), m_input(input)
+{
+  CSingleLock lock(m_critSection);
+  MMAL_STATUS_T status;
+
+  memset(&m_geo, 0, sizeof m_geo);
+
+  status = mmal_component_create(component_name, &m_component);
+  if (status != MMAL_SUCCESS)
+    CLog::Log(LOGERROR, "%s::%s Failed to create component %s", CLASSNAME, __func__, component_name);
+
+  MMAL_PORT_T *port = m_input ? m_component->input[0] : m_component->output[0];
+
+  // set up initial decoded frame format - may change from this
+  port->format->encoding = encoding;
+
+  status = mmal_port_parameter_set_boolean(port, MMAL_PARAMETER_ZERO_COPY, MMAL_TRUE);
+  if (status != MMAL_SUCCESS)
+    CLog::Log(LOGERROR, "%s::%s Failed to enable zero copy mode on %s (status=%x %s)", CLASSNAME, __func__, port->name, status, mmal_status_to_string(status));
+
+  status = mmal_port_format_commit(port);
+  if (status != MMAL_SUCCESS)
+    CLog::Log(LOGERROR, "%s::%s Failed to commit format for %s (status=%x %s)", CLASSNAME, __func__, port->name, status, mmal_status_to_string(status));
+
+  port->buffer_size = buffer_size;
+  port->buffer_num = std::max(num_buffers, port->buffer_num_recommended);
+
+  m_mmal_pool = mmal_port_pool_create(port, port->buffer_num, port->buffer_size);
+  if (!m_mmal_pool)
+    CLog::Log(LOGERROR, "%s::%s Failed to create pool for port %s", CLASSNAME, __func__, port->name);
+  else
+    CLog::Log(LOGDEBUG, "%s::%s Created pool %p of size %d x %d for port %s", CLASSNAME, __func__, m_mmal_pool, num_buffers, buffer_size, port->name);
+}
+
+CMMALPool::~CMMALPool()
+{
+  CSingleLock lock(m_critSection);
+  MMAL_STATUS_T status;
+
+  MMAL_PORT_T *port = m_input ? m_component->input[0] : m_component->output[0];
+  CLog::Log(LOGDEBUG, "%s::%s Destroying pool %p for port %s", CLASSNAME, __func__, m_mmal_pool, port->name);
+
+  if (port && port->is_enabled)
+  {
+    status = mmal_port_disable(port);
+    if (status != MMAL_SUCCESS)
+       CLog::Log(LOGERROR, "%s::%s Failed to disable port %s (status=%x %s)", CLASSNAME, __func__, port->name, status, mmal_status_to_string(status));
+  }
+
+  if (m_component && m_component->is_enabled)
+  {
+    status = mmal_component_disable(m_component);
+    if (status != MMAL_SUCCESS)
+      CLog::Log(LOGERROR, "%s::%s Failed to disable component %s (status=%x %s)", CLASSNAME, __func__, m_component->name, status, mmal_status_to_string(status));
+  }
+
+  if (m_component)
+    mmal_component_destroy(m_component);
+  m_component = nullptr;
+
+  mmal_port_pool_destroy(port, m_mmal_pool);
+  m_mmal_pool = nullptr;
+  for (auto buf : m_all)
+  {
+    delete buf;
+  }
+}
+
+std::vector<CMMALPool::MMALEncodingTable> CMMALPool::mmal_encoding_table =
+{
+  { AV_PIX_FMT_YUV420P,  MMAL_ENCODING_I420 },
+  { AV_PIX_FMT_RGBA,     MMAL_ENCODING_RGBA, },
+  { AV_PIX_FMT_BGRA,     MMAL_ENCODING_BGRA },
+  { AV_PIX_FMT_RGB0,     MMAL_ENCODING_RGBA },
+  { AV_PIX_FMT_BGR0,     MMAL_ENCODING_BGRA },
+  { AV_PIX_FMT_RGB24,    MMAL_ENCODING_RGB24 },
+  { AV_PIX_FMT_BGR24,    MMAL_ENCODING_BGR24 },
+  { AV_PIX_FMT_RGB565,   MMAL_ENCODING_RGB16 },
+  { AV_PIX_FMT_RGB565LE, MMAL_ENCODING_RGB16 },
+  { AV_PIX_FMT_BGR565,   MMAL_ENCODING_BGR16 },
+  { AV_PIX_FMT_NONE,     MMAL_ENCODING_UNKNOWN },
+};
+
+
+uint32_t CMMALPool::TranslateFormat(AVPixelFormat pixfmt)
+{
+  for (const auto& entry : mmal_encoding_table)
+  {
+    if (entry.pixfmt == pixfmt)
+      return entry.encoding;
+  }
+  assert(0);
+  return MMAL_ENCODING_UNKNOWN;
+}
+
+void CMMALPool::Configure(AVPixelFormat format, int width, int height, int alignedWidth, int alignedHeight, int size)
+{
+  CSingleLock lock(m_critSection);
+  if (m_mmal_format == MMAL_ENCODING_UNKNOWN)
+    m_mmal_format = TranslateFormat(format);
+  m_width = width;
+  m_height = height;
+  m_size = size;
+  m_software = true;
+  m_configured = true;
+
+  if (m_mmal_format != MMAL_ENCODING_UNKNOWN)
+  {
+    m_geo = g_RBP.GetFrameGeometry(m_mmal_format, alignedWidth, alignedHeight);
+    if (m_mmal_format != MMAL_ENCODING_YUVUV128)
+    {
+      if (alignedWidth)
+      {
+        m_geo.stride_y = alignedWidth;
+        m_geo.stride_c = alignedWidth>>1;
+      }
+      if (alignedHeight)
+      {
+        m_geo.height_y = alignedHeight;
+        m_geo.height_c = alignedHeight>>1;
+      }
+    }
+  }
+  if (m_size == 0)
+  {
+    const unsigned int size_y = m_geo.stride_y * m_geo.height_y;
+    const unsigned int size_c = m_geo.stride_c * m_geo.height_c;
+    m_size = (size_y + size_c * m_geo.planes_c) * m_geo.stripes;
+  }
+  CLog::Log(LOGDEBUG, "%s::%s pool:%p %dx%d (%dx%d) pix:%d size:%d fmt:%.4s", CLASSNAME, __func__, m_mmal_pool, width, height, alignedWidth, alignedHeight, format, size, (char *)&m_mmal_format);
+}
+
+void CMMALPool::Configure(AVPixelFormat format, int size)
+{
+  Configure(format, 0, 0, 0, 0, size);
+}
+
+void CMMALPool::SetDimensions(int width, int height, int alignedWidth, int alignedHeight)
+{
+  Configure(AV_PIX_FMT_NONE, width, height, alignedWidth, alignedHeight, 0);
+}
+
+inline bool CMMALPool::IsConfigured()
+{
+  CSingleLock lock(m_critSection);
+  return m_configured;
+}
+
+bool CMMALPool::IsCompatible(AVPixelFormat format, int size)
+{
+  CSingleLock lock(m_critSection);
+  uint32_t mmal_format = TranslateFormat(format);
+  if (m_mmal_format == mmal_format &&
+      m_size == size)
+    return true;
+
+  return false;
+}
+
+CVideoBuffer *CMMALPool::Get()
+{
+  return GetBuffer(500);
+}
+
+CMMALBuffer *CMMALPool::GetBuffer(uint32_t timeout)
+{
+  MMAL_BUFFER_HEADER_T *buffer = nullptr;
+  CMMALBuffer *omvb = nullptr;
+  int id = -1;
+  bool newbuf = false;
+  CGPUMEM *gmem = nullptr;
+
+  if (m_mmal_pool && m_mmal_pool->queue)
+    buffer = mmal_queue_timedwait(m_mmal_pool->queue, timeout);
+  CSingleLock lock(m_critSection);
+  if (buffer)
+  {
+    mmal_buffer_header_reset(buffer);
+    buffer->cmd = 0;
+    buffer->offset = 0;
+    buffer->flags = 0;
+    buffer->user_data = 0;
+
+    if (!m_free.empty())
+    {
+      id = m_free.front();
+      m_free.pop_front();
+      m_used.push_back(id);
+      omvb = m_all[id];
+    }
+    else
+    {
+      newbuf = true;
+      id = m_all.size();
+      if (!IsSoftware())
+      {
+        CMMALVideoBuffer *vid = new CMMALVideoBuffer(id);
+        omvb = vid;
+      }
+      else
+      {
+        CMMALYUVBuffer *yuv = new CMMALYUVBuffer(id);
+        if (yuv)
+        {
+          assert(m_size > 0);
+          gmem = yuv->Allocate(m_size, (void *)yuv);
+          if (!gmem)
+          {
+            delete yuv;
+            yuv = nullptr;
+          }
+        }
+        omvb = yuv;
+      }
+      if (omvb)
+      {
+        m_all.push_back(omvb);
+        m_used.push_back(id);
+      }
+    }
+    if (omvb)
+    {
+      omvb->Acquire(GetPtr());
+      omvb->m_rendered = false;
+      omvb->m_state = m_state;
+      buffer->user_data = omvb;
+      omvb->mmal_buffer = buffer;
+      omvb->Update();
+      assert(omvb->Pool() == GetPtr());
+    }
+  }
+  if (timeout > 0 && !omvb)
+    CLog::Log(LOGERROR, "%s::%s - failed pool:%p omvb:%p mmal:%p timeout:%d", CLASSNAME, __FUNCTION__, m_mmal_pool, omvb, buffer, timeout);
+  else if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s pool:%p omvb:%p mmal:%p gmem:%p new:%d id:%d to:%d %dx%d (%dx%d) size:%d pool:%p:%p enc:%.4s", CLASSNAME, __FUNCTION__, m_mmal_pool, omvb, buffer, gmem, newbuf, id, timeout,
+        m_width, m_height, AlignedWidth(), AlignedHeight(), buffer ? buffer->alloc_size : 0, omvb ? &*omvb->Pool() : nullptr, &*GetPtr(), (char *)&m_mmal_format);
+  return omvb;
+}
+
+void CMMALPool::Prime()
+{
+  CSingleLock lock(m_critSection);
+  CMMALBuffer *omvb;
+  if (!m_mmal_pool || !m_component)
+    return;
+  MMAL_PORT_T *port = m_input ? m_component->input[0] : m_component->output[0];
+  if (!port->is_enabled)
+    return;
+  while (omvb = GetBuffer(0), omvb)
+  {
+    if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+      CLog::Log(LOGDEBUG, "%s::%s Send omvb:%p mmal:%p from pool %p to %s len:%d cmd:%x flags:%x pool:%p", CLASSNAME, __func__, omvb, omvb->mmal_buffer, m_mmal_pool, port->name, omvb->mmal_buffer->length, omvb->mmal_buffer->cmd, omvb->mmal_buffer->flags, &*omvb->Pool());
+    MMAL_STATUS_T status = mmal_port_send_buffer(port, omvb->mmal_buffer);
+    if (status != MMAL_SUCCESS)
+      CLog::Log(LOGERROR, "%s::%s - Failed to send omvb:%p mmal:%p from pool %p to %s (status=0%x %s)", CLASSNAME, __func__, omvb, omvb->mmal_buffer, m_mmal_pool, port->name, status, mmal_status_to_string(status));
+  }
+}
+
+void CMMALPool::SetVideoDeintMethod(std::string method)
+{
+  CSingleLock lock(m_critSection);
+  if (m_processInfo)
+    m_processInfo->SetVideoDeintMethod(method);
+}
+
+void CMMALPool::Released(CVideoBufferManager &videoBufferManager)
+{
+  /* Create dummy component with attached pool */
+  std::shared_ptr<IVideoBufferPool> pool = std::make_shared<CMMALPool>(MMAL_COMPONENT_DEFAULT_VIDEO_DECODER, false, MMAL_NUM_OUTPUT_BUFFERS, 0, MMAL_ENCODING_UNKNOWN, MMALStateFFDec);
+  videoBufferManager.RegisterPool(pool);
+}
+
+#undef CLASSNAME
+#define CLASSNAME "CMMALRenderer"
 
 CRenderInfo CMMALRenderer::GetRenderInfo()
 {
   CSingleLock lock(m_sharedSection);
   CRenderInfo info;
 
-  // we'll assume that video is accelerated (RENDER_FMT_MMAL) for now
-  // we will reconfigure renderer later if necessary
-  if (!m_bMMALConfigured)
-    m_bMMALConfigured = init_vout(RENDER_FMT_MMAL);
-
-  #if defined(MMAL_DEBUG_VERBOSE)
-  CLog::Log(LOGDEBUG, "%s::%s cookie:%p", CLASSNAME, __func__, (void *)m_vout_input_pool);
-  #endif
+  CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s opaque:%p", CLASSNAME, __func__, this);
 
   info.max_buffer_size = NUM_BUFFERS;
   info.optimal_buffer_size = NUM_BUFFERS;
-  info.opaque_pointer = (void *)m_vout_input_pool;
-  info.formats = m_formats;
-  return info;
-}
+  info.opaque_pointer = (void *)this;
 
-static void vout_control_port_cb(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
-{
-  mmal_buffer_header_release(buffer);
+  return info;
 }
 
 void CMMALRenderer::vout_input_port_cb(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
 {
-  assert(!(buffer->flags & MMAL_BUFFER_HEADER_FLAG_TRANSMISSION_FAILED));
-  buffer->flags &= ~MMAL_BUFFER_HEADER_FLAG_USER2;
-  if (m_format == RENDER_FMT_MMAL)
-  {
-    CMMALVideoBuffer *omvb = (CMMALVideoBuffer *)buffer->user_data;
-    assert(buffer == omvb->mmal_buffer);
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s port:%p omvb:%p mmal:%p len:%d cmd:%x flags:%x flight:%d", CLASSNAME, __func__, port, omvb, omvb->mmal_buffer, buffer->length, buffer->cmd, buffer->flags, m_inflight);
-#endif
-    omvb->Release();
-  }
-  else if (m_format == RENDER_FMT_YUV420P)
-  {
-    CYUVVideoBuffer *omvb = (CYUVVideoBuffer *)buffer->user_data;
-    assert(buffer == omvb->mmal_buffer);
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s port:%p omvb:%p mmal:%p len:%d cmd:%x flags:%x flight:%d", CLASSNAME, __func__, port, omvb, omvb->mmal_buffer, buffer->length, buffer->cmd, buffer->flags, m_inflight);
-#endif
-    m_inflight--;
-    omvb->Release();
-  }
-  else assert(0);
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s omvb:%p mmal:%p dts:%.3f pts:%.3f len:%d cmd:%x flags:%x", CLASSNAME, __func__,
+        buffer->user_data, buffer, buffer->dts*1e-6, buffer->pts*1e-6, buffer->length, buffer->cmd, buffer->flags);
+  buffer->length = 0;
+  mmal_queue_put(m_queue_process, buffer);
 }
 
 static void vout_input_port_cb_static(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
@@ -136,122 +429,143 @@ static void vout_input_port_cb_static(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *b
   mmal->vout_input_port_cb(port, buffer);
 }
 
-bool CMMALRenderer::init_vout(ERenderFormat format)
+bool CMMALRenderer::CheckConfigurationVout(uint32_t width, uint32_t height, uint32_t aligned_width, uint32_t aligned_height, uint32_t encoding)
 {
-  CSingleLock lock(m_sharedSection);
-  bool formatChanged = m_format != format;
   MMAL_STATUS_T status;
+  bool sizeChanged = width != m_vout_width || height != m_vout_height || aligned_width != m_vout_aligned_width || aligned_height != m_vout_aligned_height;
+  bool encodingChanged = !m_vout_input || !m_vout_input->format || encoding != m_vout_input->format->encoding;
 
-  CLog::Log(LOGDEBUG, "%s::%s configured:%d format:%d->%d", CLASSNAME, __func__, m_bConfigured, m_format, format);
-
-  if (m_bMMALConfigured && formatChanged)
-    UnInitMMAL();
-
-  if (m_bMMALConfigured)
-    return true;
-
-  m_format = format;
-  if (m_format != RENDER_FMT_MMAL && m_format != RENDER_FMT_YUV420P)
-    return true;
-
-  /* Create video renderer */
-  status = mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_RENDERER, &m_vout);
-  if(status != MMAL_SUCCESS)
+  if (!m_vout)
   {
-    CLog::Log(LOGERROR, "%s::%s Failed to create vout component (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
-    return false;
-  }
+    /* Create video renderer */
+    CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s CreateRenderer", CLASSNAME, __func__);
 
-  m_vout->control->userdata = (struct MMAL_PORT_USERDATA_T *)this;
-  status = mmal_port_enable(m_vout->control, vout_control_port_cb);
-  if(status != MMAL_SUCCESS)
-  {
-    CLog::Log(LOGERROR, "%s::%s Failed to enable vout control port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
-    return false;
-  }
-  m_vout_input = m_vout->input[0];
-  m_vout_input->userdata = (struct MMAL_PORT_USERDATA_T *)this;
-  MMAL_ES_FORMAT_T *es_format = m_vout_input->format;
+    status = mmal_component_create(MMAL_COMPONENT_DEFAULT_VIDEO_RENDERER, &m_vout);
+    if(status != MMAL_SUCCESS)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to create vout component (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+      return false;
+    }
 
-  es_format->type = MMAL_ES_TYPE_VIDEO;
-  es_format->es->video.crop.width = m_sourceWidth;
-  es_format->es->video.crop.height = m_sourceHeight;
+    m_vout_input = m_vout->input[0];
 
-  if (m_format == RENDER_FMT_MMAL)
-  {
-    es_format->encoding = MMAL_ENCODING_OPAQUE;
-    es_format->es->video.width = m_sourceWidth;
-    es_format->es->video.height = m_sourceHeight;
-  }
-  else if (m_format == RENDER_FMT_YUV420P)
-  {
-    const int pitch = ALIGN_UP(m_sourceWidth, 32);
-    const int aligned_height = ALIGN_UP(m_sourceHeight, 16);
+    status = mmal_port_parameter_set_boolean(m_vout_input, MMAL_PARAMETER_NO_IMAGE_PADDING, MMAL_TRUE);
+    if (status != MMAL_SUCCESS)
+      CLog::Log(LOGERROR, "%s::%s Failed to enable no image padding mode on %s (status=%x %s)", CLASSNAME, __func__, m_vout_input->name, status, mmal_status_to_string(status));
 
-    es_format->encoding = MMAL_ENCODING_I420;
-    es_format->es->video.width = pitch;
-    es_format->es->video.height = aligned_height;
-
-    if (CONF_FLAGS_YUVCOEF_MASK(m_iFlags) == CONF_FLAGS_YUVCOEF_BT709)
-      es_format->es->video.color_space = MMAL_COLOR_SPACE_ITUR_BT709;
-    else if (CONF_FLAGS_YUVCOEF_MASK(m_iFlags) == CONF_FLAGS_YUVCOEF_BT601)
-      es_format->es->video.color_space = MMAL_COLOR_SPACE_ITUR_BT601;
-    else if (CONF_FLAGS_YUVCOEF_MASK(m_iFlags) == CONF_FLAGS_YUVCOEF_240M)
-      es_format->es->video.color_space = MMAL_COLOR_SPACE_SMPTE240M;
-  }
-
-  if (m_format == RENDER_FMT_MMAL)
-  {
-    status = mmal_port_parameter_set_boolean(m_vout_input, MMAL_PARAMETER_ZERO_COPY,  MMAL_TRUE);
+    status = mmal_port_parameter_set_boolean(m_vout_input, MMAL_PARAMETER_ZERO_COPY, MMAL_TRUE);
     if (status != MMAL_SUCCESS)
        CLog::Log(LOGERROR, "%s::%s Failed to enable zero copy mode on %s (status=%x %s)", CLASSNAME, __func__, m_vout_input->name, status, mmal_status_to_string(status));
-  }
-  status = mmal_port_format_commit(m_vout_input);
-  if (status != MMAL_SUCCESS)
-  {
-    CLog::Log(LOGERROR, "%s::%s Failed to commit vout input format (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
-    return false;
+
+    m_vout_input->format->type = MMAL_ES_TYPE_VIDEO;
+    if (CONF_FLAGS_YUVCOEF_MASK(m_iFlags) == CONF_FLAGS_YUVCOEF_BT709)
+      m_vout_input->format->es->video.color_space = MMAL_COLOR_SPACE_ITUR_BT709;
+    else if (CONF_FLAGS_YUVCOEF_MASK(m_iFlags) == CONF_FLAGS_YUVCOEF_BT601)
+      m_vout_input->format->es->video.color_space = MMAL_COLOR_SPACE_ITUR_BT601;
+    else if (CONF_FLAGS_YUVCOEF_MASK(m_iFlags) == CONF_FLAGS_YUVCOEF_240M)
+      m_vout_input->format->es->video.color_space = MMAL_COLOR_SPACE_SMPTE240M;
   }
 
-  m_vout_input->buffer_num = std::max(m_vout_input->buffer_num_recommended, (uint32_t)m_NumYV12Buffers);
-  m_vout_input->buffer_size = m_vout_input->buffer_size_recommended;
-
-  status = mmal_port_enable(m_vout_input, vout_input_port_cb_static);
-  if(status != MMAL_SUCCESS)
+  if (m_vout_input && (sizeChanged || encodingChanged))
   {
-    CLog::Log(LOGERROR, "%s::%s Failed to vout enable input port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
-    return false;
+    assert(m_vout_input != nullptr && m_vout_input->format != nullptr && m_vout_input->format->es != nullptr);
+    CLog::Log(LOGDEBUG, "%s::%s Changing Vout dimensions from %dx%d (%dx%d) to %dx%d (%dx%d) %.4s", CLASSNAME, __func__,
+        m_vout_width, m_vout_height, m_vout_aligned_width, m_vout_aligned_height, width, height, aligned_width, aligned_height, (char *)&encoding);
+
+    // we need to disable port when encoding changes, but not if just resolution changes
+    if (encodingChanged && m_vout_input->is_enabled)
+    {
+      status = mmal_port_disable(m_vout_input);
+      if (status != MMAL_SUCCESS)
+      {
+        CLog::Log(LOGERROR, "%s::%s Failed to disable vout input port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+        return false;
+      }
+    }
+
+    m_vout_width = width;
+    m_vout_height = height;
+    m_vout_aligned_width = aligned_width;
+    m_vout_aligned_height = aligned_height;
+
+    m_vout_input->format->es->video.crop.width = width;
+    m_vout_input->format->es->video.crop.height = height;
+    m_vout_input->format->es->video.width = aligned_width;
+    m_vout_input->format->es->video.height = aligned_height;
+    m_vout_input->format->encoding = encoding;
+
+    status = mmal_port_format_commit(m_vout_input);
+    if (status != MMAL_SUCCESS)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to commit vout input format (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+      return false;
+    }
+
+    if (!m_vout_input->is_enabled)
+    {
+      m_vout_input->buffer_num = MMAL_NUM_OUTPUT_BUFFERS;
+      m_vout_input->buffer_size = m_vout_input->buffer_size_recommended;
+      m_vout_input->userdata = (struct MMAL_PORT_USERDATA_T *)this;
+
+      status = mmal_port_enable(m_vout_input, vout_input_port_cb_static);
+      if (status != MMAL_SUCCESS)
+      {
+        CLog::Log(LOGERROR, "%s::%s Failed to enable vout input port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+        return false;
+      }
+    }
   }
 
-  status = mmal_component_enable(m_vout);
-  if(status != MMAL_SUCCESS)
+  if (m_vout && !m_vout->is_enabled)
   {
-    CLog::Log(LOGERROR, "%s::%s Failed to enable vout component (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
-    return false;
-  }
+    status = mmal_component_enable(m_vout);
+    if(status != MMAL_SUCCESS)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to enable vout component (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+      return false;
+    }
 
-  m_vout_input_pool = mmal_port_pool_create(m_vout_input , m_vout_input->buffer_num, m_vout_input->buffer_size);
-  if (!m_vout_input_pool)
-  {
-    CLog::Log(LOGERROR, "%s::%s Failed to create pool for decoder input port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
-    return false;
+    if (!m_queue_render && !CServiceBroker::GetSettings().GetBool("videoplayer.usedisplayasclock"))
+    {
+      m_queue_render = mmal_queue_create();
+      CThread::Create();
+    }
   }
+  SetVideoRect(m_cachedSourceRect, m_cachedDestRect);
   return true;
 }
 
-CMMALRenderer::CMMALRenderer()
+CMMALRenderer::CMMALRenderer() : CThread("MMALRenderer"), m_processThread(this, "MMALProcess")
 {
   CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
   m_vout = NULL;
   m_vout_input = NULL;
-  m_vout_input_pool = NULL;
   memset(m_buffers, 0, sizeof m_buffers);
   m_iFlags = 0;
-  m_format = RENDER_FMT_NONE;
   m_bConfigured = false;
-  m_bMMALConfigured = false;
-  m_iYV12RenderBuffer = 0;
-  m_inflight = 0;
+  m_queue_render = nullptr;
+  m_error = 0.0;
+  m_fps = 0.0;
+  m_lastPts = DVD_NOPTS_VALUE;
+  m_frameInterval = 0.0;
+  m_frameIntervalDiff = 1e5;
+  m_vsync_count = ~0U;
+  m_vout_width = 0;
+  m_vout_height = 0;
+  m_vout_aligned_width = 0;
+  m_vout_aligned_height = 0;
+  m_deint = NULL;
+  m_deint_input = NULL;
+  m_deint_output = NULL;
+  m_deint_width = 0;
+  m_deint_height = 0;
+  m_deint_aligned_width = 0;
+  m_deint_aligned_height = 0;
+  m_cachedSourceRect.SetRect(0, 0, 0, 0);
+  m_cachedDestRect.SetRect(0, 0, 0, 0);
+
+  m_queue_process = mmal_queue_create();
+  m_processThread.Create();
 }
 
 CMMALRenderer::~CMMALRenderer()
@@ -259,322 +573,443 @@ CMMALRenderer::~CMMALRenderer()
   CSingleLock lock(m_sharedSection);
   CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
   UnInit();
+
+  if (m_queue_process)
+    mmal_queue_put(m_queue_process, &m_quitpacket);
+
+  {
+    // leave the lock to allow other threads to exit
+    CSingleExit unlock(m_sharedSection);
+    m_processThread.StopThread();
+  }
+
+  mmal_queue_destroy(m_queue_process);
+  m_queue_process = nullptr;
 }
 
-void CMMALRenderer::AddVideoPictureHW(DVDVideoPicture& pic, int index)
+
+void CMMALRenderer::Process()
 {
-  CMMALVideoBuffer *buffer = pic.MMALBuffer;
-#if defined(MMAL_DEBUG_VERBOSE)
-  CLog::Log(LOGDEBUG, "%s::%s - %p (%p) %i", CLASSNAME, __func__, buffer, buffer->mmal_buffer, index);
-#endif
+  bool bStop = false;
+  SetPriority(THREAD_PRIORITY_ABOVE_NORMAL);
+  CLog::Log(LOGDEBUG, "%s::%s - starting", CLASSNAME, __func__);
+  while (!bStop)
+  {
+    double dfps = g_graphicsContext.GetFPS();
+    double fps = 0.0;
+    double inc = 1.0;
+    g_RBP.WaitVsync();
 
-  YUVBUFFER &buf = m_buffers[index];
-  assert(!buf.MMALBuffer);
-  memset(&buf, 0, sizeof buf);
-  buf.MMALBuffer = buffer->Acquire();
+    CSingleLock lock(m_sharedSection);
+    // if good enough framerate measure then use it
+    if (dfps > 0.0 && m_frameInterval > 0.0 && m_frameIntervalDiff * 1e-6 < 1e-3)
+    {
+      fps = 1e6 / m_frameInterval;
+      inc = fps / dfps;
+      if (fabs(inc - 1.0) < 1e-2)
+        inc = 1.0;
+      else if (fabs(inc - 0.5) < 1e-2)
+        inc = 0.5;
+      else if (fabs(inc - 24.0/60.0) < 1e-2)
+        inc = 24.0/60.0;
+      if (m_deint)
+        inc *= 2.0;
+    }
+    // This algorithm is basically making the decision according to Bresenham's line algorithm.  Imagine drawing a line where x-axis is display frames, and y-axis is video frames
+    m_error += inc;
+    CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s - debug vsync:%d queue:%d fps:%.2f/%.2f/%.2f inc:%f diff:%f", CLASSNAME, __func__, g_RBP.LastVsync(), mmal_queue_length(m_queue_render), fps, m_fps, dfps, inc, m_error);
+    // we may need to discard frames if queue length gets too high or video frame rate is above display frame rate
+    while (mmal_queue_length(m_queue_render) > 2 || (mmal_queue_length(m_queue_render) > 1 && m_error > 1.0))
+    {
+      if (m_error > 1.0)
+        m_error -= 1.0;
+      MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(m_queue_render);
+      if (buffer == &m_quitpacket)
+        bStop = true;
+      else if (buffer)
+      {
+        CMMALBuffer *omvb = (CMMALBuffer *)buffer->user_data;
+        assert(buffer == omvb->mmal_buffer);
+        omvb->Release();
+        CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s - discard omvb:%p mmal:%p vsync:%d queue:%d diff:%f", CLASSNAME, __func__, omvb, buffer, g_RBP.LastVsync(), mmal_queue_length(m_queue_render), m_error);
+      }
+    }
+    // this is case where we would like to display a new frame
+    if (m_error > 0.0)
+    {
+      m_error -= 1.0;
+      MMAL_BUFFER_HEADER_T *buffer = mmal_queue_get(m_queue_render);
+      if (buffer == &m_quitpacket)
+        bStop = true;
+      else if (buffer)
+      {
+        CMMALBuffer *omvb = (CMMALBuffer *)buffer->user_data;
+        assert(buffer == omvb->mmal_buffer);
+        CheckConfigurationVout(omvb->Width(), omvb->Height(), omvb->AlignedWidth(), omvb->AlignedHeight(), omvb->Encoding());
+        MMAL_STATUS_T status = mmal_port_send_buffer(m_vout_input, buffer);
+        if (status != MMAL_SUCCESS)
+          CLog::Log(LOGERROR, "%s::%s - Failed to send omvb:%p mmal:%p to %s (status=0%x %s)", CLASSNAME, __func__, omvb, buffer, m_vout_input->name, status, mmal_status_to_string(status));
+      }
+      CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s - omvb:%p mmal:%p vsync:%d queue:%d diff:%f", CLASSNAME, __func__, buffer ? buffer->user_data : nullptr, buffer, g_RBP.LastVsync(), mmal_queue_length(m_queue_render), m_error);
+    }
+  }
+  CLog::Log(LOGDEBUG, "%s::%s - stopping", CLASSNAME, __func__);
 }
 
-bool CMMALRenderer::Configure(unsigned int width, unsigned int height, unsigned int d_width, unsigned int d_height, float fps, unsigned flags, ERenderFormat format, unsigned extended_format, unsigned int orientation)
+void CMMALRenderer::Run()
+{
+  CLog::Log(LOGDEBUG, "%s::%s - starting", CLASSNAME, __func__);
+  while (1)
+  {
+    MMAL_BUFFER_HEADER_T *buffer = mmal_queue_wait(m_queue_process);
+    assert(buffer);
+    if (buffer == &m_quitpacket)
+      break;
+    CSingleLock lock(m_sharedSection);
+    bool kept = false;
+
+    CMMALBuffer *omvb = (CMMALBuffer *)buffer->user_data;
+    if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+      CLog::Log(LOGDEBUG, "%s::%s %s omvb:%p mmal:%p dts:%.3f pts:%.3f len:%d cmd:%x flags:%x enc:%.4s", CLASSNAME, __func__,
+         omvb ? omvb->GetStateName():"", omvb, buffer, buffer->dts*1e-6, buffer->pts*1e-6, buffer->length, buffer->cmd, buffer->flags, omvb ? (char *)&omvb->Encoding():"");
+
+    assert(omvb && buffer == omvb->mmal_buffer);
+    assert(buffer->cmd == 0);
+    assert(!(buffer->flags & (MMAL_BUFFER_HEADER_FLAG_EOS | MMAL_BUFFER_HEADER_FLAG_TRANSMISSION_FAILED)));
+    if (m_bConfigured)
+    switch (omvb->m_state)
+    {
+    case MMALStateHWDec:
+    case MMALStateFFDec:
+    {
+      if (buffer->length > 0)
+      {
+        EINTERLACEMETHOD last_interlace_method = m_interlace_method;
+        EINTERLACEMETHOD interlace_method = m_videoSettings.m_InterlaceMethod;
+        if (interlace_method == VS_INTERLACEMETHOD_AUTO)
+        {
+          interlace_method = VS_INTERLACEMETHOD_MMAL_ADVANCED;
+          // avoid advanced deinterlace when using software decode and HD resolution
+          if (omvb->m_state == MMALStateFFDec && omvb->Width() * omvb->Height() > 720*576)
+            interlace_method = VS_INTERLACEMETHOD_MMAL_BOB;
+        }
+        bool interlace = (omvb->mmal_buffer->flags & MMAL_BUFFER_HEADER_VIDEO_FLAG_INTERLACED) ? true:false;
+
+        // advanced deinterlace requires 3 frames of context so disable when showing stills
+        if (omvb->m_stills)
+        {
+          if (interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED)
+             interlace_method = VS_INTERLACEMETHOD_MMAL_BOB;
+           if (interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED_HALF)
+             interlace_method = VS_INTERLACEMETHOD_MMAL_BOB_HALF;
+        }
+
+        // we don't keep up when running at 60fps in the background so switch to half rate
+        if (!g_graphicsContext.IsFullScreenVideo())
+        {
+          if (interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED)
+            interlace_method = VS_INTERLACEMETHOD_MMAL_ADVANCED_HALF;
+          if (interlace_method == VS_INTERLACEMETHOD_MMAL_BOB)
+            interlace_method = VS_INTERLACEMETHOD_MMAL_BOB_HALF;
+        }
+
+        if (interlace_method == VS_INTERLACEMETHOD_NONE)
+        {
+          if (m_deint_input)
+            DestroyDeinterlace();
+        }
+        else if (m_deint_input || interlace)
+          CheckConfigurationDeint(omvb->Width(), omvb->Height(), omvb->AlignedWidth(), omvb->AlignedHeight(), omvb->Encoding(), interlace_method);
+
+        if (!m_deint_input)
+          m_interlace_method = VS_INTERLACEMETHOD_NONE;
+
+        if (last_interlace_method == m_interlace_method)
+          ;
+        else if (m_interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED)
+          omvb->SetVideoDeintMethod("adv(x2)");
+        else if (m_interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED_HALF)
+          omvb->SetVideoDeintMethod("adv(x1)");
+        else if (m_interlace_method == VS_INTERLACEMETHOD_MMAL_BOB)
+          omvb->SetVideoDeintMethod("bob(x2)");
+        else if (m_interlace_method == VS_INTERLACEMETHOD_MMAL_BOB_HALF)
+          omvb->SetVideoDeintMethod("bob(x1)");
+        else
+          omvb->SetVideoDeintMethod("none");
+
+        if (m_deint_input)
+        {
+          MMAL_STATUS_T status = mmal_port_send_buffer(m_deint_input, omvb->mmal_buffer);
+          if (status != MMAL_SUCCESS)
+            CLog::Log(LOGERROR, "%s::%s - Failed to send omvb:%p mmal:%p to %s (status=0%x %s)", CLASSNAME, __func__, omvb, omvb->mmal_buffer, m_deint_input->name, status, mmal_status_to_string(status));
+          else
+            kept = true;
+        }
+        else if (m_queue_render)
+        {
+          mmal_queue_put(m_queue_render, omvb->mmal_buffer);
+          kept = true;
+        }
+        else
+        {
+          CheckConfigurationVout(omvb->Width(), omvb->Height(), omvb->AlignedWidth(), omvb->AlignedHeight(), omvb->Encoding());
+          if (m_vout_input)
+          {
+            MMAL_STATUS_T status = mmal_port_send_buffer(m_vout_input, omvb->mmal_buffer);
+            if (status != MMAL_SUCCESS)
+              CLog::Log(LOGERROR, "%s::%s - Failed to send omvb:%p mmal:%p to %s (status=0%x %s)", CLASSNAME, __func__, omvb, omvb->mmal_buffer, m_vout_input->name, status, mmal_status_to_string(status));
+            else
+              kept = true;
+          }
+        }
+      }
+      break;
+    }
+    case MMALStateDeint:
+    {
+      if (buffer->length > 0)
+      {
+        if (m_queue_render)
+        {
+          mmal_queue_put(m_queue_render, buffer);
+          if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+            CLog::Log(LOGDEBUG, "%s::%s send %p to m_queue_render", CLASSNAME, __func__, omvb);
+          kept = true;
+        }
+        else
+        {
+          CheckConfigurationVout(omvb->Width(), omvb->Height(), omvb->AlignedWidth(), omvb->AlignedHeight(), omvb->Encoding());
+          if (m_vout_input)
+          {
+            if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+              CLog::Log(LOGDEBUG, "%s::%s send %p to m_vout_input", CLASSNAME, __func__, omvb);
+            MMAL_STATUS_T status = mmal_port_send_buffer(m_vout_input, buffer);
+            if (status != MMAL_SUCCESS)
+              CLog::Log(LOGERROR, "%s::%s - Failed to send omvb:%p mmal%:p to %s (status=0%x %s)", CLASSNAME, __func__, omvb, buffer, m_vout_input->name, status, mmal_status_to_string(status));
+            else
+              kept = true;
+          }
+        }
+      }
+      break;
+    }
+    default: assert(0); break;
+    }
+    if (!kept)
+    {
+      if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+        CLog::Log(LOGDEBUG, "%s::%s %s Not kept: omvb:%p mmal:%p dts:%.3f pts:%.3f len:%d cmd:%x flags:%x enc:%.4s", CLASSNAME, __func__,
+          omvb ? omvb->GetStateName():"", omvb, buffer, buffer->dts*1e-6, buffer->pts*1e-6, buffer->length, buffer->cmd, buffer->flags, omvb ? (char *)&omvb->Encoding():"");
+      if (omvb)
+        omvb->Release();
+      else
+      {
+        mmal_buffer_header_reset(buffer);
+        buffer->cmd = 0;
+        mmal_buffer_header_release(buffer);
+      }
+    }
+  }
+  CLog::Log(LOGDEBUG, "%s::%s - stopping", CLASSNAME, __func__);
+}
+
+void CMMALRenderer::UpdateFramerateStats(double pts)
+{
+  double diff = 0.0;
+  if (m_lastPts != DVD_NOPTS_VALUE && pts != DVD_NOPTS_VALUE && pts - m_lastPts > 0.0 && pts - m_lastPts < DVD_SEC_TO_TIME(1./20.0))
+  {
+    diff = pts - m_lastPts;
+    if (m_frameInterval == 0.0)
+      m_frameInterval = diff;
+    else if (diff > 0.0)
+    {
+      m_frameIntervalDiff = m_frameIntervalDiff * 0.9 + 0.1 * fabs(m_frameInterval - diff);
+      m_frameInterval = m_frameInterval * 0.9 + diff * 0.1;
+    }
+  }
+  if (pts != DVD_NOPTS_VALUE)
+    m_lastPts = pts;
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s pts:%.3f diff:%.3f m_frameInterval:%.6f m_frameIntervalDiff:%.6f", CLASSNAME, __func__, pts*1e-6, diff * 1e-6 , m_frameInterval * 1e-6, m_frameIntervalDiff *1e-6);
+}
+
+void CMMALRenderer::AddVideoPicture(const VideoPicture& pic, int id, double currentClock)
+{
+  CMMALBuffer *buffer = dynamic_cast<CMMALBuffer*>(pic.videoBuffer);
+  assert(buffer);
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s MMAL - %p (%p) %i", CLASSNAME, __func__, buffer, buffer->mmal_buffer, id);
+
+  assert(!m_buffers[id]);
+  buffer->Acquire();
+  m_buffers[id] = buffer;
+  UpdateFramerateStats(pic.pts);
+}
+
+bool CMMALRenderer::Configure(const VideoPicture &picture, float fps, unsigned int orientation)
 {
   CSingleLock lock(m_sharedSection);
   ReleaseBuffers();
 
-  m_sourceWidth  = width;
-  m_sourceHeight = height;
+  if (picture.videoBuffer)
+    m_format = picture.videoBuffer->GetFormat();
+  m_sourceWidth = picture.iWidth;
+  m_sourceHeight = picture.iHeight;
   m_renderOrientation = orientation;
 
+  m_iFlags = GetFlagsChromaPosition(picture.chroma_position) |
+             GetFlagsColorPrimaries(picture.color_primaries) |
+             GetFlagsStereoMode(picture.stereoMode);
+
   m_fps = fps;
-  m_iFlags = flags;
+  m_error = 0.0;
+  m_lastPts = DVD_NOPTS_VALUE;
+  m_frameInterval = 0.0;
+  m_frameIntervalDiff = 1e5;
 
   // cause SetVideoRect to trigger - needed after a hdmi mode change
   m_src_rect.SetRect(0, 0, 0, 0);
   m_dst_rect.SetRect(0, 0, 0, 0);
 
-  CLog::Log(LOGDEBUG, "%s::%s - %dx%d->%dx%d@%.2f flags:%x format:%d ext:%x orient:%d", CLASSNAME, __func__, width, height, d_width, d_height, fps, flags, format, extended_format, orientation);
-  if (format != RENDER_FMT_YUV420P && format != RENDER_FMT_BYPASS && format != RENDER_FMT_MMAL)
-  {
-    CLog::Log(LOGERROR, "%s::%s - format:%d not supported", CLASSNAME, __func__, format);
-    return false;
-  }
+  CLog::Log(LOGDEBUG, "%s::%s - %dx%d->%dx%d@%.2f flags:%x format:%d orient:%d", CLASSNAME, __func__, picture.iWidth, picture.iHeight, picture.iDisplayWidth, picture.iDisplayHeight, fps, m_iFlags, m_format, orientation);
 
   // calculate the input frame aspect ratio
-  CalculateFrameAspectRatio(d_width, d_height);
-  SetViewMode(CMediaSettings::GetInstance().GetCurrentVideoSettings().m_ViewMode);
-  ManageDisplay();
+  CalculateFrameAspectRatio(picture.iDisplayWidth, picture.iDisplayHeight);
+  SetViewMode(m_videoSettings.m_ViewMode);
+  ManageRenderArea();
 
-  m_bMMALConfigured = init_vout(format);
-  m_bConfigured = m_bMMALConfigured;
-  assert(m_bConfigured);
-  return m_bConfigured;
+  m_bConfigured = true;
+  return true;
 }
 
-int CMMALRenderer::GetImage(YV12Image *image, int source, bool readonly)
-{
-  if (!image || source < 0)
-  {
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - invalid: image:%p source:%d ro:%d flight:%d", CLASSNAME, __func__, image, source, readonly, m_inflight);
-#endif
-    return -1;
-  }
-
-  if (m_format == RENDER_FMT_MMAL)
-  {
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - MMAL: image:%p source:%d ro:%d flight:%d", CLASSNAME, __func__, image, source, readonly, m_inflight);
-#endif
-  }
-  else if (m_format == RENDER_FMT_YUV420P)
-  {
-    const int pitch = ALIGN_UP(m_sourceWidth, 32);
-    const int aligned_height = ALIGN_UP(m_sourceHeight, 16);
-
-    MMAL_BUFFER_HEADER_T *buffer = mmal_queue_timedwait(m_vout_input_pool->queue, 500);
-    if (!buffer)
-    {
-      CLog::Log(LOGERROR, "%s::%s - mmal_queue_get failed", CLASSNAME, __func__);
-      return -1;
-    }
-
-    m_inflight++;
-    mmal_buffer_header_reset(buffer);
-
-    buffer->length = 3 * pitch * aligned_height >> 1;
-    assert(buffer->length <= buffer->alloc_size);
-
-    image->width    = m_sourceWidth;
-    image->height   = m_sourceHeight;
-    image->flags    = 0;
-    image->cshift_x = 1;
-    image->cshift_y = 1;
-    image->bpp      = 1;
-
-    image->stride[0] = pitch;
-    image->stride[1] = image->stride[2] = pitch>>image->cshift_x;
-
-    image->planesize[0] = pitch * aligned_height;
-    image->planesize[1] = image->planesize[2] = (pitch>>image->cshift_x)*(aligned_height>>image->cshift_y);
-
-    image->plane[0] = (uint8_t *)buffer->data;
-    image->plane[1] = image->plane[0] + image->planesize[0];
-    image->plane[2] = image->plane[1] + image->planesize[1];
-
-    YUVBUFFER &buf = m_buffers[source];
-    memset(&buf, 0, sizeof buf);
-    buf.YUVBuffer = new CYUVVideoBuffer;
-    if (!buf.YUVBuffer)
-      return -1;
-    buf.YUVBuffer->mmal_buffer = buffer;
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - YUV: image:%p source:%d ro:%d omvb:%p mmal:%p flight:%d", CLASSNAME, __func__, image, source, readonly, buf.YUVBuffer, buffer, m_inflight);
-#endif
-    buf.YUVBuffer->Acquire();
-  }
-  else assert(0);
-
-  return source;
-}
-
-void CMMALRenderer::ReleaseBuffer(int idx)
+void CMMALRenderer::ReleaseBuffer(int id)
 {
   CSingleLock lock(m_sharedSection);
-  if (!m_bMMALConfigured)
-  {
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - not configured: source:%d", CLASSNAME, __func__, idx);
-#endif
-    return;
-  }
-  if (m_format == RENDER_FMT_BYPASS)
-  {
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - bypass: source:%d", CLASSNAME, __func__, idx);
-#endif
-    return;
-  }
-
-  YUVBUFFER *buffer = &m_buffers[idx];
-  if (m_format == RENDER_FMT_MMAL)
-  {
-    CMMALVideoBuffer *omvb = buffer->MMALBuffer;
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - MMAL: source:%d omvb:%p mmal:%p", CLASSNAME, __func__, idx, omvb, omvb ? omvb->mmal_buffer:NULL);
-#endif
-    SAFE_RELEASE(buffer->MMALBuffer);
-  }
-  else if (m_format == RENDER_FMT_YUV420P)
-  {
-    CYUVVideoBuffer *omvb = buffer->YUVBuffer;
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - YUV: source:%d omvb:%p mmal:%p flight:%d", CLASSNAME, __func__, idx, omvb, omvb ? omvb->mmal_buffer:NULL, m_inflight);
-#endif
-    if (omvb && omvb->mmal_buffer)
-      SAFE_RELEASE(buffer->YUVBuffer);
-  }
-  else assert(0);
-}
-
-void CMMALRenderer::ReleaseImage(int source, bool preserve)
-{
-}
-
-void CMMALRenderer::Reset()
-{
-  CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
+  CMMALBuffer *omvb = m_buffers[id];
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s - MMAL: source:%d omvb:%p mmal:%p", CLASSNAME, __func__, id, omvb, omvb ? omvb->mmal_buffer:NULL);
+  if (m_buffers[id])
+    m_buffers[id]->Release();
+  m_buffers[id] = nullptr;
 }
 
 void CMMALRenderer::Flush()
 {
-  m_iYV12RenderBuffer = 0;
+  CSingleLock lock(m_sharedSection);
   CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
+  if (m_vout_input)
+    mmal_port_flush(m_vout_input);
+  ReleaseBuffers();
 }
 
 void CMMALRenderer::Update()
 {
-#if defined(MMAL_DEBUG_VERBOSE)
-  CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
-#endif
+  CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s", CLASSNAME, __func__);
   if (!m_bConfigured) return;
-  ManageDisplay();
+  ManageRenderArea();
 }
 
-void CMMALRenderer::RenderUpdate(bool clear, DWORD flags, DWORD alpha)
+void CMMALRenderer::RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha)
 {
   CSingleLock lock(m_sharedSection);
-  int source = m_iYV12RenderBuffer;
+  CMMALBuffer *omvb = nullptr;
 
   if (!m_bConfigured)
   {
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - not configured: clear:%d flags:%x alpha:%d source:%d", CLASSNAME, __func__, clear, flags, alpha, source);
-#endif
-    return;
+    CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s - not configured: clear:%d flags:%x alpha:%d source:%d", CLASSNAME, __func__, clear, flags, alpha, index);
+    goto exit;
   }
 
-  ManageDisplay();
+  omvb = m_buffers[index];
 
-  if (m_format == RENDER_FMT_BYPASS)
+  if (g_graphicsContext.GetStereoView() != RENDER_STEREO_VIEW_RIGHT)
   {
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - bypass: clear:%d flags:%x alpha:%d source:%d", CLASSNAME, __func__, clear, flags, alpha, source);
-#endif
-    return;
+    ManageRenderArea();
+    CRect view;
+    CBaseRenderer::GetVideoRect(m_cachedSourceRect, m_cachedDestRect, view);
   }
-  SetVideoRect(m_sourceRect, m_destRect);
 
-  YUVBUFFER *buffer = &m_buffers[source];
-  if (m_format == RENDER_FMT_MMAL)
+  // we only want to upload frames once
+  if (omvb && omvb->m_rendered)
   {
-    CMMALVideoBuffer *omvb = buffer->MMALBuffer;
-    if (omvb && omvb->mmal_buffer)
-    {
-#if defined(MMAL_DEBUG_VERBOSE)
-      CLog::Log(LOGDEBUG, "%s::%s - MMAL: clear:%d flags:%x alpha:%d source:%d omvb:%p mmal:%p mflags:%x", CLASSNAME, __func__, clear, flags, alpha, source, omvb, omvb->mmal_buffer, omvb->mmal_buffer->flags);
-#endif
-      // we only want to upload frames once
-      if (omvb->mmal_buffer->flags & MMAL_BUFFER_HEADER_FLAG_USER1)
-        return;
-      omvb->Acquire();
-      omvb->mmal_buffer->flags |= MMAL_BUFFER_HEADER_FLAG_USER1 | MMAL_BUFFER_HEADER_FLAG_USER2;
-      mmal_port_send_buffer(m_vout_input, omvb->mmal_buffer);
-    }
-    else
-      CLog::Log(LOGDEBUG, "%s::%s - No buffer to update", CLASSNAME, __func__);
+    CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s - MMAL: clear:%d flags:%x alpha:%d source:%d omvb:%p mmal:%p mflags:%x skipping", CLASSNAME, __func__, clear, flags, alpha, index, omvb, omvb->mmal_buffer, omvb->mmal_buffer->flags);
+    SetVideoRect(m_cachedSourceRect, m_cachedDestRect);
+    goto exit;
   }
-  else if (m_format == RENDER_FMT_YUV420P)
+
+  if (omvb && omvb->m_state == MMALStateBypass)
   {
-    CYUVVideoBuffer *omvb = buffer->YUVBuffer;
-    if (omvb && omvb->mmal_buffer)
-    {
-#if defined(MMAL_DEBUG_VERBOSE)
-      CLog::Log(LOGDEBUG, "%s::%s - YUV: clear:%d flags:%x alpha:%d source:%d omvb:%p mmal:%p mflags:%x", CLASSNAME, __func__, clear, flags, alpha, source, omvb, omvb->mmal_buffer, omvb->mmal_buffer->flags);
-#endif
-      // we only want to upload frames once
-      if (omvb->mmal_buffer->flags & MMAL_BUFFER_HEADER_FLAG_USER1)
-        return;
-      // sanity check it is not on display
-      omvb->Acquire();
-      omvb->mmal_buffer->flags |= MMAL_BUFFER_HEADER_FLAG_USER1 | MMAL_BUFFER_HEADER_FLAG_USER2;
-      omvb->mmal_buffer->user_data = omvb;
-      mmal_port_send_buffer(m_vout_input, omvb->mmal_buffer);
-    }
-    else
-      CLog::Log(LOGDEBUG, "%s::%s - No buffer to update: clear:%d flags:%x alpha:%d source:%d", CLASSNAME, __func__, clear, flags, alpha, source);
+    // dummy buffer from omxplayer
+    if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+      CLog::Log(LOGDEBUG, "%s::%s - OMX: clear:%d flags:%x alpha:%d source:%d omvb:%p", CLASSNAME, __func__, clear, flags, alpha, index, omvb);
   }
-  else assert(0);
-}
-
-void CMMALRenderer::FlipPage(int source)
-{
-  CSingleLock lock(m_sharedSection);
-  if (!m_bConfigured || m_format == RENDER_FMT_BYPASS)
+  else if (omvb && omvb->mmal_buffer)
   {
-#if defined(MMAL_DEBUG_VERBOSE)
-    CLog::Log(LOGDEBUG, "%s::%s - not configured: source:%d", CLASSNAME, __func__, source);
-#endif
-    return;
+    if (flags & RENDER_FLAG_TOP)
+      omvb->mmal_buffer->flags |= MMAL_BUFFER_HEADER_VIDEO_FLAG_INTERLACED | MMAL_BUFFER_HEADER_VIDEO_FLAG_TOP_FIELD_FIRST;
+    else if (flags & RENDER_FLAG_BOT)
+      omvb->mmal_buffer->flags |= MMAL_BUFFER_HEADER_VIDEO_FLAG_INTERLACED;
+    CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s - MMAL: clear:%d flags:%x alpha:%d source:%d omvb:%p mmal:%p mflags:%x len:%d data:%p enc:%.4s", CLASSNAME, __func__, clear, flags, alpha, index, omvb, omvb->mmal_buffer, omvb->mmal_buffer->flags, omvb->mmal_buffer->length, omvb->mmal_buffer->data, (char *)&omvb->Encoding());
+    assert(omvb->mmal_buffer && omvb->mmal_buffer->data && omvb->mmal_buffer->length);
+    omvb->Acquire();
+    omvb->m_rendered = true;
+    assert(omvb->mmal_buffer->user_data == omvb);
+    mmal_queue_put(m_queue_process, omvb->mmal_buffer);
   }
+  else
+    CLog::Log(LOGDEBUG, "%s::%s - MMAL: No buffer to update clear:%d flags:%x alpha:%d source:%d omvb:%p mmal:%p", CLASSNAME, __func__, clear, flags, alpha, index, omvb, omvb ? omvb->mmal_buffer : nullptr);
 
-#if defined(MMAL_DEBUG_VERBOSE)
-  CLog::Log(LOGDEBUG, "%s::%s - source:%d", CLASSNAME, __func__, source);
-#endif
-
-  m_iYV12RenderBuffer = source;
-}
-
-void CMMALRenderer::PreInit()
-{
-  CSingleLock lock(m_sharedSection);
-  m_bConfigured = false;
-  UnInit();
-
-  m_iFlags = 0;
-
-  CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
-
-  m_formats.clear();
-  m_formats.push_back(RENDER_FMT_YUV420P);
-  m_formats.push_back(RENDER_FMT_MMAL);
-  m_formats.push_back(RENDER_FMT_BYPASS);
-
-  memset(m_buffers, 0, sizeof m_buffers);
-  m_iYV12RenderBuffer = 0;
-  m_NumYV12Buffers = NUM_BUFFERS;
+exit:
+   lock.Leave();
+   uint32_t v = g_RBP.WaitVsync(m_vsync_count);
+   // allow a frame of slop
+   if (m_vsync_count == ~0U || !(v == m_vsync_count))
+   {
+     CLog::Log(LOGDEBUG, "%s::%s - vsync %d (+%d)", CLASSNAME, __func__, m_vsync_count, v - m_vsync_count);
+     m_vsync_count = v + 1;
+   }
+   else
+     m_vsync_count++;
 }
 
 void CMMALRenderer::ReleaseBuffers()
 {
-#if defined(MMAL_DEBUG_VERBOSE)
-  CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
-#endif
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
   for (int i=0; i<NUM_BUFFERS; i++)
     ReleaseBuffer(i);
 }
 
 void CMMALRenderer::UnInitMMAL()
 {
-  CSingleLock lock(m_sharedSection);
-  CLog::Log(LOGDEBUG, "%s::%s pool(%p)", CLASSNAME, __func__, m_vout_input_pool);
+  CLog::Log(LOGDEBUG, "%s::%s", CLASSNAME, __func__);
+
+  if (m_queue_render)
+  {
+    mmal_queue_put(m_queue_render, &m_quitpacket);
+    {
+      // leave the lock to allow other threads to exit
+      CSingleExit unlock(m_sharedSection);
+      StopThread(true);
+    }
+    mmal_queue_destroy(m_queue_render);
+    m_queue_render = nullptr;
+  }
+
   if (m_vout)
   {
     mmal_component_disable(m_vout);
-    mmal_port_disable(m_vout->control);
   }
 
   if (m_vout_input)
   {
     mmal_port_flush(m_vout_input);
     mmal_port_disable(m_vout_input);
-    m_vout_input = NULL;
   }
 
   ReleaseBuffers();
 
-  if (m_vout_input_pool)
-  {
-    mmal_pool_destroy(m_vout_input_pool);
-    m_vout_input_pool = NULL;
-  }
+  m_vout_input = NULL;
 
   if (m_vout)
   {
@@ -587,14 +1022,17 @@ void CMMALRenderer::UnInitMMAL()
   m_video_stereo_mode = RENDER_STEREO_MODE_OFF;
   m_display_stereo_mode = RENDER_STEREO_MODE_OFF;
   m_StereoInvert = false;
-  m_format = RENDER_FMT_NONE;
-
-  m_bConfigured = false;
-  m_bMMALConfigured = false;
+  m_vout_width = 0;
+  m_vout_height = 0;
+  m_vout_aligned_width = 0;
+  m_vout_aligned_height = 0;
 }
 
 void CMMALRenderer::UnInit()
 {
+  CSingleLock lock(m_sharedSection);
+  m_bConfigured = false;
+  DestroyDeinterlace();
   UnInitMMAL();
 }
 
@@ -615,39 +1053,6 @@ bool CMMALRenderer::RenderCapture(CRenderCapture* capture)
 // YV12 Texture creation, deletion, copying + clearing
 //********************************************************************************************************
 
-bool CMMALRenderer::Supports(EDEINTERLACEMODE mode)
-{
-  if(mode == VS_DEINTERLACEMODE_OFF
-  || mode == VS_DEINTERLACEMODE_AUTO
-  || mode == VS_DEINTERLACEMODE_FORCE)
-    return true;
-
-  return false;
-}
-
-bool CMMALRenderer::Supports(EINTERLACEMETHOD method)
-{
-  if (m_format == RENDER_FMT_YUV420P)
-  {
-    if (method == VS_INTERLACEMETHOD_DEINTERLACE_HALF)
-      return true;
-    else
-      return false;
-  }
-  if (method == VS_INTERLACEMETHOD_AUTO)
-    return true;
-  if (method == VS_INTERLACEMETHOD_MMAL_ADVANCED)
-    return true;
-  if (method == VS_INTERLACEMETHOD_MMAL_ADVANCED_HALF)
-    return true;
-  if (method == VS_INTERLACEMETHOD_MMAL_BOB)
-    return true;
-  if (method == VS_INTERLACEMETHOD_MMAL_BOB_HALF)
-    return true;
-
-  return false;
-}
-
 bool CMMALRenderer::Supports(ERENDERFEATURE feature)
 {
   if (feature == RENDERFEATURE_STRETCH         ||
@@ -665,17 +1070,9 @@ bool CMMALRenderer::Supports(ESCALINGMETHOD method)
   return false;
 }
 
-EINTERLACEMETHOD CMMALRenderer::AutoInterlaceMethod()
-{
-  if (m_format == RENDER_FMT_YUV420P)
-    return VS_INTERLACEMETHOD_DEINTERLACE_HALF;
-  return m_sourceWidth * m_sourceHeight <= 576 * 720 ? VS_INTERLACEMETHOD_MMAL_ADVANCED : VS_INTERLACEMETHOD_MMAL_BOB;
-}
-
 void CMMALRenderer::SetVideoRect(const CRect& InSrcRect, const CRect& InDestRect)
 {
   CSingleLock lock(m_sharedSection);
-  assert(g_graphicsContext.GetStereoView() != RENDER_STEREO_VIEW_RIGHT);
 
   if (!m_vout_input)
     return;
@@ -693,11 +1090,30 @@ void CMMALRenderer::SetVideoRect(const CRect& InSrcRect, const CRect& InDestRect
   // fix up transposed video
   if (m_renderOrientation == 90 || m_renderOrientation == 270)
   {
-    float diff = (DestRect.Height() - DestRect.Width()) * 0.5f;
-    DestRect.x1 -= diff;
-    DestRect.x2 += diff;
-    DestRect.y1 += diff;
-    DestRect.y2 -= diff;
+    float newWidth, newHeight;
+    float aspectRatio = GetAspectRatio();
+    // clamp width if too wide
+    if (DestRect.Height() > DestRect.Width())
+    {
+      newWidth = DestRect.Width(); // clamp to the width of the old dest rect
+      newHeight = newWidth * aspectRatio;
+    }
+    else // else clamp to height
+    {
+      newHeight = DestRect.Height(); // clamp to the height of the old dest rect
+      newWidth = newHeight / aspectRatio;
+    }
+
+    // calculate the center point of the view and offsets
+    float centerX = DestRect.x1 + DestRect.Width() * 0.5f;
+    float centerY = DestRect.y1 + DestRect.Height() * 0.5f;
+    float diffX = newWidth * 0.5f;
+    float diffY = newHeight * 0.5f;
+
+    DestRect.x1 = centerX - diffX;
+    DestRect.x2 = centerX + diffX;
+    DestRect.y1 = centerY - diffY;
+    DestRect.y2 = centerY + diffY;
   }
 
   // check if destination rect or video view mode has changed
@@ -788,4 +1204,248 @@ void CMMALRenderer::SetVideoRect(const CRect& InSrcRect, const CRect& InDestRect
   CLog::Log(LOGDEBUG, "%s::%s %d,%d,%d,%d -> %d,%d,%d,%d t:%x", CLASSNAME, __func__,
       region.src_rect.x, region.src_rect.y, region.src_rect.width, region.src_rect.height,
       region.dest_rect.x, region.dest_rect.y, region.dest_rect.width, region.dest_rect.height, region.transform);
+}
+
+void CMMALRenderer::deint_input_port_cb(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s omvb:%p mmal:%p dts:%.3f pts:%.3f len:%d cmd:%x flags:%x", CLASSNAME, __func__,
+        buffer->user_data, buffer, buffer->dts*1e-6, buffer->pts*1e-6, buffer->length, buffer->cmd, buffer->flags);
+  mmal_queue_put(m_queue_process, buffer);
+}
+
+static void deint_input_port_cb_static(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+  CMMALRenderer *mmal = reinterpret_cast<CMMALRenderer*>(port->userdata);
+  mmal->deint_input_port_cb(port, buffer);
+}
+
+void CMMALRenderer::deint_output_port_cb(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+  if (VERBOSE && g_advancedSettings.CanLogComponent(LOGVIDEO))
+    CLog::Log(LOGDEBUG, "%s::%s omvb:%p mmal:%p dts:%.3f pts:%.3f len:%d cmd:%x flags:%x", CLASSNAME, __func__,
+        buffer->user_data, buffer, buffer->dts*1e-6, buffer->pts*1e-6, buffer->length, buffer->cmd, buffer->flags);
+  mmal_queue_put(m_queue_process, buffer);
+}
+
+static void deint_output_port_cb_static(MMAL_PORT_T *port, MMAL_BUFFER_HEADER_T *buffer)
+{
+  CMMALRenderer *mmal = reinterpret_cast<CMMALRenderer*>(port->userdata);
+  mmal->deint_output_port_cb(port, buffer);
+}
+
+void CMMALRenderer::DestroyDeinterlace()
+{
+  MMAL_STATUS_T status;
+
+  CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s", CLASSNAME, __func__);
+
+  // (lazily) destroy pool first so new buffers aren't allocated when flushing
+  m_deint_output_pool = nullptr;
+
+  if (m_deint_input && m_deint_input->is_enabled)
+  {
+    status = mmal_port_disable(m_deint_input);
+    if (status != MMAL_SUCCESS)
+      CLog::Log(LOGERROR, "%s::%s Failed to disable deinterlace input port(status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+  }
+  m_deint_input = nullptr;
+  if (m_deint_output && m_deint_output->is_enabled)
+  {
+    status = mmal_port_disable(m_deint_output);
+    if (status != MMAL_SUCCESS)
+      CLog::Log(LOGERROR, "%s::%s Failed to disable deinterlace output port(status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+  }
+  m_deint_output = nullptr;
+  m_interlace_method = VS_INTERLACEMETHOD_MAX;
+  m_deint_width = 0;
+  m_deint_height = 0;
+  m_deint_aligned_width = 0;
+  m_deint_aligned_height = 0;
+  m_deint = nullptr;
+}
+
+bool CMMALRenderer::CheckConfigurationDeint(uint32_t width, uint32_t height, uint32_t aligned_width, uint32_t aligned_height, uint32_t encoding, EINTERLACEMETHOD interlace_method)
+{
+  MMAL_STATUS_T status;
+  bool sizeChanged = width != m_deint_width || height != m_deint_height || aligned_width != m_deint_aligned_width || aligned_height != m_deint_aligned_height;
+  bool deinterlaceChanged = interlace_method != m_interlace_method;
+  bool encodingChanged = !m_deint_input || !m_deint_input->format || m_deint_input->format->encoding != encoding;
+  bool advanced_deinterlace = interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED || interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED_HALF;
+  bool half_framerate = interlace_method == VS_INTERLACEMETHOD_MMAL_ADVANCED_HALF || interlace_method == VS_INTERLACEMETHOD_MMAL_BOB_HALF;
+  uint32_t output_encoding = advanced_deinterlace ? MMAL_ENCODING_YUVUV128 : MMAL_ENCODING_I420;
+
+  if (!m_bConfigured)
+  {
+    CLog::Log(LOGDEBUG, "%s::%s Unconfigured", CLASSNAME, __func__);
+    return false;
+  }
+
+  if (!m_deint)
+  {
+    CLog::Log(LOGDEBUG, LOGVIDEO, "%s::%s CreateDeinterlace", CLASSNAME, __func__);
+
+    /* Create deinterlace component with attached pool */
+    m_deint_output_pool = std::make_shared<CMMALPool>("vc.ril.image_fx", false, 3, 0, output_encoding, MMALStateDeint);
+    if (!m_deint_output_pool)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to create pool for deint output", CLASSNAME, __func__);
+      return false;
+    }
+
+    m_deint = m_deint_output_pool->GetComponent();
+    m_deint_output = m_deint->output[0];
+    m_deint_input = m_deint->input[0];
+
+    status = mmal_port_parameter_set_boolean(m_deint_input, MMAL_PARAMETER_ZERO_COPY, MMAL_TRUE);
+    if (status != MMAL_SUCCESS)
+      CLog::Log(LOGERROR, "%s::%s Failed to enable zero copy mode on %s (status=%x %s)", CLASSNAME, __func__, m_deint_input->name, status, mmal_status_to_string(status));
+  }
+
+  if (m_deint_input && (sizeChanged || deinterlaceChanged || encodingChanged))
+  {
+    assert(m_deint_input != nullptr && m_deint_input->format != nullptr && m_deint_input->format->es != nullptr);
+    CLog::Log(LOGDEBUG, "%s::%s Changing Deint dimensions from %dx%d (%dx%d) to %dx%d (%dx%d) %.4s->%.4s mode %d->%d", CLASSNAME, __func__,
+        m_deint_input->format->es->video.crop.width, m_deint_input->format->es->video.crop.height,
+        m_deint_input->format->es->video.width, m_deint_input->format->es->video.height, width, height, aligned_width, aligned_height,
+        (char *)&m_deint_input->format->encoding, (char *)&encoding, m_interlace_method, interlace_method);
+
+    // we need to disable port when parameters change
+    if (m_deint_input && m_deint_input->is_enabled)
+    {
+      status = mmal_port_disable(m_deint_input);
+      if (status != MMAL_SUCCESS)
+      {
+        CLog::Log(LOGERROR, "%s::%s Failed to disable deint input port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+        return false;
+      }
+    }
+  }
+
+  if (m_deint_output && (sizeChanged || deinterlaceChanged || encodingChanged))
+  {
+    if (m_deint_output && m_deint_output->is_enabled)
+    {
+      status = mmal_port_disable(m_deint_output);
+      if (status != MMAL_SUCCESS)
+      {
+        CLog::Log(LOGERROR, "%s::%s Failed to disable deint output port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+        return false;
+      }
+    }
+  }
+
+  if (m_deint_input && (sizeChanged || deinterlaceChanged || encodingChanged))
+  {
+    m_deint_width = width;
+    m_deint_height = height;
+    m_deint_aligned_width = aligned_width;
+    m_deint_aligned_height = aligned_height;
+
+    m_deint_input->format->es->video.crop.width = width;
+    m_deint_input->format->es->video.crop.height = height;
+    m_deint_input->format->es->video.width = aligned_width;
+    m_deint_input->format->es->video.height = aligned_height;
+    m_deint_input->format->encoding = encoding;
+
+    status = mmal_port_format_commit(m_deint_input);
+    if (status != MMAL_SUCCESS)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to commit deint input format (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+      return false;
+    }
+
+    if (!m_deint_input->is_enabled)
+    {
+      m_deint_input->buffer_num = MMAL_NUM_OUTPUT_BUFFERS;
+      m_deint_input->buffer_size = m_deint_input->buffer_size_recommended;
+      m_deint_input->userdata = (struct MMAL_PORT_USERDATA_T *)this;
+
+      status = mmal_port_enable(m_deint_input, deint_input_port_cb_static);
+      if (status != MMAL_SUCCESS)
+      {
+        CLog::Log(LOGERROR, "%s::%s Failed to enable deint input port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+        return false;
+      }
+    }
+  }
+
+  if (m_deint_output && (sizeChanged || deinterlaceChanged || encodingChanged))
+  {
+    MMAL_PARAMETER_IMAGEFX_PARAMETERS_T imfx_param = {{MMAL_PARAMETER_IMAGE_EFFECT_PARAMETERS, sizeof(imfx_param)},
+          advanced_deinterlace ? MMAL_PARAM_IMAGEFX_DEINTERLACE_ADV : MMAL_PARAM_IMAGEFX_DEINTERLACE_FAST, 4, {5, 0, half_framerate, 1 }};
+
+    status = mmal_port_parameter_set(m_deint_output, &imfx_param.hdr);
+    if (status != MMAL_SUCCESS)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to set deinterlace parameters (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+      return false;
+    }
+
+    // Image_fx assumed 3 frames of context. simple deinterlace doesn't require this
+    status = mmal_port_parameter_set_uint32(m_deint_input, MMAL_PARAMETER_EXTRA_BUFFERS, 6 - 5 + advanced_deinterlace ? 2:0);
+    if (status != MMAL_SUCCESS)
+      CLog::Log(LOGERROR, "%s::%s Failed to enable extra buffers on %s (status=%x %s)", CLASSNAME, __func__, m_deint_input->name, status, mmal_status_to_string(status));
+  }
+
+  if (m_deint_output && (sizeChanged || deinterlaceChanged || encodingChanged))
+  {
+    m_deint_output->format->es->video.crop.width = width;
+    m_deint_output->format->es->video.crop.height = height;
+    m_deint_output->format->es->video.width = ALIGN_UP(width, 32);
+    m_deint_output->format->es->video.height = ALIGN_UP(height, 16);
+    m_deint_output->format->encoding = output_encoding;
+
+    status = mmal_port_format_commit(m_deint_output);
+    if (status != MMAL_SUCCESS)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to commit deint output format (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+      return false;
+    }
+
+    if (!m_deint_output->is_enabled)
+    {
+      m_deint_output->buffer_num = 3;
+      m_deint_output->buffer_size = m_deint_output->buffer_size_recommended;
+      m_deint_output->userdata = (struct MMAL_PORT_USERDATA_T *)this;
+
+      status = mmal_port_enable(m_deint_output, deint_output_port_cb_static);
+      if (status != MMAL_SUCCESS)
+      {
+        CLog::Log(LOGERROR, "%s::%s Failed to enable deint output port (status=%x %s)", CLASSNAME, __func__, status, mmal_status_to_string(status));
+        return false;
+      }
+    }
+    if (m_deint_output_pool)
+      m_deint_output_pool->Configure(AV_PIX_FMT_NONE,
+        m_deint_output->format->es->video.crop.width, m_deint_output->format->es->video.crop.height,
+        m_deint_output->format->es->video.width, m_deint_output->format->es->video.height, m_deint_output->buffer_size);
+  }
+
+  if (m_deint && !m_deint->is_enabled)
+  {
+    status = mmal_component_enable(m_deint);
+    if (status != MMAL_SUCCESS)
+    {
+      CLog::Log(LOGERROR, "%s::%s Failed to enable deinterlacer component %s (status=%x %s)", CLASSNAME, __func__, m_deint->name, status, mmal_status_to_string(status));
+      return false;
+    }
+  }
+  m_interlace_method = interlace_method;
+
+  // give buffers to deint
+  if (m_deint_output_pool)
+    m_deint_output_pool->Prime();
+  return true;
+}
+
+CBaseRenderer* CMMALRenderer::Create(CVideoBuffer *buffer)
+{
+  return new CMMALRenderer();
+}
+
+bool CMMALRenderer::Register()
+{
+  VIDEOPLAYER::CRendererFactory::RegisterRenderer("mmal", CMMALRenderer::Create);
+  return true;
 }

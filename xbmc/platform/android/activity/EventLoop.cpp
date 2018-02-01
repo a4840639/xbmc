@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -142,14 +142,16 @@ int32_t CEventLoop::processInput(AInputEvent* event)
   int32_t type   = AInputEvent_getType(event);
   int32_t source = AInputEvent_getSource(event);
 
+  // handle joystick input
+  if (IS_FROM_SOURCE(source, AINPUT_SOURCE_GAMEPAD) || IS_FROM_SOURCE(source, AINPUT_SOURCE_JOYSTICK))
+  {
+    if (m_inputHandler->onJoyStickEvent(event))
+      return true;
+  }
+
   switch(type)
   {
     case AINPUT_EVENT_TYPE_KEY:
-      if (IS_FROM_SOURCE(source, AINPUT_SOURCE_GAMEPAD) || IS_FROM_SOURCE(source, AINPUT_SOURCE_JOYSTICK))
-      {
-        if (m_inputHandler->onJoyStickKeyEvent(event))
-          return true;
-      }
       rtn = m_inputHandler->onKeyboardEvent(event);
       break;
     case AINPUT_EVENT_TYPE_MOTION:
@@ -157,8 +159,6 @@ int32_t CEventLoop::processInput(AInputEvent* event)
         rtn = m_inputHandler->onTouchEvent(event);
       else if (IS_FROM_SOURCE(source, AINPUT_SOURCE_MOUSE))
         rtn = m_inputHandler->onMouseEvent(event);
-      else if (IS_FROM_SOURCE(source, AINPUT_SOURCE_GAMEPAD) || IS_FROM_SOURCE(source, AINPUT_SOURCE_JOYSTICK))
-        rtn = m_inputHandler->onJoyStickMotionEvent(event);
       break;
   }
 

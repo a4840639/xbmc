@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 
 #include "SkinSettings.h"
 #include "GUIInfoManager.h"
+#include "ServiceBroker.h"
 #include "addons/Skin.h"
 #include "settings/Settings.h"
 #include "threads/SingleLock.h"
@@ -37,8 +38,7 @@ CSkinSettings::CSkinSettings()
   Clear();
 }
 
-CSkinSettings::~CSkinSettings()
-{ }
+CSkinSettings::~CSkinSettings() = default;
 
 CSkinSettings& CSkinSettings::GetInstance()
 {
@@ -95,8 +95,8 @@ bool CSkinSettings::Load(const TiXmlNode *settings)
 
   const TiXmlElement *rootElement = settings->FirstChildElement(XML_SKINSETTINGS);
   
-  //return true in the case skinsettings is missing. It just means that
-  //it's been migrated and it's not an error
+  // return true in the case skinsettings is missing. It just means that
+  // it's been migrated and it's not an error
   if (rootElement == nullptr)
   {
     CLog::Log(LOGDEBUG, "CSkinSettings: no <skinsettings> tag found");
@@ -115,26 +115,7 @@ bool CSkinSettings::Save(TiXmlNode *settings) const
   if (settings == nullptr)
     return false;
 
-  CSingleLock lock(m_critical);
-
-  if (m_settings.empty())
-    return true;
-
-  // add the <skinsettings> tag
-  TiXmlElement xmlSettingsElement(XML_SKINSETTINGS);
-  TiXmlNode* settingsNode = settings->InsertEndChild(xmlSettingsElement);
-  if (settingsNode == nullptr)
-  {
-    CLog::Log(LOGWARNING, "CSkinSettings: could not create <skinsettings> tag");
-    return false;
-  }
-
-  TiXmlElement* settingsElement = settingsNode->ToElement();
-  for (const auto& setting : m_settings)
-  {
-    if (!setting->Serialize(settingsElement))
-      CLog::Log(LOGWARNING, "CSkinSettings: unable to save setting \"%s\"", setting->name.c_str());
-  }
+  // nothing to do here because skin settings saving has been migrated to CSkinInfo
 
   return true;
 }
@@ -185,7 +166,7 @@ void CSkinSettings::MigrateSettings(const ADDON::SkinPtr& skin)
     skin->SaveSettings();
 
     // save the guisettings.xml
-    CSettings::GetInstance().Save();
+    CServiceBroker::GetSettings().Save();
   }
 }
 

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ class CNetworkWin32;
 class CNetworkInterfaceWin32 : public CNetworkInterface
 {
 public:
-   CNetworkInterfaceWin32(CNetworkWin32* network, IP_ADAPTER_INFO adapter);
+   CNetworkInterfaceWin32(CNetworkWin32* network, const IP_ADAPTER_INFO& adapter);
    ~CNetworkInterfaceWin32(void);
 
    virtual std::string& GetName(void);
@@ -79,6 +79,17 @@ public:
    // Get/set the nameserver(s)
    virtual std::vector<std::string> GetNameServers(void);
    virtual void SetNameServers(const std::vector<std::string>& nameServers);
+
+   /*!
+    \brief  IPv6/IPv4 compatible conversion of host IP address
+    \param  struct sockaddr
+    \return Function converts binary structure sockaddr to std::string.
+            It can read sockaddr_in and sockaddr_in6, cast as (sockaddr*).
+            IPv4 address is returned in the format x.x.x.x (where x is 0-255),
+            IPv6 address is returned in it's canonised form.
+            On error (or no IPv6/v4 valid input) empty string is returned.
+    */
+   const static std::string GetIpStr(const sockaddr* sa);
 
    friend class CNetworkInterfaceWin32;
 

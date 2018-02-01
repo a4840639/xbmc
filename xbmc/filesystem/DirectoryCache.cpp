@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,6 +39,7 @@ CDirectoryCache::CDir::CDir(DIR_CACHE_TYPE cacheType)
   m_cacheType = cacheType;
   m_lastAccess = 0;
   m_Items = new CFileItemList;
+  m_Items->SetIgnoreURLOptions(true);
   m_Items->SetFastLookup(true);
 }
 
@@ -61,9 +62,7 @@ CDirectoryCache::CDirectoryCache(void)
 #endif
 }
 
-CDirectoryCache::~CDirectoryCache(void)
-{
-}
+CDirectoryCache::~CDirectoryCache(void) = default;
 
 bool CDirectoryCache::GetDirectory(const std::string& strPath, CFileItemList &items, bool retrieveAll)
 {
@@ -150,12 +149,11 @@ void CDirectoryCache::ClearSubPaths(const std::string& strPath)
 
   // Get rid of any URL options, else the compare may be wrong
   std::string storedPath = CURL(strPath).GetWithoutOptions();
-  URIUtils::RemoveSlashAtEnd(storedPath);
 
   iCache i = m_cache.begin();
   while (i != m_cache.end())
   {
-    if (StringUtils::StartsWith(i->first, storedPath))
+    if (URIUtils::PathHasParent(i->first, storedPath))
       Delete(i++);
     else
       i++;
@@ -200,7 +198,7 @@ bool CDirectoryCache::FileExists(const std::string& strFile, bool& bInCache)
 #ifdef _DEBUG
     m_cacheHits++;
 #endif
-    return (URIUtils::PathEquals(strPath, storedPath) || dir->m_Items->Contains(strFile, true));
+    return (URIUtils::PathEquals(strPath, storedPath) || dir->m_Items->Contains(strFile));
   }
 #ifdef _DEBUG
   m_cacheMisses++;

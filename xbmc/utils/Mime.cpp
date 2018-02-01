@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -55,6 +55,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("arc",       "application/octet-stream"));
   mimeTypes.insert(std::pair<std::string, std::string>("arj",       "application/arj"));
   mimeTypes.insert(std::pair<std::string, std::string>("art",       "image/x-jg"));
+  mimeTypes.insert(std::pair<std::string, std::string>("arw",       "image/arw"));
   mimeTypes.insert(std::pair<std::string, std::string>("asf",       "video/x-ms-asf"));
   mimeTypes.insert(std::pair<std::string, std::string>("asm",       "text/x-asm"));
   mimeTypes.insert(std::pair<std::string, std::string>("asp",       "text/asp"));
@@ -91,6 +92,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("cpt",       "application/x-cpt"));
   mimeTypes.insert(std::pair<std::string, std::string>("crl",       "application/pkcs-crl"));
   mimeTypes.insert(std::pair<std::string, std::string>("crt",       "application/pkix-cert"));
+  mimeTypes.insert(std::pair<std::string, std::string>("cr2",       "image/cr2"));
   mimeTypes.insert(std::pair<std::string, std::string>("csh",       "application/x-csh"));
   mimeTypes.insert(std::pair<std::string, std::string>("css",       "text/css"));
   mimeTypes.insert(std::pair<std::string, std::string>("cxx",       "text/plain"));
@@ -102,6 +104,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("dir",       "application/x-director"));
   mimeTypes.insert(std::pair<std::string, std::string>("dl",        "video/dl"));
   mimeTypes.insert(std::pair<std::string, std::string>("divx",      "video/x-msvideo"));
+  mimeTypes.insert(std::pair<std::string, std::string>("dng",       "image/dng"));
   mimeTypes.insert(std::pair<std::string, std::string>("doc",       "application/msword"));
   mimeTypes.insert(std::pair<std::string, std::string>("docx",      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
   mimeTypes.insert(std::pair<std::string, std::string>("dot",       "application/msword"));
@@ -177,7 +180,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("ima",       "application/x-ima"));
   mimeTypes.insert(std::pair<std::string, std::string>("imap",      "application/x-httpd-imap"));
   mimeTypes.insert(std::pair<std::string, std::string>("inf",       "application/inf"));
-  mimeTypes.insert(std::pair<std::string, std::string>("ins",       "application/x-internett-signup"));
+  mimeTypes.insert(std::pair<std::string, std::string>("ins",       "application/x-internet-signup"));
   mimeTypes.insert(std::pair<std::string, std::string>("ip",        "application/x-ip2"));
   mimeTypes.insert(std::pair<std::string, std::string>("isu",       "video/x-isvideo"));
   mimeTypes.insert(std::pair<std::string, std::string>("it",        "audio/it"));
@@ -219,7 +222,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("m1v",       "video/mpeg"));
   mimeTypes.insert(std::pair<std::string, std::string>("m2a",       "audio/mpeg"));
   mimeTypes.insert(std::pair<std::string, std::string>("m2v",       "video/mpeg"));
-  mimeTypes.insert(std::pair<std::string, std::string>("m3u",       "audio/x-mpequrl"));
+  mimeTypes.insert(std::pair<std::string, std::string>("m3u",       "audio/x-mpegurl"));
   mimeTypes.insert(std::pair<std::string, std::string>("man",       "application/x-troff-man"));
   mimeTypes.insert(std::pair<std::string, std::string>("map",       "application/x-navimap"));
   mimeTypes.insert(std::pair<std::string, std::string>("mar",       "text/plain"));
@@ -268,6 +271,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("naplps",    "image/naplps"));
   mimeTypes.insert(std::pair<std::string, std::string>("nc",        "application/x-netcdf"));
   mimeTypes.insert(std::pair<std::string, std::string>("ncm",       "application/vnd.nokia.configuration-message"));
+  mimeTypes.insert(std::pair<std::string, std::string>("nef",       "image/nef"));
   mimeTypes.insert(std::pair<std::string, std::string>("nfo",       "text/xml"));
   mimeTypes.insert(std::pair<std::string, std::string>("nif",       "image/x-niff"));
   mimeTypes.insert(std::pair<std::string, std::string>("niff",      "image/x-niff"));
@@ -323,7 +327,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("pvu",       "paleovu/x-pv"));
   mimeTypes.insert(std::pair<std::string, std::string>("pwz",       "application/vnd.ms-powerpoint"));
   mimeTypes.insert(std::pair<std::string, std::string>("py",        "text/x-script.phyton"));
-  mimeTypes.insert(std::pair<std::string, std::string>("pyc",       "applicaiton/x-bytecode.python"));
+  mimeTypes.insert(std::pair<std::string, std::string>("pyc",       "application/x-bytecode.python"));
   mimeTypes.insert(std::pair<std::string, std::string>("qcp",       "audio/vnd.qcelp"));
   mimeTypes.insert(std::pair<std::string, std::string>("qd3",       "x-world/x-3dmf"));
   mimeTypes.insert(std::pair<std::string, std::string>("qd3d",      "x-world/x-3dmf"));
@@ -391,6 +395,7 @@ std::map<std::string, std::string> fillMimeTypes()
   mimeTypes.insert(std::pair<std::string, std::string>("step",      "application/step"));
   mimeTypes.insert(std::pair<std::string, std::string>("stl",       "application/sla"));
   mimeTypes.insert(std::pair<std::string, std::string>("stp",       "application/step"));
+  mimeTypes.insert(std::pair<std::string, std::string>("sup",       "application/x-pgs"));
   mimeTypes.insert(std::pair<std::string, std::string>("sv4cpio",   "application/x-sv4cpio"));
   mimeTypes.insert(std::pair<std::string, std::string>("sv4crc",    "application/x-sv4crc"));
   mimeTypes.insert(std::pair<std::string, std::string>("svf",       "image/vnd.dwg"));
@@ -637,7 +642,7 @@ CMime::EFileType CMime::GetFileTypeFromContent(const std::string& fileContent)
 
   const unsigned char* const b = (const unsigned char*)fileContent.c_str();
 
-  // TODO: add detection for text types
+  //! @todo add detection for text types
 
   // check image types
   if (b[0] == 'B' && b[1] == 'M')
@@ -657,7 +662,7 @@ CMime::EFileType CMime::GetFileTypeFromContent(const std::string& fileContent)
   if (len >= 7 && b[0] == 'R' && b[1] == 'a' && b[2] == 'r' && b[3] == ' ' && b[4] == 0x1A && b[5] == 0x07 && b[6] == 0x00)
     return FileTypeRar;
 
-  // TODO: add detection for other types if required
+  //! @todo add detection for other types if required
 
   return FileTypeUnknown;
 }

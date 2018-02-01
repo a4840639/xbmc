@@ -24,7 +24,7 @@
 #define XBMC_keysym_h
 
 // The XBMC_keysym identifies a physical key on the keyboard i.e. it is
-// analogous to a scan code but is hardware independant.
+// analogous to a scan code but is hardware independent.
 // These values are bazsed on the SDL_keysym standards, see:
 //
 //   http://www.libsdl.org/tmp/SDL-1.3-docs/SDL__keysym_8h.html
@@ -229,6 +229,7 @@ typedef enum {
   XBMCK_FAVORITES   = 0x14d,
   XBMCK_HOMEPAGE    = 0x14e,
   XBMCK_CONFIG      = 0x14f,
+  XBMCK_EPG         = 0x150,
 
   // Add any other keys here
 

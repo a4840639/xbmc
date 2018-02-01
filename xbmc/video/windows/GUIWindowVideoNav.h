@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -44,12 +44,12 @@ class CGUIWindowVideoNav : public CGUIWindowVideoBase
 public:
 
   CGUIWindowVideoNav(void);
-  virtual ~CGUIWindowVideoNav(void);
+  ~CGUIWindowVideoNav(void) override;
 
-  virtual bool OnAction(const CAction &action) override;
-  virtual bool OnMessage(CGUIMessage& message) override;
+  bool OnAction(const CAction &action) override;
+  bool OnMessage(CGUIMessage& message) override;
 
-  virtual void OnItemInfo(CFileItem* pItem, ADDON::ScraperPtr &info) override;
+  void OnItemInfo(const CFileItem& fileItem, ADDON::ScraperPtr &info) override;
 
   /*! \brief Load video information from the database for these items (public static version)
    Useful for grabbing information for file listings, from watched status to full metadata
@@ -67,21 +67,22 @@ protected:
   void LoadVideoInfo(CFileItemList &items);
 
   bool ApplyWatchedFilter(CFileItemList &items);
-  virtual bool GetFilteredItems(const std::string &filter, CFileItemList &items) override;
+  bool GetFilteredItems(const std::string &filter, CFileItemList &items) override;
 
-  virtual void OnItemLoaded(CFileItem* pItem) override {};
+  void OnItemLoaded(CFileItem* pItem) override {};
 
   // override base class methods
-  virtual bool Update(const std::string &strDirectory, bool updateFilterPath = true) override;
-  virtual bool GetDirectory(const std::string &strDirectory, CFileItemList &items) override;
-  virtual void UpdateButtons() override;
-  virtual void DoSearch(const std::string& strSearch, CFileItemList& items) override;
+  bool Update(const std::string &strDirectory, bool updateFilterPath = true) override;
+  bool GetDirectory(const std::string &strDirectory, CFileItemList &items) override;
+  void UpdateButtons() override;
+  void DoSearch(const std::string& strSearch, CFileItemList& items) override;
   virtual void PlayItem(int iItem);
-  virtual void OnDeleteItem(CFileItemPtr pItem) override;
-  virtual void GetContextButtons(int itemNumber, CContextButtons &buttons) override;
-  virtual bool OnContextButton(int itemNumber, CONTEXT_BUTTON button) override;
-  virtual bool OnClick(int iItem, const std::string &player = "") override;
-  virtual std::string GetStartFolder(const std::string &dir) override;
+  void OnDeleteItem(CFileItemPtr pItem) override;
+  void GetContextButtons(int itemNumber, CContextButtons &buttons) override;
+  bool OnContextButton(int itemNumber, CONTEXT_BUTTON button) override;
+  bool OnAddMediaSource() override;
+  bool OnClick(int iItem, const std::string &player = "") override;
+  std::string GetStartFolder(const std::string &dir) override;
 
   VECSOURCES m_shares;
 
@@ -89,4 +90,5 @@ private:
   virtual SelectFirstUnwatchedItem GetSettingSelectFirstUnwatchedItem();
   virtual IncludeAllSeasonsAndSpecials GetSettingIncludeAllSeasonsAndSpecials();
   virtual int GetFirstUnwatchedItemIndex(bool includeAllSeasons, bool includeSpecials);
+  void SelectFirstUnwatched();
 };

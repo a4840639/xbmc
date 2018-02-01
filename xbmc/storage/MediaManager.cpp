@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,17 +20,18 @@
 
 #include "system.h"
 #include "MediaManager.h"
+#include "ServiceBroker.h"
 #include "guilib/LocalizeStrings.h"
 #include "URL.h"
 #include "utils/URIUtils.h"
 #ifdef TARGET_WINDOWS
-#include "WIN32Util.h"
+#include "platform/win32/WIN32Util.h"
 #include "utils/CharsetConverter.h"
 #endif
 #include "guilib/GUIWindowManager.h"
 #ifdef HAS_DVD_DRIVE
 #ifndef TARGET_WINDOWS
-// TODO: switch all ports to use auto sources
+//! @todo switch all ports to use auto sources
 #include <map>
 #include <utility>
 #include "DetectDVDType.h"
@@ -38,6 +39,7 @@
 #endif
 #endif
 #include "Autorun.h"
+#include "addons/VFSEntry.h"
 #include "GUIUserMessages.h"
 #include "settings/MediaSourceSettings.h"
 #include "settings/Settings.h"
@@ -63,12 +65,18 @@
 #include "linux/LinuxStorageProvider.h"
 #include <sys/ioctl.h>
 #include <linux/cdrom.h>
-#elif TARGET_WINDOWS
+#elif TARGET_WINDOWS_DESKTOP
 #include "windows/Win32StorageProvider.h"
+#elif TARGET_WINDOWS_STORE
+#include "win10/Win10StorageProvider.h"
 #endif
 
 #include <string>
 #include <vector>
+
+#ifdef HAVE_LIBBLURAY
+#include "filesystem/BlurayDirectory.h"
+#endif
 
 using namespace XFILE;
 
@@ -105,8 +113,10 @@ void CMediaManager::Initialize()
       m_platformStorage = new CAndroidStorageProvider();
     #elif defined(TARGET_POSIX)
       m_platformStorage = new CLinuxStorageProvider();
-    #elif TARGET_WINDOWS
+    #elif TARGET_WINDOWS_DESKTOP
       m_platformStorage = new CWin32StorageProvider();
+    #elif TARGET_WINDOWS_STORE
+      m_platformStorage = new CStorageProvider();
     #endif
   }
 #ifdef HAS_DVD_DRIVE
@@ -216,17 +226,34 @@ void CMediaManager::GetNetworkLocations(VECSOURCES &locations, bool autolocation
 #endif// HAS_FILESYSTEM_NFS
 
 #ifdef HAS_UPNP
-    std::string strDevices = g_localizeStrings.Get(33040); //"% Devices"
-    share.strPath = "upnp://";
-    share.strName = StringUtils::Format(strDevices.c_str(), "UPnP"); //"UPnP Devices"
-    locations.push_back(share);
+    if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_SERVICES_UPNP))
+    {
+      std::string strDevices = g_localizeStrings.Get(33040); //"% Devices"
+      share.strPath = "upnp://";
+      share.strName = StringUtils::Format(strDevices.c_str(), "UPnP"); //"UPnP Devices"
+      locations.push_back(share);
+    }
 #endif
-    
+
 #ifdef HAS_ZEROCONF
     share.strPath = "zeroconf://";
     share.strName = g_localizeStrings.Get(20262);
     locations.push_back(share);
 #endif
+
+    if (CServiceBroker::IsBinaryAddonCacheUp())
+    {
+      for (const auto& addon : CServiceBroker::GetVFSAddonCache().GetAddonInstances())
+      {
+        const auto& info = addon->GetProtocolInfo();
+        if (!info.type.empty() && info.supportBrowsing)
+        {
+          share.strPath = info.type + "://";
+          share.strName = g_localizeStrings.Get(info.label);
+          locations.push_back(share);
+        }
+      }
+    }
   }
 }
 
@@ -309,12 +336,13 @@ void CMediaManager::RemoveAutoSource(const CMediaSource &share)
 #ifdef HAS_DVD_DRIVE
   // delete cached CdInfo if any
   RemoveCdInfo(TranslateDevicePath(share.strPath, true));
+  RemoveDiscInfo(TranslateDevicePath(share.strPath, true));
 #endif
 }
 
 /////////////////////////////////////////////////////////////
 // AutoSource status functions:
-// - TODO: translate cdda://<device>/
+//! @todo translate cdda://<device>/
 
 std::string CMediaManager::TranslateDevicePath(const std::string& devicePath, bool bReturnAsDevice)
 {
@@ -347,7 +375,7 @@ bool CMediaManager::IsDiscInDrive(const std::string& devicePath)
   if(!m_bhasoptical)
     return false;
 
-  std::string strDevice = TranslateDevicePath(devicePath, true);
+  std::string strDevice = TranslateDevicePath(devicePath, false);
   std::map<std::string,CCdInfo*>::iterator it;
   CSingleLock waitLock(m_muAutoSource);
   it = m_mapCdInfo.find(strDevice);
@@ -357,7 +385,7 @@ bool CMediaManager::IsDiscInDrive(const std::string& devicePath)
     return false;
 #else
   if(URIUtils::IsDVD(devicePath) || devicePath.empty())
-    return MEDIA_DETECT::CDetectDVDMedia::IsDiscInDrive();   // TODO: switch all ports to use auto sources
+    return MEDIA_DETECT::CDetectDVDMedia::IsDiscInDrive();   //! @todo switch all ports to use auto sources
   else
     return true; // Assume other paths to be mounted already
 #endif
@@ -379,7 +407,7 @@ bool CMediaManager::IsAudio(const std::string& devicePath)
 
   return false;
 #else
-  // TODO: switch all ports to use auto sources
+  //! @todo switch all ports to use auto sources
   MEDIA_DETECT::CCdInfo* pInfo = MEDIA_DETECT::CDetectDVDMedia::GetCdInfo();
   if (pInfo != NULL && pInfo->IsAudio(1))
     return true;
@@ -439,7 +467,7 @@ CCdInfo* CMediaManager::GetCdInfo(const std::string& devicePath)
   if(!m_bhasoptical)
     return NULL;
   
-  std::string strDevice = TranslateDevicePath(devicePath, true);
+  std::string strDevice = TranslateDevicePath(devicePath, false);
   std::map<std::string,CCdInfo*>::iterator it;
   {
     CSingleLock waitLock(m_muAutoSource);
@@ -468,7 +496,7 @@ bool CMediaManager::RemoveCdInfo(const std::string& devicePath)
   if(!m_bhasoptical)
     return false;
 
-  std::string strDevice = TranslateDevicePath(devicePath, true);
+  std::string strDevice = TranslateDevicePath(devicePath, false);
 
   std::map<std::string,CCdInfo*>::iterator it;
   CSingleLock waitLock(m_muAutoSource);
@@ -486,9 +514,30 @@ bool CMediaManager::RemoveCdInfo(const std::string& devicePath)
 
 std::string CMediaManager::GetDiskLabel(const std::string& devicePath)
 {
-#ifdef TARGET_WINDOWS
+#ifdef TARGET_WINDOWS_STORE
+  return ""; // GetVolumeInformationW nut support in UWP app
+#elif defined(TARGET_WINDOWS)
   if(!m_bhasoptical)
     return "";
+
+  std::string mediaPath = g_mediaManager.TranslateDevicePath(devicePath);
+
+  auto cached = m_mapDiscInfo.find(mediaPath);
+  if (cached != m_mapDiscInfo.end())
+    return cached->second.name;
+  
+  // try to minimize the chance of a "device not ready" dialog
+  std::string drivePath = g_mediaManager.TranslateDevicePath(devicePath, true);
+  if (g_mediaManager.GetDriveStatus(drivePath) != DRIVE_CLOSED_MEDIA_PRESENT)
+    return "";
+
+  DiscInfo info;
+  info = GetDiscInfo(mediaPath);
+  if (!info.name.empty())
+  {
+    m_mapDiscInfo[mediaPath] = info;
+    return info.name;
+  }
 
   std::string strDevice = TranslateDevicePath(devicePath);
   WCHAR cVolumenName[128];
@@ -499,7 +548,11 @@ std::string CMediaManager::GetDiskLabel(const std::string& devicePath)
   if(GetVolumeInformationW(strDeviceW.c_str(), cVolumenName, 127, NULL, NULL, NULL, cFSName, 127)==0)
     return "";
   g_charsetConverter.wToUTF8(cVolumenName, strDevice);
-  return StringUtils::TrimRight(strDevice, " ");
+  info.name = StringUtils::TrimRight(strDevice, " ");
+  if (!info.name.empty())
+    m_mapDiscInfo[mediaPath] = info;
+
+  return info.name;
 #else
   return MEDIA_DETECT::CDetectDVDMedia::GetDVDLabel();
 #endif
@@ -525,32 +578,19 @@ std::string CMediaManager::GetDiskUniqueId(const std::string& devicePath)
 #ifdef TARGET_WINDOWS
   if (mediaPath.empty() || mediaPath == "iso9660://")
   {
-    mediaPath = g_mediaManager.TranslateDevicePath("");
-    URIUtils::AddSlashAtEnd(mediaPath);
+    mediaPath = g_mediaManager.TranslateDevicePath(devicePath);
   }
 #endif
+  
+  DiscInfo info = GetDiscInfo(mediaPath);
+  if (info.empty())
+  {
+    CLog::Log(LOGDEBUG, "GetDiskUniqueId: Retrieving ID for path %s failed, ID is empty.", CURL::GetRedacted(mediaPath).c_str());
+    return "";
+  }
 
-  // Try finding VIDEO_TS/VIDEO_TS.IFO - this indicates a DVD disc is inserted 
-  std::string pathVideoTS = URIUtils::AddFileToFolder(mediaPath, "VIDEO_TS"); 
-  if(!CFile::Exists(URIUtils::AddFileToFolder(pathVideoTS, "VIDEO_TS.IFO"))) 
-    return ""; // return empty
-
-  // correct the filename if needed 
-  if (StringUtils::StartsWith(pathVideoTS, "dvd://") ||
-      StringUtils::StartsWith(pathVideoTS, "iso9660://"))
-    pathVideoTS = g_mediaManager.TranslateDevicePath(""); 
-
-  CLog::Log(LOGDEBUG, "GetDiskUniqueId: Trying to retrieve ID for path %s", pathVideoTS.c_str());
-
-
-  CFileItem item(pathVideoTS, false);
-  CDVDInputStreamNavigator dvdNavigator(NULL, item);
-  dvdNavigator.Open();
-  std::string labelString = dvdNavigator.GetDVDTitleString();
-  std::string serialString = dvdNavigator.GetDVDSerialString();
-
-  std::string strID = StringUtils::Format("removable://%s_%s", labelString.c_str(), serialString.c_str());
-  CLog::Log(LOGDEBUG, "GetDiskUniqueId: Got ID %s for DVD disk", strID.c_str());
+  std::string strID = StringUtils::Format("removable://%s_%s", info.name.c_str(), info.serial.c_str());
+  CLog::Log(LOGDEBUG, "GetDiskUniqueId: Got ID %s for %s with path %s", strID.c_str(), info.type.c_str(), CURL::GetRedacted(mediaPath).c_str());
 
   return strID;
 }
@@ -566,7 +606,7 @@ std::string CMediaManager::GetDiscPath()
   m_platformStorage->GetRemovableDrives(drives);
   for(unsigned i = 0; i < drives.size(); ++i)
   {
-    if(drives[i].m_iDriveType == CMediaSource::SOURCE_TYPE_DVD)
+    if(drives[i].m_iDriveType == CMediaSource::SOURCE_TYPE_DVD && !drives[i].strPath.empty())
       return drives[i].strPath;
   }
 
@@ -679,8 +719,8 @@ std::vector<std::string> CMediaManager::GetDiskUsage()
 void CMediaManager::OnStorageAdded(const std::string &label, const std::string &path)
 {
 #ifdef HAS_DVD_DRIVE
-  if (CSettings::GetInstance().GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) != AUTOCD_NONE || CSettings::GetInstance().GetBool(CSettings::SETTING_DVDS_AUTORUN))
-    if (CSettings::GetInstance().GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) == AUTOCD_RIP)
+  if (CServiceBroker::GetSettings().GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) != AUTOCD_NONE || CServiceBroker::GetSettings().GetBool(CSettings::SETTING_DVDS_AUTORUN))
+    if (CServiceBroker::GetSettings().GetInt(CSettings::SETTING_AUDIOCDS_AUTOACTION) == AUTOCD_RIP)
       CJobManager::GetInstance().AddJob(new CAutorunMediaJob(label, path), this, CJob::PRIORITY_LOW);
     else
       CJobManager::GetInstance().AddJob(new CAutorunMediaJob(label, path), this, CJob::PRIORITY_HIGH);
@@ -697,4 +737,58 @@ void CMediaManager::OnStorageSafelyRemoved(const std::string &label)
 void CMediaManager::OnStorageUnsafelyRemoved(const std::string &label)
 {
   CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Warning, g_localizeStrings.Get(13022), label);
+}
+
+CMediaManager::DiscInfo CMediaManager::GetDiscInfo(const std::string& mediaPath)
+{
+  DiscInfo info;
+
+  if (mediaPath.empty())
+    return info;
+
+  // Try finding VIDEO_TS/VIDEO_TS.IFO - this indicates a DVD disc is inserted 
+  std::string pathVideoTS = URIUtils::AddFileToFolder(mediaPath, "VIDEO_TS");
+  if (CFile::Exists(URIUtils::AddFileToFolder(pathVideoTS, "VIDEO_TS.IFO")))
+  {
+    info.type = "DVD";
+    // correct the filename if needed 
+    if (StringUtils::StartsWith(pathVideoTS, "dvd://") ||
+      StringUtils::StartsWith(pathVideoTS, "iso9660://"))
+      pathVideoTS = g_mediaManager.TranslateDevicePath("");
+
+
+    CFileItem item(pathVideoTS, false);
+    CDVDInputStreamNavigator dvdNavigator(nullptr, item);
+
+    if (!dvdNavigator.Open())
+      return info;
+
+    info.name = dvdNavigator.GetDVDTitleString();
+    info.serial = dvdNavigator.GetDVDSerialString();
+  }
+#ifdef HAVE_LIBBLURAY
+  // check for Blu-ray discs
+  else if (XFILE::CFile::Exists(URIUtils::AddFileToFolder(mediaPath, "BDMV", "index.bdmv")))
+  {
+    info.type = "Blu-ray";
+    CBlurayDirectory bdDir;
+
+    if (!bdDir.InitializeBluray(mediaPath))
+      return info;
+
+    info.name = bdDir.GetBlurayTitle();
+    info.serial = bdDir.GetBlurayID();
+  }
+#endif
+
+  return info;
+}
+
+void CMediaManager::RemoveDiscInfo(const std::string& devicePath)
+{
+  std::string strDevice = TranslateDevicePath(devicePath, false);
+
+  auto it = m_mapDiscInfo.find(strDevice);
+  if (it != m_mapDiscInfo.end())
+    m_mapDiscInfo.erase(it);
 }

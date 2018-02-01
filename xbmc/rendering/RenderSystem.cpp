@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,11 @@
  */
 
 #include "RenderSystem.h"
+#include "guilib/GUIImage.h"
+#include "guilib/GUILabelControl.h"
+#include "guilib/GUIFontManager.h"
+#include "settings/AdvancedSettings.h"
+#include "Util.h"
 
 CRenderSystemBase::CRenderSystemBase()
   : m_stereoView(RENDER_STEREO_VIEW_OFF)
@@ -34,10 +39,7 @@ CRenderSystemBase::CRenderSystemBase()
   m_minDXTPitch = 0;
 }
 
-CRenderSystemBase::~CRenderSystemBase()
-{
-
-}
+CRenderSystemBase::~CRenderSystemBase() = default;
 
 void CRenderSystemBase::GetRenderVersion(unsigned int& major, unsigned int& minor) const
 {
@@ -79,5 +81,58 @@ bool CRenderSystemBase::SupportsStereo(RENDER_STEREO_MODE mode) const
     default:
       return false;
   }
+}
+
+void CRenderSystemBase::ShowSplash(const std::string& message)
+{
+  if (!g_advancedSettings.m_splashImage && !(m_splashImage || !message.empty()))
+    return;
+
+  if (!m_splashImage)
+  {
+    m_splashImage = std::unique_ptr<CGUIImage>(new CGUIImage(0, 0, 0, 0, g_graphicsContext.GetWidth(),
+                                                       g_graphicsContext.GetHeight(), CTextureInfo(CUtil::GetSplashPath())));
+    m_splashImage->SetAspectRatio(CAspectRatio::AR_SCALE);
+  }
+
+  g_graphicsContext.lock();
+  g_graphicsContext.Clear();
+
+  RESOLUTION_INFO res = g_graphicsContext.GetResInfo();
+  g_graphicsContext.SetRenderingResolution(res, true);
+
+  //render splash image
+  BeginRender();
+
+  m_splashImage->AllocResources();
+  m_splashImage->Render();
+  m_splashImage->FreeResources();
+
+  if (!message.empty())
+  {
+    if (!m_splashMessageLayout)
+    {
+      auto messageFont = g_fontManager.LoadTTF("__splash__", "arial.ttf", 0xFFFFFFFF, 0, 20, FONT_STYLE_NORMAL, false, 1.0f, 1.0f, &res);
+      if (messageFont)
+        m_splashMessageLayout = std::unique_ptr<CGUITextLayout>(new CGUITextLayout(messageFont, true, 0));
+    }
+
+    if (m_splashMessageLayout)
+    {
+      m_splashMessageLayout->Update(message, 1150, false, true);
+      float textWidth, textHeight;
+      m_splashMessageLayout->GetTextExtent(textWidth, textHeight);
+
+      int width = g_graphicsContext.GetWidth();
+      int height = g_graphicsContext.GetHeight();
+      float y = height - textHeight - 100;
+      m_splashMessageLayout->RenderOutline(width/2, y, 0, 0xFF000000, XBFONT_CENTER_X, width);
+    }
+  }
+
+  //show it on screen
+  EndRender();
+  g_graphicsContext.unlock();
+  g_graphicsContext.Flip(true, false);
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,8 +22,10 @@
 #include "DVDVideoCodec.h"
 #include "DVDStreamInfo.h"
 #include "threads/CriticalSection.h"
+#include "cores/VideoPlayer/Process/VideoBuffer.h"
 
 #include <set>
+#include <atomic>
 
 class CAMLCodec;
 struct frame_queue;
@@ -32,61 +34,71 @@ class CBitstreamParser;
 class CBitstreamConverter;
 
 class CDVDVideoCodecAmlogic;
-class IVPClockCallback;
 
-class CDVDAmlogicInfo
+class CAMLVideoBuffer : public CVideoBuffer
 {
 public:
-  CDVDAmlogicInfo(CDVDVideoCodecAmlogic *codec, CAMLCodec *amlcodec);
-
-  // reference counting
-  CDVDAmlogicInfo* Retain();
-  long             Release();
-
-  CAMLCodec *getAmlCodec() const;
-  void invalidate();
-
-protected:
-  long m_refs;
-  CCriticalSection    m_section;
+  CAMLVideoBuffer(int id) : CVideoBuffer(id) {};
+  void Set(CDVDVideoCodecAmlogic *codec, std::shared_ptr<CAMLCodec> amlcodec, int omxPts, int amlDuration, uint32_t bufferIndex)
+  {
+    m_codec = codec;
+    m_amlCodec = amlcodec;
+    m_omxPts = omxPts;
+    m_amlDuration = amlDuration;
+    m_bufferIndex = bufferIndex;
+  }
 
   CDVDVideoCodecAmlogic* m_codec;
-  CAMLCodec* m_amlCodec;
+  std::shared_ptr<CAMLCodec> m_amlCodec;
+  int m_omxPts, m_amlDuration;
+  uint32_t m_bufferIndex;
+};
+
+class CAMLVideoBufferPool : public IVideoBufferPool
+{
+public:
+  virtual ~CAMLVideoBufferPool();
+
+  virtual CVideoBuffer* Get() override;
+  virtual void Return(int id) override;
+
+private:
+  CCriticalSection m_criticalSection;;
+  std::vector<CAMLVideoBuffer*> m_videoBuffers;
+  std::vector<int> m_freeBuffers;
 };
 
 class CDVDVideoCodecAmlogic : public CDVDVideoCodec
 {
-  friend class CDVDAmlogicInfo;
-
 public:
-  CDVDVideoCodecAmlogic(IVPClockCallback* clock);
+  CDVDVideoCodecAmlogic(CProcessInfo &processInfo);
   virtual ~CDVDVideoCodecAmlogic();
 
+  static CDVDVideoCodec* Create(CProcessInfo &processInfo);
+  static bool Register();
+
   // Required overrides
-  virtual bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options);
-  virtual void Dispose(void);
-  virtual int  Decode(uint8_t *pData, int iSize, double dts, double pts);
-  virtual void Reset(void);
-  virtual bool GetPicture(DVDVideoPicture *pDvdVideoPicture);
-  virtual bool ClearPicture(DVDVideoPicture* pDvdVideoPicture);
-  virtual void SetSpeed(int iSpeed);
-  virtual void SetDropState(bool bDrop);
-  virtual int  GetDataSize(void);
-  virtual double GetTimeSize(void);
-  virtual const char* GetName(void) { return (const char*)m_pFormatName; }
+  virtual bool Open(CDVDStreamInfo &hints, CDVDCodecOptions &options) override;
+  virtual bool AddData(const DemuxPacket &packet) override;
+  virtual void Reset() override;
+  virtual VCReturn GetPicture(VideoPicture* pVideoPicture) override;
+  virtual void SetSpeed(int iSpeed) override;
+  virtual void SetCodecControl(int flags) override;
+  virtual const char* GetName(void) override { return (const char*)m_pFormatName; }
 
 protected:
+  void            Dispose(void);
   void            FrameQueuePop(void);
   void            FrameQueuePush(double dts, double pts);
   void            FrameRateTracking(uint8_t *pData, int iSize, double dts, double pts);
-  void            RemoveInfo(CDVDAmlogicInfo* info);
+  //void            RemoveInfo(CDVDAmlogicInfo* info);
 
-  IVPClockCallback* m_clock;
-  CAMLCodec      *m_Codec;
-  std::set<CDVDAmlogicInfo*> m_inflight;
+  std::shared_ptr<CAMLCodec> m_Codec;
+
   const char     *m_pFormatName;
-  DVDVideoPicture m_videobuffer;
+  VideoPicture m_videobuffer;
   bool            m_opened;
+  int             m_codecControlFlags;
   CDVDStreamInfo  m_hints;
   double          m_last_pts;
   frame_queue    *m_frame_queue;
@@ -97,9 +109,11 @@ protected:
   float           m_aspect_ratio;
   mpeg2_sequence *m_mpeg2_sequence;
   double          m_mpeg2_sequence_pts;
+  bool            m_has_keyframe;
 
   CBitstreamParser *m_bitparser;
   CBitstreamConverter *m_bitstream;
 private:
-  CCriticalSection    m_secure;
+  std::shared_ptr<CAMLVideoBufferPool> m_videoBufferPool;
+  static std::atomic<bool> m_InstanceGuard;
 };

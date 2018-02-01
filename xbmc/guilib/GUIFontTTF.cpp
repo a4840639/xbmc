@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,10 +23,12 @@
 #include "GUIFontManager.h"
 #include "Texture.h"
 #include "GraphicContext.h"
+#include "ServiceBroker.h"
 #include "filesystem/SpecialProtocol.h"
 #include "utils/MathUtils.h"
 #include "utils/log.h"
-#include "windowing/WindowingFactory.h"
+#include "rendering/RenderSystem.h"
+#include "windowing/WinSystem.h"
 #include "URL.h"
 #include "filesystem/File.h"
 #include "threads/SystemClock.h"
@@ -37,19 +39,28 @@
 
 // stuff for freetype
 #include <ft2build.h>
+
+#ifdef TARGET_WINDOWS_STORE
+#define generic GenericFromFreeTypeLibrary
+#endif
+
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
 #include FT_OUTLINE_H
 #include FT_STROKER_H
 
-#define USE_RELEASE_LIBS
-
 #ifdef TARGET_WINDOWS
-#pragma comment(lib, "freetype246MT.lib")
+#ifdef NDEBUG
+#pragma comment(lib, "freetype.lib")
+#else
+#pragma comment(lib, "freetyped.lib")
+#endif
 #endif
 
 #define CHARS_PER_TEXTURE_LINE 20 // number of characters to cache per texture line
 #define CHAR_CHUNK    64      // 64 chars allocated at a time (1024 bytes)
+#define GLYPH_STRENGTH_BOLD 24
+#define GLYPH_STRENGTH_LIGHT -48
 
 
 class CFreeTypeLibrary
@@ -312,8 +323,8 @@ bool CGUIFontTTFBase::Load(const std::string& strFilename, float height, float a
 
   m_textureWidth = CBaseTexture::PadPow2(m_textureWidth);
 
-  if (m_textureWidth > g_Windowing.GetMaxTextureSize())
-    m_textureWidth = g_Windowing.GetMaxTextureSize();
+  if (m_textureWidth > CServiceBroker::GetRenderSystem().GetMaxTextureSize())
+    m_textureWidth = CServiceBroker::GetRenderSystem().GetMaxTextureSize();
   m_textureScaleX = 1.0f / m_textureWidth;
 
   // set the posX and posY so that our texture will be created on first character write.
@@ -355,7 +366,7 @@ void CGUIFontTTFBase::DrawTextInternal(float x, float y, const vecColors &colors
 
   uint32_t rawAlignment = alignment;
   bool dirtyCache(false);
-  bool hardwareClipping = g_Windowing.ScissorsCanEffectClipping();
+  bool hardwareClipping = CServiceBroker::GetRenderSystem().ScissorsCanEffectClipping();
   CGUIFontCacheStaticPosition staticPos(x, y);
   CGUIFontCacheDynamicPosition dynamicPos;
   if (hardwareClipping)
@@ -611,7 +622,7 @@ CGUIFontTTFBase::Character* CGUIFontTTFBase::GetCharacter(character_t chr)
   if (letter < 255)
   {
     character_t ch = (style << 8) | letter;
-    if (m_charquick[ch])
+    if (ch < LOOKUPTABLE_SIZE && m_charquick[ch])
       return m_charquick[ch];
   }
 
@@ -697,13 +708,13 @@ bool CGUIFontTTFBase::CacheCharacter(wchar_t letter, uint32_t style, Character *
   }
   // make bold if applicable
   if (style & FONT_STYLE_BOLD)
-    EmboldenGlyph(m_face->glyph);
+    SetGlyphStrength(m_face->glyph, GLYPH_STRENGTH_BOLD);
   // and italics if applicable
   if (style & FONT_STYLE_ITALICS)
     ObliqueGlyph(m_face->glyph);
   // and light if applicable
   if (style & FONT_STYLE_LIGHT)
-    LightenGlyph(m_face->glyph);
+    SetGlyphStrength(m_face->glyph, GLYPH_STRENGTH_LIGHT);
   // grab the glyph
   if (FT_Get_Glyph(m_face->glyph, &glyph))
   {
@@ -727,8 +738,9 @@ bool CGUIFontTTFBase::CacheCharacter(wchar_t letter, uint32_t style, Character *
     if (bitGlyph->left < 0)
       m_posX += -bitGlyph->left;
 
-    // check we have enough room for the character
-    if ((m_posX + bitGlyph->left + bitmap.width) > static_cast<int>(m_textureWidth))
+    // check we have enough room for the character.
+    // cast-fest is here to avoid warnings due to freeetype version differences (signedness of width).
+    if (static_cast<int>(m_posX + bitGlyph->left + bitmap.width) > static_cast<int>(m_textureWidth))
     { // no space - gotta drop to the next line (which means creating a new texture and copying it across)
       m_posX = 0;
       m_posY += GetTextureLineHeight();
@@ -740,9 +752,9 @@ bool CGUIFontTTFBase::CacheCharacter(wchar_t letter, uint32_t style, Character *
         // create the new larger texture
         unsigned int newHeight = m_posY + GetTextureLineHeight();
         // check for max height
-        if (newHeight > g_Windowing.GetMaxTextureSize())
+        if (newHeight > CServiceBroker::GetRenderSystem().GetMaxTextureSize())
         {
-          CLog::Log(LOGDEBUG, "%s: New cache texture is too large (%u > %u pixels long)", __FUNCTION__, newHeight, g_Windowing.GetMaxTextureSize());
+          CLog::Log(LOGDEBUG, "%s: New cache texture is too large (%u > %u pixels long)", __FUNCTION__, newHeight, CServiceBroker::GetRenderSystem().GetMaxTextureSize());
           FT_Done_Glyph(glyph);
           return false;
         }
@@ -815,7 +827,7 @@ void CGUIFontTTFBase::RenderCharacter(float posX, float posY, const Character *c
                (posY + ch->offsetY + height) * g_graphicsContext.GetGUIScaleY());
   vertex += CPoint(m_originX, m_originY);
   CRect texture(ch->left, ch->top, ch->right, ch->bottom);
-  if (!g_Windowing.ScissorsCanEffectClipping())
+  if (!CServiceBroker::GetRenderSystem().ScissorsCanEffectClipping())
     g_graphicsContext.ClipRect(vertex, texture);
 
   // transform our positions - note, no scaling due to GUI calibration/resolution occurs
@@ -871,13 +883,13 @@ void CGUIFontTTFBase::RenderCharacter(float posX, float posY, const Character *c
   SVertex* v = &vertices[vertices.size() - 4];
   m_color = color;
 
-#ifndef HAS_DX
+#if !defined(HAS_DX)
   unsigned char r = GET_R(color)
               , g = GET_G(color)
               , b = GET_B(color)
               , a = GET_A(color);
 
-  if(g_Windowing.UseLimitedColor())
+  if(CServiceBroker::GetWinSystem().UseLimitedColor())
   {
     r = (235 - 16) * r / 255;
     g = (235 - 16) * g / 255;
@@ -897,7 +909,7 @@ void CGUIFontTTFBase::RenderCharacter(float posX, float posY, const Character *c
 #endif
   }
 
-#if defined(HAS_GL) || defined(HAS_DX)
+#if defined(HAS_DX)
   for(int i = 0; i < 4; i++)
   {
     v[i].x = x[i];
@@ -917,7 +929,7 @@ void CGUIFontTTFBase::RenderCharacter(float posX, float posY, const Character *c
   v[3].u = tl;
   v[3].v = tb;
 #else
-  // GLES uses triangle strips, not quads, so have to rearrange the vertex order
+  // GL / GLES uses triangle strips, not quads, so have to rearrange the vertex order
   v[0].u = tl;
   v[0].v = tt;
   v[0].x = x[0];
@@ -968,14 +980,14 @@ void CGUIFontTTFBase::ObliqueGlyph(FT_GlyphSlot slot)
 
 
 // Embolden code - original taken from freetype2 (ftsynth.c)
-void CGUIFontTTFBase::EmboldenGlyph(FT_GlyphSlot slot)
+void CGUIFontTTFBase::SetGlyphStrength(FT_GlyphSlot slot, int glyphStrength)
 {
   if ( slot->format != FT_GLYPH_FORMAT_OUTLINE )
     return;
 
   /* some reasonable strength */
   FT_Pos strength = FT_MulFix( m_face->units_per_EM,
-                    m_face->size->metrics.y_scale ) / 24;
+                    m_face->size->metrics.y_scale ) / glyphStrength;
 
   FT_BBox bbox_before, bbox_after;
   FT_Outline_Get_CBox( &slot->outline, &bbox_before );
@@ -999,39 +1011,3 @@ void CGUIFontTTFBase::EmboldenGlyph(FT_GlyphSlot slot)
   slot->metrics.vertBearingY += dy;
   slot->metrics.vertAdvance  += dy;
 }
- 
-// Lighten code - original taken from freetype2 (ftsynth.c)  
-void CGUIFontTTFBase::LightenGlyph(FT_GlyphSlot slot)
-{
-  if (slot->format != FT_GLYPH_FORMAT_OUTLINE)
-    return;
-
-  /* some reasonable strength */
-  FT_Pos strength = FT_MulFix(m_face->units_per_EM,
-                              m_face->size->metrics.y_scale) / -48;
-
-  FT_BBox bbox_before, bbox_after;
-  FT_Outline_Get_CBox(&slot->outline, &bbox_before);
-  FT_Outline_Embolden(&slot->outline, strength);  // ignore error  
-  FT_Outline_Get_CBox(&slot->outline, &bbox_after);
-
-  FT_Pos dx = bbox_after.xMax - bbox_before.xMax;
-  FT_Pos dy = bbox_after.yMax - bbox_before.yMax;
-
-  if (slot->advance.x)
-    slot->advance.x += dx;
-
-  if (slot->advance.y)
-    slot->advance.y += dy;
-
-  slot->metrics.width += dx;
-  slot->metrics.height += dy;
-  slot->metrics.horiBearingY += dy;
-  slot->metrics.horiAdvance += dx;
-  slot->metrics.vertBearingX -= dx / 2;
-  slot->metrics.vertBearingY += dy;
-  slot->metrics.vertAdvance += dy;
-}
-
-
-

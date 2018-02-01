@@ -1,19 +1,20 @@
 include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+DEPS= ../../Makefile.include Makefile 0001-HTTP-reset-expected-DL-UL-sizes-on-redirects.patch
 
 # lib name, version
 LIBNAME=curl
 ifeq (osx, $(findstring osx, $(OS)))
 VERSION=7.21.6
 else
-VERSION=7.39.0
+VERSION=7.56.1
 endif
 SOURCE=$(LIBNAME)-$(VERSION)
 ARCHIVE=$(SOURCE).tar.bz2
 # configuration settings
 CONFIGURE=cp -f $(CONFIG_SUB) $(CONFIG_GUESS) .; \
-          ./configure --prefix=$(PREFIX) \
-          --without-libssh2 --disable-ntlm-wb
+          ./configure --prefix=$(PREFIX) --disable-shared --disable-ldap \
+          --without-libssh2 --disable-ntlm-wb --enable-ipv6 --without-librtmp \
+          --with-ssl=$(PREFIX)
 
 LIBDYLIB=$(PLATFORM)/lib/.libs/lib$(LIBNAME).a
 
@@ -30,6 +31,9 @@ $(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
 ifeq (osx, $(findstring osx, $(OS)))
 	cd $(PLATFORM); patch -p1 < ../0001-HTTP-reset-expected-DL-UL-sizes-on-redirects.patch
 endif
+ifeq (darwin, $(findstring darwin, $(HOST)))
+	cd $(PLATFORM); sed -ie "s/elif defined(HAVE_CLOCK_GETTIME_MONOTONIC)/#elif defined(HAVE_CLOCK_GETTIME_MONOTONIC_NOPE)/" lib/timeval.c
+endif
 	cd $(PLATFORM); $(CONFIGURE)
 
 $(LIBDYLIB): $(PLATFORM)
@@ -42,12 +46,6 @@ $(LIBDYLIB): $(PLATFORM)
 	# make sure to also install libcurl.pc, we need to do
 	# this because we are selectively installing only libcurl
 	$(MAKE) -C $(PLATFORM) install-pkgconfigDATA
-ifeq ($(OS),android)
-	rm -f $(PREFIX)/lib/libcurl.la $(PREFIX)/lib/libcurl.so $(PREFIX)/lib/libcurl.so.5
-	mv -f $(PREFIX)/lib/libcurl.so.5.3.0 $(PREFIX)/lib/libcurl.so
-	$(RPL) -e "libcurl.so.5" "libcurl.so\x00\x00" $(PREFIX)/lib/libcurl.so
-	-$(READELF) --dynamic $(PREFIX)/lib/libcurl.so | grep ibrary
-endif
 	touch $@
 
 clean:

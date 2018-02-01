@@ -7,7 +7,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 #include "GUITextLayout.h"
 #include "GUIInfoTypes.h"
 #include "GUIFont.h"
-#include "Geometry.h"
+#include "utils/Geometry.h"
 
 class CLabelInfo
 {
@@ -155,6 +155,10 @@ public:
    */
   bool SetScrolling(bool scrolling);
 
+  /*! \brief Set max. text scroll count
+  */
+  void SetScrollLoopCount(unsigned int loopCount) { m_maxScrollLoops = loopCount; };
+
   /*! \brief Set how this label should handle overflowing text.
    \param overflow the overflow type
    \sa OVER_FLOW
@@ -236,10 +240,10 @@ private:
 
   bool           m_scrolling;
   OVER_FLOW      m_overflowType;
-  bool           m_selected;
   CScrollInfo    m_scrollInfo;
   CRect          m_renderRect;   ///< actual sizing of text
   CRect          m_maxRect;      ///< maximum sizing of text
   bool           m_invalid;      ///< if true, the label needs recomputing
   COLOR          m_color;        ///< color to render text \sa SetColor, GetColor
+  unsigned int   m_maxScrollLoops = ~0U;
 };

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,8 +18,6 @@
  *
  */
 
-#ifdef HAS_DBUS
-
 #include "UPowerSyscall.h"
 #include "DBusUtil.h"
 
@@ -27,11 +25,9 @@ class CConsoleUPowerSyscall : public CUPowerSyscall
 {
 public:
   CConsoleUPowerSyscall();
-  virtual bool Powerdown();
-  virtual bool Reboot();
+  bool Powerdown() override;
+  bool Reboot() override;
   static bool HasConsoleKitAndUPower();
 private:
   static bool ConsoleKitMethodCall(const char *method);
 };
-
-#endif

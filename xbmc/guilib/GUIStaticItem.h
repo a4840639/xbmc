@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
  */
 
 #include <utility>
+#include <vector>
 
 #include "GUIAction.h"
 #include "GUIInfoTypes.h"
@@ -61,9 +62,9 @@ public:
    \param contextWindow window context to use for any info labels
    */
   CGUIStaticItem(const TiXmlElement *element, int contextWindow);
-  CGUIStaticItem(const CFileItem &item); // for python
-  virtual ~CGUIStaticItem() {};
-  virtual CGUIListItem *Clone() const { return new CGUIStaticItem(*this); };
+  explicit CGUIStaticItem(const CFileItem &item); // for python
+  ~CGUIStaticItem() override = default;
+  CGUIListItem *Clone() const override { return new CGUIStaticItem(*this); };
   
   /*! \brief update any infolabels in the items properties
    Runs through all the items properties, updating any that should be

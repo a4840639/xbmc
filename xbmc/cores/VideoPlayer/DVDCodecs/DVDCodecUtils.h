@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,28 +21,11 @@
  */
 
 #include "Video/DVDVideoCodec.h"
-#include "cores/VideoPlayer/VideoRenderers/RenderFormats.h"
-
-struct YV12Image;
 
 class CDVDCodecUtils
 {
 public:
-  static DVDVideoPicture* AllocatePicture(int iWidth, int iHeight);
-  static void FreePicture(DVDVideoPicture* pPicture);
-  static bool CopyPicture(DVDVideoPicture* pDst, DVDVideoPicture* pSrc);
-  static bool CopyPicture(YV12Image* pDst, DVDVideoPicture *pSrc);
-  
-  static DVDVideoPicture* ConvertToNV12Picture(DVDVideoPicture *pSrc);
-  static DVDVideoPicture* ConvertToYUV422PackedPicture(DVDVideoPicture *pSrc, ERenderFormat format);
-  static bool CopyNV12Picture(YV12Image* pImage, DVDVideoPicture *pSrc);
-  static bool CopyYUV422PackedPicture(YV12Image* pImage, DVDVideoPicture *pSrc);
-
   static bool IsVP3CompatibleWidth(int width);
-
   static double NormalizeFrameduration(double frameduration, bool *match = NULL);
-
-  static ERenderFormat EFormatFromPixfmt(int fmt);
-  static int           PixfmtFromEFormat(ERenderFormat format);
 };
 

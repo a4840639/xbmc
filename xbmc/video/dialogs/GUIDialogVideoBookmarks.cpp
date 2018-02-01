@@ -22,9 +22,7 @@
 #include "GUIDialogVideoBookmarks.h"
 #include "video/VideoDatabase.h"
 #include "Application.h"
-#if defined(HAS_LIBAMCODEC)
-#include "utils/ScreenshotAML.h"
-#endif//HAS_LIBAMCODEC
+#include "ServiceBroker.h"
 #include "pictures/Picture.h"
 #include "dialogs/GUIDialogContextMenu.h"
 #include "view/ViewState.h"
@@ -52,13 +50,12 @@
 
 using namespace KODI::MESSAGING;
 
-#define BOOKMARK_THUMB_WIDTH g_advancedSettings.GetThumbSize()
+#define BOOKMARK_THUMB_WIDTH g_advancedSettings.m_imageRes
 
 #define CONTROL_ADD_BOOKMARK           2
 #define CONTROL_CLEAR_BOOKMARKS        3
 #define CONTROL_ADD_EPISODE_BOOKMARK   4
 
-#define CONTROL_LIST                  10
 #define CONTROL_THUMBS                11
 
 CGUIDialogVideoBookmarks::CGUIDialogVideoBookmarks()
@@ -89,7 +86,7 @@ bool CGUIDialogVideoBookmarks::OnMessage(CGUIMessage& message)
   case GUI_MSG_WINDOW_INIT:
     {
       // don't init this dialog if we don't playback a file
-      if (!g_application.m_pPlayer->IsPlaying())
+      if (!g_application.GetAppPlayer().IsPlaying())
         return false;
 
       CGUIWindow::OnMessage(message);
@@ -273,12 +270,12 @@ void CGUIDialogVideoBookmarks::OnRefreshList()
   }
 
   // add chapters if around
-  for (int i = 1; i <= g_application.m_pPlayer->GetChapterCount(); ++i)
+  for (int i = 1; i <= g_application.GetAppPlayer().GetChapterCount(); ++i)
   {
     std::string chapterName;
-    g_application.m_pPlayer->GetChapterName(chapterName, i);
+    g_application.GetAppPlayer().GetChapterName(chapterName, i);
 
-    int64_t pos = g_application.m_pPlayer->GetChapterPos(i);
+    int64_t pos = g_application.GetAppPlayer().GetChapterPos(i);
     std::string time = StringUtils::SecondsToTimeString((long) pos, TIME_FORMAT_HH_MM_SS);
 
     if (chapterName.empty() ||
@@ -293,7 +290,7 @@ void CGUIDialogVideoBookmarks::OnRefreshList()
     std::string cachefile = CTextureCache::GetInstance().GetCachedPath(CTextureCache::GetInstance().GetCacheFile(chapterPath)+".jpg");
     if (XFILE::CFile::Exists(cachefile))
       item->SetArt("thumb", cachefile);
-    else if (i > m_jobsStarted && CSettings::GetInstance().GetBool(CSettings::SETTING_MYVIDEOS_EXTRACTCHAPTERTHUMBS))
+    else if (i > m_jobsStarted && CServiceBroker::GetSettings().GetBool(CSettings::SETTING_MYVIDEOS_EXTRACTCHAPTERTHUMBS))
     {
       CFileItem item(m_filePath, false);
       CJob* job = new CThumbExtractor(item, m_filePath, true, chapterPath, pos * 1000, false);
@@ -351,17 +348,13 @@ void CGUIDialogVideoBookmarks::Update()
   }
 
 
-  // lock our display, as this window is rendered from the player thread
-  g_graphicsContext.Lock();
   m_viewControl.SetCurrentView(DEFAULT_VIEW_ICONS);
 
   // empty the list ready for population
   Clear();
 
   OnRefreshList();
-  
-  g_graphicsContext.Unlock();
-  
+
   videoDatabase.Close();
 }
 
@@ -373,18 +366,18 @@ void CGUIDialogVideoBookmarks::Clear()
 
 void CGUIDialogVideoBookmarks::GotoBookmark(int item)
 {
-  if (item < 0 || item >= m_vecItems->Size() || !g_application.m_pPlayer->HasPlayer())
+  if (item < 0 || item >= m_vecItems->Size() || !g_application.GetAppPlayer().HasPlayer())
     return;
 
   CFileItemPtr fileItem = m_vecItems->Get(item);
   int chapter = static_cast<int>(fileItem->GetProperty("chapter").asInteger());
   if (chapter <= 0)
   {
-    g_application.m_pPlayer->SetPlayerState(fileItem->GetProperty("playerstate").asString());
+    g_application.GetAppPlayer().SetPlayerState(fileItem->GetProperty("playerstate").asString());
     g_application.SeekTime(fileItem->GetProperty("resumepoint").asDouble());
   }
   else
-    g_application.m_pPlayer->SeekChapter(chapter);
+    g_application.GetAppPlayer().SeekChapter(chapter);
 
   Close();
 }
@@ -411,15 +404,15 @@ bool CGUIDialogVideoBookmarks::AddBookmark(CVideoInfoTag* tag)
   bookmark.timeInSeconds = (int)g_application.GetTime();
   bookmark.totalTimeInSeconds = (int)g_application.GetTotalTime();
 
-  if( g_application.m_pPlayer->HasPlayer() )
-    bookmark.playerState = g_application.m_pPlayer->GetPlayerState();
+  if( g_application.GetAppPlayer().HasPlayer() )
+    bookmark.playerState = g_application.GetAppPlayer().GetPlayerState();
   else
     bookmark.playerState.clear();
 
   bookmark.player = g_application.GetCurrentPlayer();
 
   // create the thumbnail image
-  float aspectRatio = g_application.m_pPlayer->GetRenderAspectRatio();
+  float aspectRatio = g_application.GetAppPlayer().GetRenderAspectRatio();
   int width = BOOKMARK_THUMB_WIDTH;
   int height = (int)(BOOKMARK_THUMB_WIDTH / aspectRatio);
   if (height > (int)BOOKMARK_THUMB_WIDTH)
@@ -430,17 +423,16 @@ bool CGUIDialogVideoBookmarks::AddBookmark(CVideoInfoTag* tag)
 
 
   uint8_t *pixels = (uint8_t*)malloc(height * width * 4);
-  unsigned int captureId = g_application.m_pPlayer->RenderCaptureAlloc();
+  unsigned int captureId = g_application.GetAppPlayer().RenderCaptureAlloc();
 
-  g_application.m_pPlayer->RenderCapture(captureId, width, height, CAPTUREFLAG_IMMEDIATELY);
-  bool hasImage = g_application.m_pPlayer->RenderCaptureGetPixels(captureId, 1000, pixels, height * width * 4);
+  g_application.GetAppPlayer().RenderCapture(captureId, width, height, CAPTUREFLAG_IMMEDIATELY);
+  bool hasImage = g_application.GetAppPlayer().RenderCaptureGetPixels(captureId, 1000, pixels, height * width * 4);
 
   if (hasImage)
   {
 
-    Crc32 crc;
-    crc.ComputeFromLowerCase(g_application.CurrentFile());
-    bookmark.thumbNailImage = StringUtils::Format("%08x_%i.jpg", (unsigned __int32) crc, (int)bookmark.timeInSeconds);
+    auto crc = Crc32::ComputeFromLowerCase(g_application.CurrentFile());
+    bookmark.thumbNailImage = StringUtils::Format("%08x_%i.jpg", crc, (int)bookmark.timeInSeconds);
     bookmark.thumbNailImage = URIUtils::AddFileToFolder(CProfilesManager::GetInstance().GetBookmarksThumbFolder(), bookmark.thumbNailImage);
 
 
@@ -452,7 +444,7 @@ bool CGUIDialogVideoBookmarks::AddBookmark(CVideoInfoTag* tag)
     else
       CLog::Log(LOGERROR,"CGUIDialogVideoBookmarks: failed to create thumbnail");
 
-    g_application.m_pPlayer->RenderCaptureRelease(captureId);
+    g_application.GetAppPlayer().RenderCaptureRelease(captureId);
   }
   else
     CLog::Log(LOGERROR,"CGUIDialogVideoBookmarks: failed to create thumbnail 2");

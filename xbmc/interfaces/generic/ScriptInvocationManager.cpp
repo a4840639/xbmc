@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,6 +32,10 @@
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
 #include "utils/log.h"
+
+#ifdef TARGET_POSIX
+#include "platform/linux/XTimeUtils.h"
+#endif
 
 using namespace XFILE;
 
@@ -235,11 +239,11 @@ int CScriptInvocationManager::ExecuteAsync(const std::string &script, LanguageIn
 
   CSingleLock lock(m_critSection);
   invokerThread->SetId(m_nextId++);
-  lock.Leave();
 
   LanguageInvokerThread thread = { invokerThread, script, false };
   m_scripts.insert(std::make_pair(invokerThread->GetId(), thread));
   m_scriptPaths.insert(std::make_pair(script, invokerThread->GetId()));
+  lock.Leave();
   invokerThread->Execute(script, arguments);
 
   return invokerThread->GetId();

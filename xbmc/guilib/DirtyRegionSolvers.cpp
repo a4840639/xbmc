@@ -41,7 +41,7 @@ void CFillViewportAlwaysRegionSolver::Solve(const CDirtyRegionList &input, CDirt
 void CFillViewportOnChangeRegionSolver::Solve(const CDirtyRegionList &input, CDirtyRegionList &output)
 {
   if (!input.empty())
-    output.assign(1,g_graphicsContext.GetViewWindow());
+    output.assign(1,CDirtyRegion(g_graphicsContext.GetViewWindow()));
 }
 
 CGreedyDirtyRegionSolver::CGreedyDirtyRegionSolver()
@@ -66,7 +66,7 @@ void CGreedyDirtyRegionSolver::Solve(const CDirtyRegionList &input, CDirtyRegion
       float temporaryCost = m_costPerArea * (temporaryUnion.Area() - output[j].Area());
       if (temporaryCost < possibleUnionCost)
       {
-        // TODO if the temporaryCost is 0 then we could skip checking the other regions since there exist no better solution
+        //! @todo if the temporaryCost is 0 then we could skip checking the other regions since there exist no better solution
         possibleUnionRegion = temporaryUnion;
         possibleUnionNbr    = j;
         possibleUnionCost   = temporaryCost;

@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -56,4 +56,12 @@ int ffmpeg_lockmgr_cb(void **mutex, enum AVLockOp operation);
 void ff_avutil_log(void* ptr, int level, const char* format, va_list va);
 void ff_flush_avutil_log_buffers(void);
 
-#define FFMPEG_FILE_BUFFER_SIZE   32768 // default reading size for ffmpeg
+class CFFmpegLog
+{
+public:
+  static void SetLogLevel(int level);
+  static int GetLogLevel();
+  static void ClearLogLevel();
+  int level;
+};
+

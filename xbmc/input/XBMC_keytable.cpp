@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2007-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -243,26 +243,24 @@ static const XBMCKEYTABLE XBMCKeyTable[] =
 , { XBMCK_FAVORITES,              0,    0, XBMCVK_FAVORITES,     "favorites" }
 , { XBMCK_HOMEPAGE ,              0,    0, XBMCVK_HOMEPAGE,      "homepage" }
 , { XBMCK_CONFIG,                 0,    0, XBMCVK_CONFIG,        "config" }
+, { XBMCK_EPG   ,                 0,    0, XBMCVK_EPG,           "epg" }
 };
 
 static int XBMCKeyTableSize = sizeof(XBMCKeyTable)/sizeof(XBMCKEYTABLE);
 
-bool KeyTableLookupName(const char* keyname, XBMCKEYTABLE* keytable)
+bool KeyTableLookupName(std::string keyname, XBMCKEYTABLE* keytable)
 {
-  // If the name being searched for is null or "" there will be no match
-  if (!keyname)
-    return false;
-  if (keyname[0] == '\0')
+  // If the name being searched for is empty there will be no match
+  if (keyname.empty())
     return false;
 
   // We need the button name to be in lowercase
-  std::string lkeyname = keyname;
-  StringUtils::ToLower(lkeyname);
+  StringUtils::ToLower(keyname);
 
   // Look up the key name in XBMCKeyTable
   for (int i = 0; i < XBMCKeyTableSize; i++)
   { if (XBMCKeyTable[i].keyname)
-    { if (strcmp(lkeyname.c_str(), XBMCKeyTable[i].keyname) == 0)
+    { if (strcmp(keyname.c_str(), XBMCKeyTable[i].keyname) == 0)
       { *keytable = XBMCKeyTable[i];
         return true;
       }

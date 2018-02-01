@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
  */
 
 #include "MusicInfoLoader.h"
+#include "ServiceBroker.h"
 #include "MusicDatabase.h"
 #include "music/tags/MusicInfoTagLoaderFactory.h"
 #include "filesystem/MusicDatabaseDirectory/DirectoryNode.h"
@@ -82,7 +83,8 @@ void CMusicInfoLoader::OnLoaderStart()
 
 bool CMusicInfoLoader::LoadAdditionalTagInfo(CFileItem* pItem)
 {
-  if (!pItem || pItem->m_bIsFolder || pItem->IsPlayList() || pItem->IsNFO() || pItem->IsInternetStream())
+  if (!pItem || (pItem->m_bIsFolder && !pItem->IsAudio()) ||
+      pItem->IsPlayList() || pItem->IsNFO() || pItem->IsInternetStream())
     return false;
 
   if (pItem->GetProperty("hasfullmusictag") == "true")
@@ -134,7 +136,8 @@ bool CMusicInfoLoader::LoadItem(CFileItem* pItem)
 
 bool CMusicInfoLoader::LoadItemCached(CFileItem* pItem)
 {
-  if (pItem->m_bIsFolder || pItem->IsPlayList() || pItem->IsNFO() || pItem->IsInternetStream())
+  if ((pItem->m_bIsFolder && !pItem->IsAudio()) ||
+       pItem->IsPlayList() || pItem->IsNFO() || pItem->IsInternetStream())
     return false;
 
   // Get thumb for item
@@ -148,7 +151,8 @@ bool CMusicInfoLoader::LoadItemLookup(CFileItem* pItem)
   if (m_pProgressCallback && !pItem->m_bIsFolder)
     m_pProgressCallback->SetProgressAdvance();
 
-  if (pItem->m_bIsFolder || pItem->IsPlayList() || pItem->IsNFO() || pItem->IsInternetStream())
+  if ((pItem->m_bIsFolder && !pItem->IsAudio()) || pItem->IsPlayList() ||
+       pItem->IsNFO() || pItem->IsInternetStream())
     return false;
 
   if (!pItem->HasMusicInfoTag() || !pItem->GetMusicInfoTag()->Loaded())
@@ -173,11 +177,18 @@ bool CMusicInfoLoader::LoadItemLookup(CFileItem* pItem)
         m_databaseHits++;
       }
 
+      /* Note for songs from embedded or separate cuesheets strFileName is not unique, so only the first song from such a file 
+         gets added to the song map. Any such songs from a cuesheet can be identified by having a non-zero offset value.
+         When the item we are looking up has a cue document or is a music file with a cuesheet embedded in the tags, it needs 
+         to have the cuesheet fully processed replacing that item with items for every track etc. This is done elsewhere, as 
+         changes to the list of items is not possible from here. This method only loads the item with the song from the database 
+         when it maps to a single song.
+      */
+
       MAPSONGS::iterator it = m_songsMap.find(pItem->GetPath());
-      if (it != m_songsMap.end())
-      {  // Have we loaded this item from database before
+      if (it != m_songsMap.end() && !pItem->HasCueDocument() && it->second.iStartOffset == 0 && it->second.iEndOffset == 0)
+      {  // Have we loaded this item from database before (and it is not a cuesheet nor has an embedded cue sheet)
         pItem->GetMusicInfoTag()->SetSong(it->second);
-        pItem->GetMusicInfoTag()->SetCueSheet(m_musicDatabase.LoadCuesheet(it->second.strFileName));
         if (!it->second.strThumb.empty())
           pItem->SetArt("thumb", it->second.strThumb);
       }
@@ -193,7 +204,7 @@ bool CMusicInfoLoader::LoadItemLookup(CFileItem* pItem)
             pItem->SetArt("thumb", song.strThumb);
         }
       }
-      else if (CSettings::GetInstance().GetBool(CSettings::SETTING_MUSICFILES_USETAGS) || pItem->IsCDDA())
+      else if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_MUSICFILES_USETAGS) || pItem->IsCDDA())
       { // Nothing found, load tag from file,
         // always try to load cddb info
         // get correct tag parser

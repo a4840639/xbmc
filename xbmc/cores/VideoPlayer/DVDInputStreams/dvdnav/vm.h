@@ -45,7 +45,7 @@ typedef struct {
   int       vtsN;         /* 0 is vmgm? */
   pgc_t    *pgc;          /* either this or 'int pgcN' is enough? */
   int       pgcN;         /* but provide pgcN for quick lookup */
-  int       pgN;          /* is this needed? can allways fid pgN from cellN? */
+  int       pgN;          /* is this needed? can always fid pgN from cellN? */
   int       cellN;
   int32_t   cell_restart; /* get cell to restart */
   int       blockN;
@@ -127,7 +127,7 @@ dvd_reader_t *vm_get_dvd_reader(vm_t *vm);
 /* Basic Handling */
 int  vm_start(vm_t *vm);
 void vm_stop(vm_t *vm);
-int  vm_reset(vm_t *vm, const char *dvdroot);
+int  vm_reset(vm_t *vm, const char *dvdroot, void *stream, dvdnav_stream_cb *stream_cb);
 
 /* copying and merging  - useful for try-running an operation */
 vm_t *vm_new_copy(vm_t *vm);

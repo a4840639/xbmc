@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -35,13 +35,13 @@ namespace XbmcThreads
   {
     CONDITION_VARIABLE cond;
 
-    // SleepConditionVarialbeCS requires the condition variable be entered
+    // SleepConditionVariableCS requires the condition variable be entered
     //  only once.
     struct AlmostExit 
     {
       unsigned int count;
       CCriticalSection& cc;
-      inline AlmostExit(CCriticalSection& pcc) : count(pcc.exit(1)), cc(pcc) { cc.count = 0; }
+      inline explicit AlmostExit(CCriticalSection& pcc) : count(pcc.exit(1)), cc(pcc) { cc.count = 0; }
       inline ~AlmostExit() { cc.count = 1; cc.restore(count); }
     };
 

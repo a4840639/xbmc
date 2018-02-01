@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,11 +19,9 @@
  *
  */
 
-#include "system.h"
-#ifdef HAS_AVAHI
-
 #include <memory>
 #include <map>
+#include <vector>
 
 #include "network/ZeroconfBrowser.h"
 #include "threads/Thread.h"
@@ -39,16 +37,16 @@ class CZeroconfBrowserAvahi : public CZeroconfBrowser
 {
   public:
     CZeroconfBrowserAvahi();
-    ~CZeroconfBrowserAvahi();
+    ~CZeroconfBrowserAvahi() override;
 
   private:
     ///implementation if CZeroconfBrowser interface
     ///@{
-    virtual bool doAddServiceType(const std::string& fcr_service_type);
-    virtual bool doRemoveServiceType(const std::string& fcr_service_type);
+    bool doAddServiceType(const std::string& fcr_service_type) override;
+    bool doRemoveServiceType(const std::string& fcr_service_type) override;
 
-    virtual std::vector<CZeroconfBrowser::ZeroconfService> doGetFoundServices();
-    virtual bool doResolveService(CZeroconfBrowser::ZeroconfService& fr_service, double f_timeout);
+    std::vector<CZeroconfBrowser::ZeroconfService> doGetFoundServices() override;
+    bool doResolveService(CZeroconfBrowser::ZeroconfService& fr_service, double f_timeout) override;
     ///@}
 
     /// avahi callbacks
@@ -78,8 +76,6 @@ class CZeroconfBrowserAvahi : public CZeroconfBrowser
                          AvahiStringList *txt,
                          AvahiLookupResultFlags flags,
                          AVAHI_GCC_UNUSED void* userdata);
-    //helper to workaround avahi bug
-    static void shutdownCallback(AvahiTimeout *fp_e, void *fp_data);
     //helpers
     bool createClient();
     static AvahiServiceBrowser* createServiceBrowser(const std::string& fcr_service_type, AvahiClient* fp_client, void* fp_userdata);
@@ -106,10 +102,4 @@ class CZeroconfBrowserAvahi : public CZeroconfBrowser
     tDiscoveredServices m_discovered_services;
     CZeroconfBrowser::ZeroconfService m_resolving_service;
     CEvent m_resolved_event;
-
-    //2 variables below are needed for workaround of avahi bug (see destructor for details)
-    bool m_shutdown;
-    pthread_t m_thread_id;
 };
-
-#endif //HAS_AVAHI

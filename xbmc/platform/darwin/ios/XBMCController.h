@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,8 +23,8 @@
 #import <OpenGLES/ES2/gl.h>
 #import <AudioToolbox/AudioToolbox.h>
 
-#import "XBMC_events.h"
-#include "XBMC_keysym.h"
+#import "windowing/XBMC_events.h"
+#include "input/XBMC_keysym.h"
 
 @class IOSEAGLView;
 
@@ -55,6 +55,7 @@ typedef enum
   NSTimer *m_networkAutoSuspendTimer;
   IOSPlaybackState m_playbackState;
   NSDictionary *nowPlayingInfo;
+  bool nativeKeyboardActive;
 }
 @property (readonly, nonatomic, getter=isAnimating) BOOL animating;
 @property CGPoint lastGesturePoint;
@@ -64,6 +65,7 @@ typedef enum
 @property CGSize screensize;
 @property (nonatomic, retain) NSTimer *m_networkAutoSuspendTimer;
 @property (nonatomic, retain) NSDictionary *nowPlayingInfo;
+@property bool nativeKeyboardActive;
 
 // message from which our instance is obtained
 - (void) pauseAnimation;
@@ -84,6 +86,7 @@ typedef enum
 - (void) createGestureRecognizers;
 - (void) activateKeyboard:(UIView *)view;
 - (void) deactivateKeyboard:(UIView *)view;
+- (void) nativeKeyboardActive: (bool)active;
 
 - (void) disableNetworkAutoSuspend;
 - (void) enableNetworkAutoSuspend:(id)obj;
@@ -94,6 +97,7 @@ typedef enum
 - (bool) changeScreen: (unsigned int)screenIdx withMode:(UIScreenMode *)mode;
 - (void) activateScreen: (UIScreen *)screen withOrientation:(UIInterfaceOrientation)newOrientation;
 - (id)   initWithFrame:(CGRect)frame withScreen:(UIScreen *)screen;
+- (void*) getEAGLContextObj;
 @end
 
 extern XBMCController *g_xbmcController;

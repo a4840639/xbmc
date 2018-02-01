@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,9 +36,7 @@ CGUIDialogSlider::CGUIDialogSlider(void)
   m_loadType = KEEP_IN_MEMORY;
 }
 
-CGUIDialogSlider::~CGUIDialogSlider(void)
-{
-}
+CGUIDialogSlider::~CGUIDialogSlider(void) = default;
 
 bool CGUIDialogSlider::OnAction(const CAction &action)
 {
@@ -109,7 +107,7 @@ void CGUIDialogSlider::SetModalityType(DialogModalityType type)
 void CGUIDialogSlider::ShowAndGetInput(const std::string &label, float value, float min, float delta, float max, ISliderCallback *callback, void *callbackData)
 {
   // grab the slider dialog
-  CGUIDialogSlider *slider = (CGUIDialogSlider *)g_windowManager.GetWindow(WINDOW_DIALOG_SLIDER);
+  CGUIDialogSlider *slider = g_windowManager.GetWindow<CGUIDialogSlider>(WINDOW_DIALOG_SLIDER);
   if (!slider)
     return;
 
@@ -123,7 +121,7 @@ void CGUIDialogSlider::ShowAndGetInput(const std::string &label, float value, fl
 void CGUIDialogSlider::Display(int label, float value, float min, float delta, float max, ISliderCallback *callback)
 {
   // grab the slider dialog
-  CGUIDialogSlider *slider = (CGUIDialogSlider *)g_windowManager.GetWindow(WINDOW_DIALOG_SLIDER);
+  CGUIDialogSlider *slider = g_windowManager.GetWindow<CGUIDialogSlider>(WINDOW_DIALOG_SLIDER);
   if (!slider)
     return;
 

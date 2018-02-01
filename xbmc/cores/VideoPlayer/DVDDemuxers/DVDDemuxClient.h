@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,6 +20,8 @@
  */
 
 #include "DVDDemux.h"
+#include <map>
+#include <vector>
 
 extern "C" {
 #include "libavcodec/avcodec.h"
@@ -31,33 +33,37 @@ class CDVDDemuxClient : public CDVDDemux
 public:
 
   CDVDDemuxClient();
-  ~CDVDDemuxClient();
+  ~CDVDDemuxClient() override;
 
-  bool Open(CDVDInputStream* pInput);
+  bool Open(std::shared_ptr<CDVDInputStream> pInput);
   void Dispose();
-  void Reset() override;
+  bool Reset() override;
   void Abort() override;
   void Flush() override;
   DemuxPacket* Read() override;
-  bool SeekTime(int time, bool backwords = false, double* startpts = NULL) override;
+  bool SeekTime(double time, bool backwards = false, double* startpts = NULL) override;
   void SetSpeed(int iSpeed) override;
-  int GetStreamLength() override { return 0; }
-  CDemuxStream* GetStream(int iStreamId) override;
-  int GetNrOfStreams() override;
+  CDemuxStream* GetStream(int iStreamId) const override;
+  std::vector<CDemuxStream*> GetStreams() const override;
+  int GetNrOfStreams() const override;
   std::string GetFileName() override;
-  virtual std::string GetStreamCodecName(int iStreamId) override;
+  std::string GetStreamCodecName(int iStreamId) override;
+  void EnableStream(int id, bool enable) override;
+  void OpenStream(int id) override;
+  void SetVideoResolution(int width, int height) override;
 
 protected:
   void RequestStreams();
-  void ParsePacket(DemuxPacket* pPacket);
-  void DisposeStream(int iStreamId);
+  void SetStreamProps(CDemuxStream *stream, std::map<int, std::shared_ptr<CDemuxStream>> &map, bool forceInit);
+  bool ParsePacket(DemuxPacket* pPacket);
   void DisposeStreams();
+  std::shared_ptr<CDemuxStream> GetStreamInternal(int iStreamId);
   
-  CDVDInputStream* m_pInput;
-  CDVDInputStream::IDemux *m_IDemux;
-#ifndef MAX_STREAMS
-  #define MAX_STREAMS 100
-#endif
-  CDemuxStream* m_streams[MAX_STREAMS]; // maximum number of streams that ffmpeg can handle
+  std::shared_ptr<CDVDInputStream> m_pInput;
+  std::shared_ptr<CDVDInputStream::IDemux> m_IDemux;
+  std::map<int, std::shared_ptr<CDemuxStream>> m_streams;
+  int m_displayTime;
+  double m_dtsAtDisplayTime;
+  std::unique_ptr<DemuxPacket> m_packet;
 };
 

@@ -21,6 +21,7 @@
 #include <cstdlib>
 
 #include "FileItem.h"
+#include "ServiceBroker.h"
 #include "guilib/LocalizeStrings.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
@@ -36,15 +37,19 @@
 #include "filesystem/MusicDatabaseDirectory.h"
 #include "filesystem/VideoDatabaseDirectory.h"
 #include "filesystem/VideoDatabaseDirectory/QueryParams.h"
+#include "games/addons/GameClient.h"
+#include "games/GameUtils.h"
+#include "games/tags/GameInfoTag.h"
 #include "music/tags/MusicInfoTagLoaderFactory.h"
 #include "CueDocument.h"
 #include "video/VideoDatabase.h"
 #include "music/MusicDatabase.h"
-#include "epg/Epg.h"
 #include "pvr/channels/PVRChannel.h"
 #include "pvr/channels/PVRRadioRDSInfoTag.h"
+#include "pvr/epg/Epg.h"
 #include "pvr/recordings/PVRRecording.h"
 #include "pvr/timers/PVRTimerInfoTag.h"
+#include "video/Bookmark.h"
 #include "video/VideoInfoTag.h"
 #include "threads/SingleLock.h"
 #include "music/tags/MusicInfoTag.h"
@@ -54,19 +59,22 @@
 #include "URL.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
+#include "utils/FileExtensionProvider.h"
 #include "utils/RegExp.h"
 #include "utils/log.h"
 #include "utils/Variant.h"
 #include "utils/Mime.h"
+#include "utils/Random.h"
+#include "events/IEvent.h"
 
-#include <assert.h>
 #include <algorithm>
 
+using namespace KODI;
 using namespace XFILE;
 using namespace PLAYLIST;
 using namespace MUSIC_INFO;
 using namespace PVR;
-using namespace EPG;
+using namespace GAME;
 
 CFileItem::CFileItem(const CSong& song)
 {
@@ -116,10 +124,33 @@ CFileItem::CFileItem(const CVideoInfoTag& movie)
   SetFromVideoInfoTag(movie);
 }
 
-CFileItem::CFileItem(const CEpgInfoTagPtr& tag)
+void CFileItem::FillMusicInfoTag(const CPVRChannelPtr& channel, const CPVREpgInfoTagPtr& tag)
 {
-  assert(tag.get());
+  if (channel && channel->IsRadio() && !HasMusicInfoTag())
+  {
+    CMusicInfoTag* musictag = GetMusicInfoTag(); // create (!) the music tag.
 
+    if (tag)
+    {
+      musictag->SetTitle(tag->Title());
+      musictag->SetGenre(tag->Genre());
+      musictag->SetDuration(tag->GetDuration());
+    }
+    else if (CServiceBroker::GetSettings().GetBool(CSettings::SETTING_EPG_HIDENOINFOAVAILABLE))
+    {
+      musictag->SetTitle(g_localizeStrings.Get(19055)); // no information available
+    }
+    musictag->SetURL(channel->Path());
+    musictag->SetArtist(channel->ChannelName());
+    musictag->SetAlbumArtist(channel->ChannelName());
+    musictag->SetLoaded(true);
+    musictag->SetComment("");
+    musictag->SetLyrics("");
+  }
+}
+
+CFileItem::CFileItem(const CPVREpgInfoTagPtr& tag)
+{
   Initialize();
 
   m_bIsFolder = false;
@@ -131,60 +162,44 @@ CFileItem::CFileItem(const CEpgInfoTagPtr& tag)
 
   if (!tag->Icon().empty())
     SetIconImage(tag->Icon());
-  else if (tag->HasPVRChannel() && !tag->ChannelTag()->IconPath().empty())
-    SetIconImage(tag->ChannelTag()->IconPath());
+  else if (tag->HasChannel() && !tag->Channel()->IconPath().empty())
+    SetIconImage(tag->Channel()->IconPath());
 
+  FillMusicInfoTag(tag->Channel(), tag);
   FillInMimeType(false);
 }
 
 CFileItem::CFileItem(const CPVRChannelPtr& channel)
 {
-  assert(channel.get());
-
   Initialize();
 
-  CEpgInfoTagPtr epgNow(channel->GetEPGNow());
+  CPVREpgInfoTagPtr epgNow(channel->GetEPGNow());
 
   m_strPath = channel->Path();
   m_bIsFolder = false;
   m_pvrChannelInfoTag = channel;
   SetLabel(channel->ChannelName());
   m_strLabel2 = epgNow ? epgNow->Title() :
-      CSettings::GetInstance().GetBool(CSettings::SETTING_EPG_HIDENOINFOAVAILABLE) ?
+      CServiceBroker::GetSettings().GetBool(CSettings::SETTING_EPG_HIDENOINFOAVAILABLE) ?
                             "" : g_localizeStrings.Get(19055); // no information available
-
-  if (channel->IsRadio())
-  {
-    CMusicInfoTag* musictag = GetMusicInfoTag();
-    if (musictag)
-    {
-      musictag->SetURL(channel->Path());
-      musictag->SetTitle(m_strLabel2);
-      musictag->SetArtist(channel->ChannelName());
-      musictag->SetAlbumArtist(channel->ChannelName());
-      if (epgNow)
-        musictag->SetGenre(epgNow->Genre());
-      musictag->SetDuration(epgNow ? epgNow->GetDuration() : 3600);
-      musictag->SetLoaded(true);
-      musictag->SetComment("");
-      musictag->SetLyrics("");
-    }
-  }
 
   if (!channel->IconPath().empty())
     SetIconImage(channel->IconPath());
+  else if (channel->IsRadio())
+    SetIconImage("DefaultAudio.png");
+  else
+    SetIconImage("DefaultTVShows.png");
 
   SetProperty("channelid", channel->ChannelID());
   SetProperty("path", channel->Path());
   SetArt("thumb", channel->IconPath());
 
+  FillMusicInfoTag(channel, epgNow);
   FillInMimeType(false);
 }
 
 CFileItem::CFileItem(const CPVRRecordingPtr& record)
 {
-  assert(record.get());
-
   Initialize();
 
   m_bIsFolder = false;
@@ -197,11 +212,9 @@ CFileItem::CFileItem(const CPVRRecordingPtr& record)
 
 CFileItem::CFileItem(const CPVRTimerInfoTagPtr& timer)
 {
-  assert(timer.get());
-
   Initialize();
 
-  m_bIsFolder = timer->IsRepeating();
+  m_bIsFolder = timer->IsTimerRule();
   m_pvrTimerInfoTag = timer;
   m_strPath = timer->Path();
   SetLabel(timer->Title());
@@ -239,7 +252,8 @@ CFileItem::CFileItem(const CGenre& genre)
 CFileItem::CFileItem(const CFileItem& item)
 : m_musicInfoTag(NULL),
   m_videoInfoTag(NULL),
-  m_pictureInfoTag(NULL)
+  m_pictureInfoTag(NULL),
+  m_gameInfoTag(NULL)
 {
   *this = item;
 }
@@ -249,7 +263,7 @@ CFileItem::CFileItem(const CGUIListItem& item)
   Initialize();
   // not particularly pretty, but it gets around the issue of Initialize() defaulting
   // parameters in the CGUIListItem base class.
-  *((CGUIListItem *)this) = item;
+  *static_cast<CGUIListItem*>(this) = item;
 
   FillInMimeType(false);
 }
@@ -309,7 +323,7 @@ CFileItem::CFileItem(const CMediaSource& share)
   m_iBadPwdCount = share.m_iBadPwdCount;
   m_iDriveType = share.m_iDriveType;
   SetArt("thumb", share.m_strThumbnailImage);
-  SetLabelPreformated(true);
+  SetLabelPreformatted(true);
   if (IsDVD())
     GetVideoInfoTag()->m_strFileNameAndPath = share.strDiskUniqueId; // share.strDiskUniqueId contains disc unique id
   FillInMimeType(false);
@@ -320,26 +334,40 @@ CFileItem::CFileItem(std::shared_ptr<const ADDON::IAddon> addonInfo) : m_addonIn
   Initialize();
 }
 
+CFileItem::CFileItem(const EventPtr& eventLogEntry)
+{
+  Initialize();
+
+  m_eventLogEntry = eventLogEntry;
+  SetLabel(eventLogEntry->GetLabel());
+  m_dateTime = eventLogEntry->GetDateTime();
+  if (!eventLogEntry->GetIcon().empty())
+    SetIconImage(eventLogEntry->GetIcon());
+}
+
 CFileItem::~CFileItem(void)
 {
   delete m_musicInfoTag;
   delete m_videoInfoTag;
   delete m_pictureInfoTag;
+  delete m_gameInfoTag;
 
   m_musicInfoTag = NULL;
   m_videoInfoTag = NULL;
   m_pictureInfoTag = NULL;
+  m_gameInfoTag = NULL;
 }
 
-const CFileItem& CFileItem::operator=(const CFileItem& item)
+CFileItem& CFileItem::operator=(const CFileItem& item)
 {
   if (this == &item)
     return *this;
 
   CGUIListItem::operator=(item);
-  m_bLabelPreformated=item.m_bLabelPreformated;
+  m_bLabelPreformatted=item.m_bLabelPreformatted;
   FreeMemory();
-  m_strPath = item.GetPath();
+  m_strPath = item.m_strPath;
+  m_strDynPath = item.m_strDynPath;
   m_bIsParentFolder = item.m_bIsParentFolder;
   m_iDriveType = item.m_iDriveType;
   m_bIsShareOrDrive = item.m_bIsShareOrDrive;
@@ -385,12 +413,26 @@ const CFileItem& CFileItem::operator=(const CFileItem& item)
     m_pictureInfoTag = NULL;
   }
 
+  if (item.m_gameInfoTag)
+  {
+    if (m_gameInfoTag)
+      *m_gameInfoTag = *item.m_gameInfoTag;
+    else
+      m_gameInfoTag = new CGameInfoTag(*item.m_gameInfoTag);
+  }
+  else
+  {
+    delete m_gameInfoTag;
+    m_gameInfoTag = NULL;
+  }
+
   m_epgInfoTag = item.m_epgInfoTag;
   m_pvrChannelInfoTag = item.m_pvrChannelInfoTag;
   m_pvrRecordingInfoTag = item.m_pvrRecordingInfoTag;
   m_pvrTimerInfoTag = item.m_pvrTimerInfoTag;
   m_pvrRadioRDSInfoTag = item.m_pvrRadioRDSInfoTag;
   m_addonInfo = item.m_addonInfo;
+  m_eventLogEntry = item.m_eventLogEntry;
 
   m_lStartOffset = item.m_lStartOffset;
   m_lStartPartNumber = item.m_lStartPartNumber;
@@ -417,7 +459,8 @@ void CFileItem::Initialize()
   m_musicInfoTag = NULL;
   m_videoInfoTag = NULL;
   m_pictureInfoTag = NULL;
-  m_bLabelPreformated = false;
+  m_gameInfoTag = NULL;
+  m_bLabelPreformatted = false;
   m_bIsAlbum = false;
   m_dwSize = 0;
   m_bIsParentFolder = false;
@@ -449,6 +492,7 @@ void CFileItem::Reset()
   m_strDVDLabel.clear();
   m_strTitle.clear();
   m_strPath.clear();
+  m_strDynPath.clear();
   m_dateTime.Reset();
   m_strLockCode.clear();
   m_mimetype.clear();
@@ -463,13 +507,17 @@ void CFileItem::Reset()
   m_pvrRadioRDSInfoTag.reset();
   delete m_pictureInfoTag;
   m_pictureInfoTag=NULL;
+  delete m_gameInfoTag;
+  m_gameInfoTag = NULL;
   m_extrainfo.clear();
   ClearProperties();
+  m_eventLogEntry.reset();
 
   Initialize();
   SetInvalid();
 }
 
+// do not archive dynamic path
 void CFileItem::Archive(CArchive& ar)
 {
   CGUIListItem::Archive(ar);
@@ -477,7 +525,7 @@ void CFileItem::Archive(CArchive& ar)
   if (ar.IsStoring())
   {
     ar << m_bIsParentFolder;
-    ar << m_bLabelPreformated;
+    ar << m_bLabelPreformatted;
     ar << m_strPath;
     ar << m_bIsShareOrDrive;
     ar << m_iDriveType;
@@ -528,11 +576,18 @@ void CFileItem::Archive(CArchive& ar)
     }
     else
       ar << 0;
+    if (m_gameInfoTag)
+    {
+      ar << 1;
+      ar << *m_gameInfoTag;
+    }
+    else
+      ar << 0;
   }
   else
   {
     ar >> m_bIsParentFolder;
-    ar >> m_bLabelPreformated;
+    ar >> m_bLabelPreformatted;
     ar >> m_strPath;
     ar >> m_bIsShareOrDrive;
     ar >> m_iDriveType;
@@ -571,6 +626,9 @@ void CFileItem::Archive(CArchive& ar)
     ar >> iType;
     if (iType == 1)
       ar >> *GetPictureInfoTag();
+    ar >> iType;
+    if (iType == 1)
+      ar >> *GetGameInfoTag();
 
     SetInvalid();
   }
@@ -600,6 +658,9 @@ void CFileItem::Serialize(CVariant& value) const
 
   if (m_pictureInfoTag)
     (*m_pictureInfoTag).Serialize(value["pictureInfoTag"]);
+
+  if (m_gameInfoTag)
+    (*m_gameInfoTag).Serialize(value["gameInfoTag"]);
 }
 
 void CFileItem::ToSortable(SortItem &sortable, Field field) const
@@ -670,6 +731,12 @@ void CFileItem::ToSortable(SortItem &sortable, Field field) const
         break;
     }
   }
+
+  if (HasGameInfoTag())
+    GetGameInfoTag()->ToSortable(sortable, field);
+
+  if (m_eventLogEntry)
+    m_eventLogEntry->ToSortable(sortable, field);
 }
 
 void CFileItem::ToSortable(SortItem &sortable, const Fields &fields) const
@@ -692,7 +759,8 @@ bool CFileItem::Exists(bool bUseCache /* = true */) const
    || IsInternetStream()
    || IsParentFolder()
    || IsVirtualDirectoryRoot()
-   || IsPlugin())
+   || IsPlugin()
+   || IsPVR())
     return true;
 
   if (IsVideoDb() && HasVideoInfoTag())
@@ -726,14 +794,22 @@ bool CFileItem::IsVideo() const
   if (HasVideoInfoTag())
     return true;
 
+  if (HasGameInfoTag())
+    return false;
+
   if (HasMusicInfoTag())
     return false;
 
   if (HasPictureInfoTag())
     return false;
 
+  // only tv recordings are videos...
   if (IsPVRRecording())
-    return true;
+    return !GetPVRRecordingInfoTag()->IsRadio();
+
+  // ... all other PVR items are not.
+  if (IsPVR())
+    return false;
 
   if (URIUtils::IsDVD(m_strPath))
     return true;
@@ -748,7 +824,10 @@ bool CFileItem::IsVideo() const
      return true;
   }
 
-  return URIUtils::HasExtension(m_strPath, g_advancedSettings.m_videoExtensions);
+  //! @todo If the file is a zip file, ask the game clients if any support this
+  // file before assuming it is video.
+
+  return URIUtils::HasExtension(m_strPath, CServiceBroker::GetFileExtensionProvider().GetVideoExtensions());
 }
 
 bool CFileItem::IsEPG() const
@@ -776,6 +855,11 @@ bool CFileItem::IsDeletedPVRRecording() const
   return (m_pvrRecordingInfoTag && m_pvrRecordingInfoTag->IsDeleted());
 }
 
+bool CFileItem::IsInProgressPVRRecording() const
+{
+  return (m_pvrRecordingInfoTag && m_pvrRecordingInfoTag->IsInProgress());
+}
+
 bool CFileItem::IsPVRTimer() const
 {
   return HasPVRTimerInfoTag();
@@ -794,7 +878,7 @@ bool CFileItem::IsDiscStub() const
     return dbItem.IsDiscStub();
   }
 
-  return URIUtils::HasExtension(m_strPath, g_advancedSettings.m_discStubExtensions);
+  return URIUtils::HasExtension(m_strPath, CServiceBroker::GetFileExtensionProvider().GetDiscStubExtensions());
 }
 
 bool CFileItem::IsAudio() const
@@ -812,6 +896,9 @@ bool CFileItem::IsAudio() const
   if (HasPictureInfoTag())
     return false;
 
+  if (HasGameInfoTag())
+    return false;
+
   if (IsCDDA())
     return true;
 
@@ -824,7 +911,46 @@ bool CFileItem::IsAudio() const
      return true;
   }
 
-  return URIUtils::HasExtension(m_strPath, g_advancedSettings.GetMusicExtensions());
+  //! @todo If the file is a zip file, ask the game clients if any support this
+  // file before assuming it is audio
+
+  return URIUtils::HasExtension(m_strPath, CServiceBroker::GetFileExtensionProvider().GetMusicExtensions());
+}
+
+bool CFileItem::IsDeleted() const
+{
+  if (HasPVRRecordingInfoTag())
+    return GetPVRRecordingInfoTag()->IsDeleted();
+
+  return false;
+}
+
+bool CFileItem::IsAudioBook() const
+{
+  return IsType(".m4b") || IsType(".mka");
+}
+
+bool CFileItem::IsGame() const
+{
+  if (HasGameInfoTag())
+    return true;
+
+  if (HasVideoInfoTag())
+    return false;
+
+  if (HasMusicInfoTag())
+    return false;
+
+  if (HasPictureInfoTag())
+    return false;
+
+  if (IsPVR())
+    return false;
+
+  if (HasAddonInfo())
+    return CGameUtils::IsStandaloneGame(std::const_pointer_cast<ADDON::IAddon>(GetAddonInfo()));
+
+  return CGameUtils::HasGameExtension(m_strPath);
 }
 
 bool CFileItem::IsPicture() const
@@ -834,6 +960,9 @@ bool CFileItem::IsPicture() const
 
   if (HasPictureInfoTag())
     return true;
+
+  if (HasGameInfoTag())
+    return false;
 
   if (HasMusicInfoTag())
     return false;
@@ -851,7 +980,7 @@ bool CFileItem::IsLyrics() const
 
 bool CFileItem::IsSubtitle() const
 {
-  return URIUtils::HasExtension(m_strPath, g_advancedSettings.m_subtitlesExtensions);
+  return URIUtils::HasExtension(m_strPath, CServiceBroker::GetFileExtensionProvider().GetSubtitleExtensions());
 }
 
 bool CFileItem::IsCUESheet() const
@@ -875,7 +1004,6 @@ bool CFileItem::IsFileFolder(EFileFolderType types) const
   if(IsInternetStream())
     always_type = EFILEFOLDER_TYPE_ONCLICK;
 
-
   if(types & always_type)
   {
     if(IsSmartPlayList()
@@ -884,13 +1012,18 @@ bool CFileItem::IsFileFolder(EFileFolderType types) const
     || IsZIP()
     || IsRAR()
     || IsRSS()
-    || IsType(".ogg|.oga|.nsf|.sid|.sap|.xbt|.xsp")
+    || IsAudioBook()
+    || IsType(".ogg|.oga|.xbt")
 #if defined(TARGET_ANDROID)
     || IsType(".apk")
 #endif
     )
     return true;
   }
+
+  if (CServiceBroker::IsBinaryAddonCacheUp() &&
+      IsType(CServiceBroker::GetFileExtensionProvider().GetFileFolderExtensions().c_str()))
+    return true;
 
   if(types & EFILEFOLDER_TYPE_ONBROWSE)
   {
@@ -901,7 +1034,6 @@ bool CFileItem::IsFileFolder(EFileFolderType types) const
 
   return false;
 }
-
 
 bool CFileItem::IsSmartPlayList() const
 {
@@ -941,7 +1073,7 @@ bool CFileItem::IsNFO() const
 
 bool CFileItem::IsDiscImage() const
 {
-  return URIUtils::HasExtension(m_strPath, ".img|.iso|.nrg");
+  return URIUtils::HasExtension(m_strPath, ".img|.iso|.nrg|.udf");
 }
 
 bool CFileItem::IsOpticalMediaFile() const
@@ -1138,6 +1270,13 @@ bool CFileItem::IsReadOnly() const
 
 void CFileItem::FillInDefaultIcon()
 {
+  if (URIUtils::IsPVRGuideItem(m_strPath))
+  {
+    // epg items never have a default icon. no need to execute this expensive method.
+    // when filling epg grid window, easily tens of thousands of epg items are processed.
+    return;
+  }
+
   //CLog::Log(LOGINFO, "FillInDefaultIcon(%s)", pItem->GetLabel().c_str());
   // find the default icon for a file or folder item
   // for files this can be the (depending on the file type)
@@ -1146,7 +1285,6 @@ void CFileItem::FillInDefaultIcon()
   //   default picture for videos
   //   default picture for shortcuts
   //   default picture for playlists
-  //   or the icon embedded in an .xbe
   //
   // for folders
   //   for .. folders the default picture for parent folder
@@ -1159,19 +1297,19 @@ void CFileItem::FillInDefaultIcon()
       /* To reduce the average runtime of this code, this list should
        * be ordered with most frequently seen types first.  Also bear
        * in mind the complexity of the code behind the check in the
-       * case of IsWhatater() returns false.
+       * case of IsWhatever() returns false.
        */
       if (IsPVRChannel())
       {
         if (GetPVRChannelInfoTag()->IsRadio())
           SetIconImage("DefaultAudio.png");
         else
-          SetIconImage("DefaultVideo.png");
+          SetIconImage("DefaultTVShows.png");
       }
       else if ( IsLiveTV() )
       {
         // Live TV Channel
-        SetIconImage("DefaultVideo.png");
+        SetIconImage("DefaultTVShows.png");
       }
       else if ( URIUtils::IsArchive(m_strPath) )
       { // archive
@@ -1206,7 +1344,7 @@ void CFileItem::FillInDefaultIcon()
         // picture
         SetIconImage("DefaultPicture.png");
       }
-      else if ( IsPlayList() )
+      else if ( IsPlayList() || IsSmartPlayList())
       {
         SetIconImage("DefaultPlaylist.png");
       }
@@ -1222,7 +1360,7 @@ void CFileItem::FillInDefaultIcon()
     }
     else
     {
-      if ( IsPlayList() )
+      if ( IsPlayList() || IsSmartPlayList())
       {
         SetIconImage("DefaultPlaylist.png");
       }
@@ -1274,7 +1412,7 @@ void CFileItem::SetLabel(const std::string &strLabel)
     m_bIsParentFolder = true;
     m_bIsFolder = true;
     m_specialSort = SortSpecialOnTop;
-    SetLabelPreformated(true);
+    SetLabelPreformatted(true);
   }
   CGUIListItem::SetLabel(strLabel);
 }
@@ -1304,7 +1442,7 @@ bool CFileItem::IsParentFolder() const
 
 void CFileItem::FillInMimeType(bool lookup /*= true*/)
 {
-  // TODO: adapt this to use CMime::GetMimeType()
+  //! @todo adapt this to use CMime::GetMimeType()
   if (m_mimetype.empty())
   {
     if( m_bIsFolder )
@@ -1347,6 +1485,15 @@ void CFileItem::FillInMimeType(bool lookup /*= true*/)
     StringUtils::Replace(m_strPath, "http:", "mms:");
 }
 
+void CFileItem::SetMimeTypeForInternetFile()
+{
+  if (m_doContentLookup && IsInternetStream())
+  {
+    SetMimeType("");
+    FillInMimeType(true);
+  }
+}
+
 bool CFileItem::IsSamePath(const CFileItem *item) const
 {
   if (!item)
@@ -1360,9 +1507,9 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
   }
   if (HasVideoInfoTag() && item->HasVideoInfoTag())
   {
-    if (m_videoInfoTag->m_iDbId != -1 && item->m_videoInfoTag->m_iDbId != -1)
-      return ((m_videoInfoTag->m_iDbId == item->m_videoInfoTag->m_iDbId) &&
-        (m_videoInfoTag->m_type == item->m_videoInfoTag->m_type));        
+    if (GetVideoInfoTag()->m_iDbId != -1 && item->GetVideoInfoTag()->m_iDbId != -1)
+      return ((GetVideoInfoTag()->m_iDbId == item->GetVideoInfoTag()->m_iDbId) &&
+        (GetVideoInfoTag()->m_type == item->GetVideoInfoTag()->m_type));
   }
   if (IsMusicDb() && HasMusicInfoTag())
   {
@@ -1373,7 +1520,7 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
   }
   if (IsVideoDb() && HasVideoInfoTag())
   {
-    CFileItem dbItem(m_videoInfoTag->m_strFileNameAndPath, false);
+    CFileItem dbItem(GetVideoInfoTag()->m_strFileNameAndPath, false);
     if (HasProperty("item_start"))
       dbItem.SetProperty("item_start", GetProperty("item_start"));
     return dbItem.IsSamePath(item);
@@ -1387,7 +1534,7 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
   }
   if (item->IsVideoDb() && item->HasVideoInfoTag())
   {
-    CFileItem dbItem(item->m_videoInfoTag->m_strFileNameAndPath, false);
+    CFileItem dbItem(item->GetVideoInfoTag()->m_strFileNameAndPath, false);
     if (item->HasProperty("item_start"))
       dbItem.SetProperty("item_start", item->GetProperty("item_start"));
     return IsSamePath(&dbItem);
@@ -1405,12 +1552,27 @@ bool CFileItem::IsAlbum() const
 void CFileItem::UpdateInfo(const CFileItem &item, bool replaceLabels /*=true*/)
 {
   if (item.HasVideoInfoTag())
-  { // copy info across (TODO: premiered info is normally stored in m_dateTime by the db)
-    *GetVideoInfoTag() = *item.GetVideoInfoTag();
-    // preferably use some information from PVR info tag if available
-    if (m_pvrRecordingInfoTag)
-      m_pvrRecordingInfoTag->CopyClientInfo(GetVideoInfoTag());
-    SetOverlayImage(ICON_OVERLAY_UNWATCHED, GetVideoInfoTag()->m_playCount > 0);
+  { // copy info across
+    //! @todo premiered info is normally stored in m_dateTime by the db
+
+    if (item.m_videoInfoTag)
+    {
+      if (m_videoInfoTag)
+        *m_videoInfoTag = *item.m_videoInfoTag;
+      else
+        m_videoInfoTag = new CVideoInfoTag(*item.m_videoInfoTag);
+    }
+    else
+    {
+      if (m_videoInfoTag)
+        delete m_videoInfoTag;
+
+      m_videoInfoTag = new CVideoInfoTag;
+    }
+
+    m_pvrRecordingInfoTag = item.m_pvrRecordingInfoTag;
+
+    SetOverlayImage(ICON_OVERLAY_UNWATCHED, GetVideoInfoTag()->GetPlayCount() > 0);
     SetInvalid();
   }
   if (item.HasMusicInfoTag())
@@ -1426,6 +1588,11 @@ void CFileItem::UpdateInfo(const CFileItem &item, bool replaceLabels /*=true*/)
   if (item.HasPictureInfoTag())
   {
     *GetPictureInfoTag() = *item.GetPictureInfoTag();
+    SetInvalid();
+  }
+  if (item.HasGameInfoTag())
+  {
+    *GetGameInfoTag() = *item.GetGameInfoTag();
     SetInvalid();
   }
   if (replaceLabels && !item.GetLabel().empty())
@@ -1454,8 +1621,12 @@ void CFileItem::SetFromVideoInfoTag(const CVideoInfoTag &video)
     m_strPath = video.m_strFileNameAndPath;
     m_bIsFolder = false;
   }
-  
-  *GetVideoInfoTag() = video;
+
+  if (m_videoInfoTag)
+    *m_videoInfoTag = video;
+  else
+    m_videoInfoTag = new CVideoInfoTag(video);
+
   if (video.m_iSeason == 0)
     SetProperty("isspecial", "true");
   FillInDefaultIcon();
@@ -1492,7 +1663,12 @@ void CFileItem::SetFromSong(const CSong &song)
 {
   if (!song.strTitle.empty())
     SetLabel(song.strTitle);
-  if (!song.strFileName.empty())
+  if (song.idSong > 0)
+  {
+    std::string strExt = URIUtils::GetExtension(song.strFileName);
+    m_strPath = StringUtils::Format("musicdb://songs/%li%s", song.idSong, strExt.c_str());
+  }
+  else if (!song.strFileName.empty())
     m_strPath = song.strFileName;
   GetMusicInfoTag()->SetSong(song);
   m_lStartOffset = song.iStartOffset;
@@ -1507,44 +1683,33 @@ void CFileItem::SetFromSong(const CSong &song)
 std::string CFileItem::GetOpticalMediaPath() const
 {
   std::string path;
-  std::string dvdPath;
   path = URIUtils::AddFileToFolder(GetPath(), "VIDEO_TS.IFO");
   if (CFile::Exists(path))
-    dvdPath = path;
-  else
-  {
-    dvdPath = URIUtils::AddFileToFolder(GetPath(), "VIDEO_TS");
-    path = URIUtils::AddFileToFolder(dvdPath, "VIDEO_TS.IFO");
-    dvdPath.clear();
-    if (CFile::Exists(path))
-      dvdPath = path;
-  }
+    return path;
+  
+  path = URIUtils::AddFileToFolder(GetPath(), "VIDEO_TS", "VIDEO_TS.IFO");
+  if (CFile::Exists(path))
+    return path;
+
 #ifdef HAVE_LIBBLURAY
-  if (dvdPath.empty())
-  {
-    path = URIUtils::AddFileToFolder(GetPath(), "index.bdmv");
-    if (CFile::Exists(path))
-      dvdPath = path;
-    else
-    {
-      dvdPath = URIUtils::AddFileToFolder(GetPath(), "BDMV");
-      path = URIUtils::AddFileToFolder(dvdPath, "index.bdmv");
-      dvdPath.clear();
-      if (CFile::Exists(path))
-        dvdPath = path;
-    }
-  }
+  path = URIUtils::AddFileToFolder(GetPath(), "index.bdmv");
+  if (CFile::Exists(path))
+    return path;
+
+  path = URIUtils::AddFileToFolder(GetPath(), "BDMV", "index.bdmv");
+  if (CFile::Exists(path))
+    return path;
 #endif
-  return dvdPath;
+  return std::string();
 }
 
-/*
- TODO: Ideally this (and SetPath) would not be available outside of construction
- for CFileItem objects, or at least restricted to essentially be equivalent
- to construction. This would require re-formulating a bunch of CFileItem
- construction, and also allowing CFileItemList to have it's own (public)
- SetURL() function, so for now we give direct access.
- */
+/**
+* @todo Ideally this (and SetPath) would not be available outside of construction
+* for CFileItem objects, or at least restricted to essentially be equivalent
+* to construction. This would require re-formulating a bunch of CFileItem
+* construction, and also allowing CFileItemList to have its own (public)
+* SetURL() function, so for now we give direct access.
+*/
 void CFileItem::SetURL(const CURL& url)
 {
   m_strPath = url.Get();
@@ -1564,6 +1729,38 @@ bool CFileItem::IsURL(const CURL& url) const
 bool CFileItem::IsPath(const std::string& path, bool ignoreURLOptions /* = false */) const
 {
   return URIUtils::PathEquals(m_strPath, path, false, ignoreURLOptions);
+}
+
+void CFileItem::SetDynURL(const CURL& url)
+{
+  m_strDynPath = url.Get();
+}
+
+const CURL CFileItem::GetDynURL() const
+{
+  if (!m_strDynPath.empty())
+  {
+    CURL url(m_strDynPath);
+    return url;
+  }
+  else
+  {
+    CURL url(m_strPath);
+    return url;
+  }
+}
+
+const std::string &CFileItem::GetDynPath() const
+{
+  if (!m_strDynPath.empty())
+    return m_strDynPath;
+  else
+    return m_strPath;
+}
+
+void CFileItem::SetDynPath(const std::string &path)
+{
+  m_strDynPath = path;
 }
 
 void CFileItem::SetCueDocument(const CCueDocumentPtr& cuePtr)
@@ -1589,6 +1786,8 @@ void CFileItem::LoadEmbeddedCue()
         cuesheet->UpdateMediaFile(*itMedia, GetPath());
       SetCueDocument(cuesheet);
     }
+    // Clear cuesheet tag having added it to item
+    tag.SetCueSheet(""); 
   }
 }
 
@@ -1620,13 +1819,13 @@ bool CFileItem::LoadTracksFromCueDocument(CFileItemList& scannedItems)
       {
         if (song.strAlbum.empty() && !tag.GetAlbum().empty())
           song.strAlbum = tag.GetAlbum();
-        //Pass album artist to final MusicInfoTag object via setting song album artist vector. 
+        //Pass album artist to final MusicInfoTag object via setting song album artist vector.
         if (song.GetAlbumArtist().empty() && !tag.GetAlbumArtist().empty())
-          song.SetAlbumArtist(tag.GetAlbumArtist());        
+          song.SetAlbumArtist(tag.GetAlbumArtist());
         if (song.genre.empty() && !tag.GetGenre().empty())
           song.genre = tag.GetGenre();
         //Pass artist to final MusicInfoTag object via setting song artist description string only.
-        //Artist credits not used during loading from cue sheet. 
+        //Artist credits not used during loading from cue sheet.
         if (song.strArtistDesc.empty() && !tag.GetArtistString().empty())
           song.strArtistDesc = tag.GetArtistString();
         if (tag.GetDiscNumber())
@@ -1638,13 +1837,13 @@ bool CFileItem::LoadTracksFromCueDocument(CFileItemList& scannedItems)
         tag.GetReleaseDate(dateTime);
         if (dateTime.wYear)
           song.iYear = dateTime.wYear;
-        if (song.embeddedArt.empty() && !tag.GetCoverArtInfo().empty())
+        if (song.embeddedArt.Empty() && !tag.GetCoverArtInfo().Empty())
           song.embeddedArt = tag.GetCoverArtInfo();
       }
 
       if (!song.iDuration && tag.GetDuration() > 0)
       { // must be the last song
-        song.iDuration = (tag.GetDuration() * 75 - song.iStartOffset + 37) / 75;
+        song.iDuration = CUtil::ConvertMilliSecsToSecsIntRounded(CUtil::ConvertSecsToMilliSecs(tag.GetDuration()) - song.iStartOffset);
       }
       if ( tag.Loaded() && oneFilePerTrack && ! ( tag.GetAlbum().empty() || tag.GetArtist().empty() || tag.GetTitle().empty() ) )
       {
@@ -1661,7 +1860,6 @@ bool CFileItem::LoadTracksFromCueDocument(CFileItemList& scannedItems)
   return tracksFound != 0;
 }
 
-
 /////////////////////////////////////////////////////////////////////////////////
 /////
 ///// CFileItemList
@@ -1670,6 +1868,7 @@ bool CFileItem::LoadTracksFromCueDocument(CFileItemList& scannedItems)
 
 CFileItemList::CFileItemList()
 : CFileItem("", true),
+  m_ignoreURLOptions(false),
   m_fastLookup(false),
   m_sortIgnoreFolders(false),
   m_cacheToDisc(CACHE_IF_SLOW),
@@ -1679,6 +1878,7 @@ CFileItemList::CFileItemList()
 
 CFileItemList::CFileItemList(const std::string& strPath)
 : CFileItem(strPath, true),
+  m_ignoreURLOptions(false),
   m_fastLookup(false),
   m_sortIgnoreFolders(false),
   m_cacheToDisc(CACHE_IF_SLOW),
@@ -1711,6 +1911,17 @@ const CFileItemPtr CFileItemList::operator[] (const std::string& strPath) const
   return Get(strPath);
 }
 
+void CFileItemList::SetIgnoreURLOptions(bool ignoreURLOptions)
+{
+  m_ignoreURLOptions = ignoreURLOptions;
+
+  if (m_fastLookup)
+  {
+    m_fastLookup = false; // Force SetFastlookup to clear map
+    SetFastLookup(true);  // and regenerate map
+  }
+}
+
 void CFileItemList::SetFastLookup(bool fastLookup)
 {
   CSingleLock lock(m_lock);
@@ -1721,7 +1932,7 @@ void CFileItemList::SetFastLookup(bool fastLookup)
     for (unsigned int i=0; i < m_items.size(); i++)
     {
       CFileItemPtr pItem = m_items[i];
-      m_map.insert(MAPFILEITEMSPAIR(pItem->GetPath(), pItem));
+      m_map.insert(MAPFILEITEMSPAIR(m_ignoreURLOptions ? CURL(pItem->GetPath()).GetWithoutOptions() : pItem->GetPath(), pItem));
     }
   }
   if (!fastLookup && m_fastLookup)
@@ -1729,18 +1940,18 @@ void CFileItemList::SetFastLookup(bool fastLookup)
   m_fastLookup = fastLookup;
 }
 
-bool CFileItemList::Contains(const std::string& fileName, bool ignoreURLOptions /* = false */) const
+bool CFileItemList::Contains(const std::string& fileName) const
 {
   CSingleLock lock(m_lock);
 
-  if (m_fastLookup && !ignoreURLOptions)
-    return m_map.find(fileName) != m_map.end();
+  if (m_fastLookup)
+    return m_map.find(m_ignoreURLOptions ? CURL(fileName).GetWithoutOptions() : fileName) != m_map.end();
 
   // slow method...
   for (unsigned int i = 0; i < m_items.size(); i++)
   {
     const CFileItemPtr pItem = m_items[i];
-    if (pItem->IsPath(fileName, ignoreURLOptions))
+    if (pItem->IsPath(m_ignoreURLOptions ? CURL(fileName).GetWithoutOptions() : fileName))
       return true;
   }
   return false;
@@ -1775,15 +1986,21 @@ void CFileItemList::ClearItems()
   m_map.clear();
 }
 
-void CFileItemList::Add(const CFileItemPtr &pItem)
+void CFileItemList::Add(CFileItemPtr pItem)
 {
   CSingleLock lock(m_lock);
-
-  m_items.push_back(pItem);
   if (m_fastLookup)
-  {
-    m_map.insert(MAPFILEITEMSPAIR(pItem->GetPath(), pItem));
-  }
+    m_map.insert(MAPFILEITEMSPAIR(m_ignoreURLOptions ? CURL(pItem->GetPath()).GetWithoutOptions() : pItem->GetPath(), pItem));
+  m_items.emplace_back(std::move(pItem));
+}
+
+void CFileItemList::Add(CFileItem&& item)
+{
+  CSingleLock lock(m_lock);
+  auto ptr = std::make_shared<CFileItem>(std::move(item));
+  if (m_fastLookup)
+    m_map.insert(MAPFILEITEMSPAIR(m_ignoreURLOptions ? CURL(ptr->GetPath()).GetWithoutOptions() : ptr->GetPath(), ptr));
+  m_items.emplace_back(std::move(ptr));
 }
 
 void CFileItemList::AddFront(const CFileItemPtr &pItem, int itemPosition)
@@ -1800,7 +2017,7 @@ void CFileItemList::AddFront(const CFileItemPtr &pItem, int itemPosition)
   }
   if (m_fastLookup)
   {
-    m_map.insert(MAPFILEITEMSPAIR(pItem->GetPath(), pItem));
+    m_map.insert(MAPFILEITEMSPAIR(m_ignoreURLOptions ? CURL(pItem->GetPath()).GetWithoutOptions() : pItem->GetPath(), pItem));
   }
 }
 
@@ -1815,7 +2032,7 @@ void CFileItemList::Remove(CFileItem* pItem)
       m_items.erase(it);
       if (m_fastLookup)
       {
-        m_map.erase(pItem->GetPath());
+        m_map.erase(m_ignoreURLOptions ? CURL(pItem->GetPath()).GetWithoutOptions() : pItem->GetPath());
       }
       break;
     }
@@ -1831,7 +2048,7 @@ void CFileItemList::Remove(int iItem)
     CFileItemPtr pItem = *(m_items.begin() + iItem);
     if (m_fastLookup)
     {
-      m_map.erase(pItem->GetPath());
+      m_map.erase(m_ignoreURLOptions ? CURL(pItem->GetPath()).GetWithoutOptions() : pItem->GetPath());
     }
     m_items.erase(m_items.begin() + iItem);
   }
@@ -1864,7 +2081,7 @@ void CFileItemList::Assign(const CFileItemList& itemlist, bool append)
 bool CFileItemList::Copy(const CFileItemList& items, bool copyItems /* = true */)
 {
   // assign all CFileItem parts
-  *(CFileItem*)this = *(CFileItem*)&items;
+  *static_cast<CFileItem*>(this) = static_cast<const CFileItem&>(items);
 
   // assign the rest of the CFileItemList properties
   m_replaceListing  = items.m_replaceListing;
@@ -1914,7 +2131,7 @@ CFileItemPtr CFileItemList::Get(const std::string& strPath)
 
   if (m_fastLookup)
   {
-    IMAPFILEITEMS it=m_map.find(strPath);
+    IMAPFILEITEMS it = m_map.find(m_ignoreURLOptions ? CURL(strPath).GetWithoutOptions() : strPath);
     if (it != m_map.end())
       return it->second;
 
@@ -1924,7 +2141,7 @@ CFileItemPtr CFileItemList::Get(const std::string& strPath)
   for (unsigned int i = 0; i < m_items.size(); i++)
   {
     CFileItemPtr pItem = m_items[i];
-    if (pItem->IsPath(strPath))
+    if (pItem->IsPath(m_ignoreURLOptions ? CURL(strPath).GetWithoutOptions() : strPath))
       return pItem;
   }
 
@@ -1937,7 +2154,7 @@ const CFileItemPtr CFileItemList::Get(const std::string& strPath) const
 
   if (m_fastLookup)
   {
-    std::map<std::string, CFileItemPtr>::const_iterator it=m_map.find(strPath);
+    std::map<std::string, CFileItemPtr>::const_iterator it = m_map.find(m_ignoreURLOptions ? CURL(strPath).GetWithoutOptions() : strPath);
     if (it != m_map.end())
       return it->second;
 
@@ -1947,7 +2164,7 @@ const CFileItemPtr CFileItemList::Get(const std::string& strPath) const
   for (unsigned int i = 0; i < m_items.size(); i++)
   {
     CFileItemPtr pItem = m_items[i];
-    if (pItem->IsPath(strPath))
+    if (pItem->IsPath(m_ignoreURLOptions ? CURL(strPath).GetWithoutOptions() : strPath))
       return pItem;
   }
 
@@ -2045,13 +2262,13 @@ void CFileItemList::Sort(SortDescription sortDescription)
   }
 
   // replace the current list with the re-ordered one
-  m_items.assign(sortedFileItems.begin(), sortedFileItems.end());
+  m_items = std::move(sortedFileItems);
 }
 
 void CFileItemList::Randomize()
 {
   CSingleLock lock(m_lock);
-  std::random_shuffle(m_items.begin(), m_items.end());
+  KODI::UTILS::RandomShuffle(m_items.begin(), m_items.end());
 }
 
 void CFileItemList::Archive(CArchive& ar)
@@ -2066,6 +2283,8 @@ void CFileItemList::Archive(CArchive& ar)
       i = 1;
 
     ar << (int)(m_items.size() - i);
+
+    ar << m_ignoreURLOptions;
 
     ar << m_fastLookup;
 
@@ -2107,9 +2326,9 @@ void CFileItemList::Archive(CArchive& ar)
         pParent.reset(new CFileItem(*pItem));
     }
 
+    SetIgnoreURLOptions(false);
     SetFastLookup(false);
     Clear();
-
 
     CFileItem::Archive(ar);
 
@@ -2126,7 +2345,10 @@ void CFileItemList::Archive(CArchive& ar)
     else
       m_items.reserve(iSize);
 
-    bool fastLookup=false;
+    bool ignoreURLOptions = false;
+    ar >> ignoreURLOptions;
+
+    bool fastLookup = false;
     ar >> fastLookup;
 
     int tempint;
@@ -2168,6 +2390,7 @@ void CFileItemList::Archive(CArchive& ar)
       Add(pItem);
     }
 
+    SetIgnoreURLOptions(ignoreURLOptions);
     SetFastLookup(fastLookup);
   }
 }
@@ -2279,7 +2502,7 @@ void CFileItemList::FilterCueItems()
                 }
                 else
                 { // try replacing the extension with one of our allowed ones.
-                  std::vector<std::string> extensions = StringUtils::Split(g_advancedSettings.GetMusicExtensions(), "|");
+                  std::vector<std::string> extensions = StringUtils::Split(CServiceBroker::GetFileExtensionProvider().GetMusicExtensions(), "|");
                   for (std::vector<std::string>::const_iterator i = extensions.begin(); i != extensions.end(); ++i)
                   {
                     strMediaFile = URIUtils::ReplaceExtension(pItem->GetPath(), *i);
@@ -2391,7 +2614,7 @@ void CFileItemList::StackFolders()
       // 1. rars and zips may be on slow sources? is this supposed to be allowed?
       if( !item->IsRemote()
         || item->IsSmb()
-        || item->IsNfs() 
+        || item->IsNfs()
         || URIUtils::IsInRAR(item->GetPath())
         || URIUtils::IsInZIP(item->GetPath())
         || URIUtils::IsOnLAN(item->GetPath())
@@ -2409,7 +2632,7 @@ void CFileItemList::StackFolders()
           if (bMatch)
           {
             CFileItemList items;
-            CDirectory::GetDirectory(item->GetPath(),items,g_advancedSettings.m_videoExtensions);
+            CDirectory::GetDirectory(item->GetPath(), items, CServiceBroker::GetFileExtensionProvider().GetVideoExtensions());
             // optimized to only traverse listing once by checking for filecount
             // and recording last file item for later use
             int nFiles = 0;
@@ -2443,7 +2666,7 @@ void CFileItemList::StackFolders()
             item->m_bIsFolder = false;
             item->SetPath(dvdPath);
             item->SetLabel2("");
-            item->SetLabelPreformated(true);
+            item->SetLabelPreformatted(true);
             m_sortDescription.sortBy = SortByNone; /* sorting is now broken */
           }
         }
@@ -2619,7 +2842,7 @@ void CFileItemList::StackFiles()
         // item->m_bIsFolder = true;  // don't treat stacked files as folders
         // the label may be in a different char set from the filename (eg over smb
         // the label is converted from utf8, but the filename is not)
-        if (!CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_SHOWEXTENSIONS))
+        if (!CServiceBroker::GetSettings().GetBool(CSettings::SETTING_FILELISTS_SHOWEXTENSIONS))
           URIUtils::RemoveExtension(stackName);
 
         item1->SetLabel(stackName);
@@ -2634,15 +2857,23 @@ void CFileItemList::StackFiles()
 bool CFileItemList::Load(int windowID)
 {
   CFile file;
-  if (file.Open(GetDiscFileCache(windowID)))
+  auto path = GetDiscFileCache(windowID);
+  try
   {
-    CArchive ar(&file, CArchive::load);
-    ar >> *this;
-    CLog::Log(LOGDEBUG,"Loading items: %i, directory: %s sort method: %i, ascending: %s", Size(), CURL::GetRedacted(GetPath()).c_str(), m_sortDescription.sortBy,
-      m_sortDescription.sortOrder == SortOrderAscending ? "true" : "false");
-    ar.Close();
-    file.Close();
-    return true;
+    if (file.Open(path))
+    {
+      CArchive ar(&file, CArchive::load);
+      ar >> *this;
+      CLog::Log(LOGDEBUG,"Loading items: %i, directory: %s sort method: %i, ascending: %s", Size(), CURL::GetRedacted(GetPath()).c_str(), m_sortDescription.sortBy,
+        m_sortDescription.sortOrder == SortOrderAscending ? "true" : "false");
+      ar.Close();
+      file.Close();
+      return true;
+    }
+  }
+  catch(std::out_of_range ex)
+  {
+    CLog::Log(LOGERROR, "Corrupt archive: %s", CURL::GetRedacted(path).c_str());
   }
 
   return false;
@@ -2675,7 +2906,7 @@ void CFileItemList::RemoveDiscCache(int windowID) const
   std::string cacheFile(GetDiscFileCache(windowID));
   if (CFile::Exists(cacheFile))
   {
-    CLog::Log(LOGDEBUG,"Clearing cached fileitems [%s]",GetPath().c_str());
+    CLog::Log(LOGDEBUG,"Clearing cached fileitems [%s]", CURL::GetRedacted(GetPath()).c_str());
     CFile::Delete(cacheFile);
   }
 }
@@ -2685,23 +2916,25 @@ std::string CFileItemList::GetDiscFileCache(int windowID) const
   std::string strPath(GetPath());
   URIUtils::RemoveSlashAtEnd(strPath);
 
-  Crc32 crc;
-  crc.ComputeFromLowerCase(strPath);
+  uint32_t crc = Crc32::ComputeFromLowerCase(strPath);
 
   std::string cacheFile;
   if (IsCDDA() || IsOnDVD())
-    cacheFile = StringUtils::Format("special://temp/r-%08x.fi", (unsigned __int32)crc);
-  else if (IsMusicDb())
-    cacheFile = StringUtils::Format("special://temp/mdb-%08x.fi", (unsigned __int32)crc);
-  else if (IsVideoDb())
-    cacheFile = StringUtils::Format("special://temp/vdb-%08x.fi", (unsigned __int32)crc);
-  else if (IsSmartPlayList())
-    cacheFile = StringUtils::Format("special://temp/sp-%08x.fi", (unsigned __int32)crc);
-  else if (windowID)
-    cacheFile = StringUtils::Format("special://temp/%i-%08x.fi", windowID, (unsigned __int32)crc);
-  else
-    cacheFile = StringUtils::Format("special://temp/%08x.fi", (unsigned __int32)crc);
-  return cacheFile;
+    return StringUtils::Format("special://temp/archive_cache/r-%08x.fi", crc);
+
+  if (IsMusicDb())
+    return StringUtils::Format("special://temp/archive_cache/mdb-%08x.fi", crc);
+
+  if (IsVideoDb())
+    return StringUtils::Format("special://temp/archive_cache/vdb-%08x.fi", crc);
+
+  if (IsSmartPlayList())
+    return StringUtils::Format("special://temp/archive_cache/sp-%08x.fi", crc);
+
+  if (windowID)
+    return StringUtils::Format("special://temp/archive_cache/%i-%08x.fi", windowID, crc);
+
+  return StringUtils::Format("special://temp/archive_cache/%08x.fi", crc);
 }
 
 bool CFileItemList::AlwaysCache() const
@@ -2745,7 +2978,7 @@ std::string CFileItem::GetUserMusicThumb(bool alwaysCheckRemote /* = false */, b
   }
 
   // if a folder, check for folder.jpg
-  if (m_bIsFolder && !IsFileFolder() && (!IsRemote() || alwaysCheckRemote || CSettings::GetInstance().GetBool(CSettings::SETTING_MUSICFILES_FINDREMOTETHUMBS)))
+  if (m_bIsFolder && !IsFileFolder() && (!IsRemote() || alwaysCheckRemote || CServiceBroker::GetSettings().GetBool(CSettings::SETTING_MUSICFILES_FINDREMOTETHUMBS)))
   {
     std::vector<std::string> thumbs = StringUtils::Split(g_advancedSettings.m_musicThumbs, "|");
     for (std::vector<std::string>::const_iterator i = thumbs.begin(); i != thumbs.end(); ++i)
@@ -2822,6 +3055,7 @@ bool CFileItem::SkipLocalArt() const
        || IsLibraryFolder()
        || IsParentFolder()
        || IsLiveTV()
+       || IsPVRRecording()
        || IsDVD());
 }
 
@@ -2915,12 +3149,15 @@ std::string CFileItem::GetFolderThumb(const std::string &folderJPG /* = "folder.
   if (IsMultiPath())
     strFolder = CMultiPathDirectory::GetFirstPath(m_strPath);
 
+  if (IsPlugin())
+    return "";
+
   return URIUtils::AddFileToFolder(strFolder, folderJPG);
 }
 
 std::string CFileItem::GetMovieName(bool bUseFolderNames /* = false */) const
 {
-  if (IsLabelPreformated())
+  if (IsLabelPreformatted())
     return GetLabel();
 
   if (m_pvrRecordingInfoTag)
@@ -3019,11 +3256,11 @@ std::string CFileItem::GetLocalFanart() const
     return "";
 
   CFileItemList items;
-  CDirectory::GetDirectory(strDir, items, g_advancedSettings.m_pictureExtensions, DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_READ_CACHE | DIR_FLAG_NO_FILE_INFO);
+  CDirectory::GetDirectory(strDir, items, CServiceBroker::GetFileExtensionProvider().GetPictureExtensions(), DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_READ_CACHE | DIR_FLAG_NO_FILE_INFO);
   if (IsOpticalMediaFile())
   { // grab from the optical media parent folder as well
     CFileItemList moreItems;
-    CDirectory::GetDirectory(GetLocalMetadataPath(), moreItems, g_advancedSettings.m_pictureExtensions, DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_READ_CACHE | DIR_FLAG_NO_FILE_INFO);
+    CDirectory::GetDirectory(GetLocalMetadataPath(), moreItems, CServiceBroker::GetFileExtensionProvider().GetPictureExtensions(), DIR_FLAG_NO_FILE_DIRS | DIR_FLAG_READ_CACHE | DIR_FLAG_NO_FILE_INFO);
     items.Append(moreItems);
   }
 
@@ -3130,6 +3367,20 @@ bool CFileItem::LoadMusicTag()
   return false;
 }
 
+bool CFileItem::LoadGameTag()
+{
+  // Already loaded?
+  if (HasGameInfoTag() && m_gameInfoTag->IsLoaded())
+    return true;
+
+  //! @todo
+  GetGameInfoTag();
+
+  m_gameInfoTag->SetLoaded(true);
+
+  return false;
+}
+
 void CFileItemList::Swap(unsigned int item1, unsigned int item2)
 {
   if (item1 != item2 && item1 < m_items.size() && item2 < m_items.size())
@@ -3190,12 +3441,27 @@ void CFileItemList::ClearSortState()
   m_sortDescription.sortAttributes = SortAttributeNone;
 }
 
+bool CFileItem::HasVideoInfoTag() const
+{
+  // Note: CPVRRecording is derived from CVideoInfoTag
+  return m_pvrRecordingInfoTag.get() != nullptr || m_videoInfoTag != nullptr;
+}
+
 CVideoInfoTag* CFileItem::GetVideoInfoTag()
 {
-  if (!m_videoInfoTag)
+  // Note: CPVRRecording is derived from CVideoInfoTag
+  if (m_pvrRecordingInfoTag)
+    return m_pvrRecordingInfoTag.get();
+  else if (!m_videoInfoTag)
     m_videoInfoTag = new CVideoInfoTag;
 
   return m_videoInfoTag;
+}
+
+const CVideoInfoTag* CFileItem::GetVideoInfoTag() const
+{
+  // Note: CPVRRecording is derived from CVideoInfoTag
+  return m_pvrRecordingInfoTag ? m_pvrRecordingInfoTag.get() : m_videoInfoTag;
 }
 
 CPictureInfoTag* CFileItem::GetPictureInfoTag()
@@ -3212,6 +3478,14 @@ MUSIC_INFO::CMusicInfoTag* CFileItem::GetMusicInfoTag()
     m_musicInfoTag = new MUSIC_INFO::CMusicInfoTag;
 
   return m_musicInfoTag;
+}
+
+CGameInfoTag* CFileItem::GetGameInfoTag()
+{
+  if (!m_gameInfoTag)
+    m_gameInfoTag = new CGameInfoTag;
+
+  return m_gameInfoTag;
 }
 
 std::string CFileItem::FindTrailer() const
@@ -3249,7 +3523,7 @@ std::string CFileItem::FindTrailer() const
 
   std::string strDir = URIUtils::GetDirectory(strFile);
   CFileItemList items;
-  CDirectory::GetDirectory(strDir, items, g_advancedSettings.m_videoExtensions, DIR_FLAG_READ_CACHE | DIR_FLAG_NO_FILE_INFO | DIR_FLAG_NO_FILE_DIRS);
+  CDirectory::GetDirectory(strDir, items, CServiceBroker::GetFileExtensionProvider().GetVideoExtensions(), DIR_FLAG_READ_CACHE | DIR_FLAG_NO_FILE_INFO | DIR_FLAG_NO_FILE_DIRS);
   URIUtils::RemoveExtension(strFile);
   strFile += "-trailer";
   std::string strFile3 = URIUtils::AddFileToFolder(strDir, "movie-trailer");
@@ -3320,26 +3594,42 @@ int CFileItem::GetVideoContentType() const
   return type;
 }
 
+CFileItem CFileItem::GetItemToPlay() const
+{
+  if (HasEPGInfoTag())
+  {
+    const CPVRChannelPtr channel(GetEPGInfoTag()->Channel());
+    if (channel)
+      return CFileItem(channel);
+  }
+  return *this;
+}
+
+CBookmark CFileItem::GetResumePoint() const
+{
+  if (HasVideoInfoTag())
+    return GetVideoInfoTag()->GetResumePoint();
+  return CBookmark();
+}
+
 bool CFileItem::IsResumePointSet() const
 {
-  return (HasVideoInfoTag() && GetVideoInfoTag()->m_resumePoint.IsSet()) ||
-      (m_pvrRecordingInfoTag && m_pvrRecordingInfoTag->GetLastPlayedPosition() > 0);
+  return GetResumePoint().IsSet();
 }
 
 double CFileItem::GetCurrentResumeTime() const
 {
-  if (m_pvrRecordingInfoTag)
+  return lrint(GetResumePoint().timeInSeconds);
+}
+
+bool CFileItem::GetCurrentResumeTimeAndPartNumber(int64_t& startOffset, int& partNumber) const
+{
+  CBookmark resumePoint(GetResumePoint());
+  if (resumePoint.IsSet())
   {
-    // This will retrieve 'fresh' resume information from the PVR server
-    int rc = m_pvrRecordingInfoTag->GetLastPlayedPosition();
-    if (rc > 0)
-      return rc;
-    // Fall through to default value
+    startOffset = llrint(resumePoint.timeInSeconds);
+    partNumber = resumePoint.partNumber;
+    return true;
   }
-  if (HasVideoInfoTag() && GetVideoInfoTag()->m_resumePoint.IsSet())
-  {
-    return GetVideoInfoTag()->m_resumePoint.timeInSeconds;
-  }
-  // Resume from start when resume points are invalid or the PVR server returns an error
-  return 0;
+  return false;
 }

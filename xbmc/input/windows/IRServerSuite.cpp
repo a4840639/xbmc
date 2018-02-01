@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,8 +20,9 @@
 
 #include "IRServerSuite.h"
 #include "IrssMessage.h"
-#include "input/ButtonTranslator.h"
+#include "input/InputManager.h"
 #include "utils/log.h"
+#include "ServiceBroker.h"
 #include <Ws2tcpip.h>
 
 #define IRSS_PORT 24000
@@ -37,7 +38,7 @@ CRemoteControl::CRemoteControl()
 
 CRemoteControl::~CRemoteControl()
 {
-  Close();
+  Disconnect();
 }
 
 void CRemoteControl::Disconnect()
@@ -357,9 +358,9 @@ bool CRemoteControl::HandleRemoteEvent(CIrssMessage& message)
     deviceName[devicenamelength] = '\0';
     keycode[keycodelength] = '\0';
     //translate to a buttoncode xbmc understands
-    m_button = CButtonTranslator::GetInstance().TranslateLircRemoteString(deviceName, keycode);
+    m_button = CServiceBroker::GetInputManager().TranslateLircRemoteString(deviceName, keycode);
     CLog::Log(LOGDEBUG, "IRServerSuite, RemoteEvent: %s %s", deviceName, keycode);
-    
+
     delete[] deviceName;
     delete[] keycode;
     return true;
@@ -451,11 +452,13 @@ bool CRemoteControl::ReadPacket(CIrssMessage &message)
     if (ReadN(messagebytes, size) != size)
     {
       CLog::Log(LOGERROR, "IRServerSuite: failed to read packet.");
+      delete[] messagebytes;
       return false;
     }
     if (!CIrssMessage::FromBytes(messagebytes, size, message))
     {
       CLog::Log(LOGERROR, "IRServerSuite: invalid packet received (size: %u).", size);
+      delete[] messagebytes;
       return false;
     }
     delete[] messagebytes;

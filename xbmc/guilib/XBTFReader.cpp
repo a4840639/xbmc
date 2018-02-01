@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@
 #ifdef TARGET_WINDOWS
 #include "filesystem/SpecialProtocol.h"
 #include "utils/CharsetConverter.h"
-#include "win32/PlatformDefs.h"
+#include "platform/win32/PlatformDefs.h"
 #endif
 
 static bool ReadString(FILE* file, char* str, size_t max_length)
@@ -119,9 +119,10 @@ bool CXBTFReader::Open(const std::string& path)
     uint32_t u32;
     uint64_t u64;
 
-    char path[CXBTFFile::MaximumPathLength];
+    // one extra char to null terminate the string with the following memset
+    char path[CXBTFFile::MaximumPathLength + 1];
     memset(path, 0, sizeof(path));
-    if (!ReadString(m_file, path, sizeof(path)))
+    if (!ReadString(m_file, path, sizeof(path) - 1))
       return false;
     xbtfFile.SetPath(path);
 
@@ -213,8 +214,10 @@ bool CXBTFReader::Load(const CXBTFFrame& frame, unsigned char* buffer) const
   if (m_file == nullptr)
     return false;
 
-#if defined(TARGET_DARWIN) || defined(TARGET_FREEBSD) || defined(TARGET_ANDROID)
+#if defined(TARGET_DARWIN) || defined(TARGET_FREEBSD)
   if (fseeko(m_file, static_cast<off_t>(frame.GetOffset()), SEEK_SET) == -1)
+#elif defined(TARGET_ANDROID)
+  if (fseek(m_file, static_cast<long>(frame.GetOffset()), SEEK_SET) == -1)  // No fseeko64 before N
 #else
   if (fseeko64(m_file, static_cast<off_t>(frame.GetOffset()), SEEK_SET) == -1)
 #endif

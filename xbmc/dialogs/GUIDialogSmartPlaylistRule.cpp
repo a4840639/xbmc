@@ -19,6 +19,7 @@
  */
 
 #include "GUIDialogSmartPlaylistRule.h"
+#include "ServiceBroker.h"
 #include "GUIDialogFileBrowser.h"
 #include "music/MusicDatabase.h"
 #include "video/VideoDatabase.h"
@@ -51,9 +52,7 @@ CGUIDialogSmartPlaylistRule::CGUIDialogSmartPlaylistRule(void)
   m_loadType = KEEP_IN_MEMORY;
 }
 
-CGUIDialogSmartPlaylistRule::~CGUIDialogSmartPlaylistRule()
-{
-}
+CGUIDialogSmartPlaylistRule::~CGUIDialogSmartPlaylistRule() = default;
 
 bool CGUIDialogSmartPlaylistRule::OnBack(int actionID)
 {
@@ -164,7 +163,7 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
     if (m_type == "artists" || m_type == "mixed")
     {
       database.GetRolesNav("musicdb://songs/", items);
-      iLabel = 38027;
+      iLabel = 38033;
     }
   }
   else if (m_rule.m_field == FieldCountry)
@@ -283,7 +282,7 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
     {
       CFileItemPtr item = items[i];
       CSmartPlaylist playlist;
-      // don't list unloadable smartplaylists or any referencable smartplaylists
+      // don't list unloadable smartplaylists or any referenceable smartplaylists
       // which do not match the type of the current smartplaylist
       if (!playlist.Load(item->GetPath()) ||
          (m_rule.m_field == FieldPlaylist &&
@@ -317,7 +316,7 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
     if (!m_rule.m_parameter.empty())
       m_rule.m_parameter.clear();
     if (!path.empty())
-      m_rule.m_parameter.push_back(path);
+      m_rule.m_parameter.emplace_back(std::move(path));
 
     UpdateButtons();
     return;
@@ -342,14 +341,14 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
     iLabel = 20459;
   }
   else
-  { // TODO: Add browseability in here.
+  { //! @todo Add browseability in here.
     assert(false);
   }
 
   // sort the items
-  items.Sort(SortByLabel, SortOrderAscending, CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING) ? SortAttributeIgnoreArticle : SortAttributeNone);
+  items.Sort(SortByLabel, SortOrderAscending, CServiceBroker::GetSettings().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING) ? SortAttributeIgnoreArticle : SortAttributeNone);
 
-  CGUIDialogSelect* pDialog = (CGUIDialogSelect*)g_windowManager.GetWindow(WINDOW_DIALOG_SELECT);
+  CGUIDialogSelect* pDialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
   pDialog->Reset();
   pDialog->SetItems(items);
   std::string strHeading = StringUtils::Format(g_localizeStrings.Get(13401).c_str(), g_localizeStrings.Get(iLabel).c_str());
@@ -371,54 +370,15 @@ void CGUIDialogSmartPlaylistRule::OnBrowse()
   pDialog->Reset();
 }
 
-void CGUIDialogSmartPlaylistRule::OnCancel()
-{
-  m_cancelled = true;
-  Close();
-}
-
-void CGUIDialogSmartPlaylistRule::OnField()
-{
-  CGUIMessage msg(GUI_MSG_ITEM_SELECTED, GetID(), CONTROL_FIELD);
-  OnMessage(msg);
-  m_rule.m_field = (Field)msg.GetParam1();
-
-  UpdateButtons();
-}
-
-void CGUIDialogSmartPlaylistRule::OnOperator()
-{
-  CGUIMessage msg(GUI_MSG_ITEM_SELECTED, GetID(), CONTROL_OPERATOR);
-  OnMessage(msg);
-  m_rule.m_operator = (CDatabaseQueryRule::SEARCH_OPERATOR)msg.GetParam1();
-
-  UpdateButtons();
-}
-
 std::pair<std::string, int> OperatorLabel(CDatabaseQueryRule::SEARCH_OPERATOR op)
 {
   return std::make_pair(CSmartPlaylistRule::GetLocalizedOperator(op), op);
 }
 
-void CGUIDialogSmartPlaylistRule::UpdateButtons()
+std::vector<std::pair<std::string, int>> CGUIDialogSmartPlaylistRule::GetValidOperators(const CSmartPlaylistRule& rule)
 {
-  // update the field control
-  SendMessage(GUI_MSG_ITEM_SELECT, CONTROL_FIELD, m_rule.m_field);
-  CGUIMessage msg2(GUI_MSG_ITEM_SELECTED, GetID(), CONTROL_FIELD);
-  OnMessage(msg2);
-  m_rule.m_field = (Field)msg2.GetParam1();
-
-  // and now update the operator set
-  SendMessage(GUI_MSG_LABEL_RESET, CONTROL_OPERATOR);
-
-  CONTROL_ENABLE(CONTROL_VALUE);
-  if (CSmartPlaylistRule::IsFieldBrowseable(m_rule.m_field))
-    CONTROL_ENABLE(CONTROL_BROWSE);
-  else
-    CONTROL_DISABLE(CONTROL_BROWSE);
-
   std::vector< std::pair<std::string, int> > labels;
-  switch (m_rule.GetFieldType(m_rule.m_field))
+  switch (rule.GetFieldType(rule.m_field))
   {
   case CDatabaseQueryRule::TEXT_FIELD:
     // text fields - add the usual comparisons
@@ -430,6 +390,7 @@ void CGUIDialogSmartPlaylistRule::UpdateButtons()
     labels.push_back(OperatorLabel(CDatabaseQueryRule::OPERATOR_ENDS_WITH));
     break;
 
+  case CDatabaseQueryRule::REAL_FIELD:
   case CDatabaseQueryRule::NUMERIC_FIELD:
   case CDatabaseQueryRule::SECONDS_FIELD:
     // numerical fields - less than greater than
@@ -464,15 +425,83 @@ void CGUIDialogSmartPlaylistRule::UpdateButtons()
     labels.push_back(OperatorLabel(CDatabaseQueryRule::OPERATOR_DOES_NOT_EQUAL));
     break;
   }
+  return labels;
+}
 
-  SET_CONTROL_LABELS(CONTROL_OPERATOR, m_rule.m_operator, &labels);
+void CGUIDialogSmartPlaylistRule::OnCancel()
+{
+  m_cancelled = true;
+  Close();
+}
 
-  // check our operator is valid, and update if not
-  CGUIMessage selected(GUI_MSG_ITEM_SELECTED, GetID(), CONTROL_OPERATOR);
-  OnMessage(selected);
-  m_rule.m_operator = (CDatabaseQueryRule::SEARCH_OPERATOR)selected.GetParam1();
+void CGUIDialogSmartPlaylistRule::OnField()
+{
+  const auto fields = CSmartPlaylistRule::GetFields(m_type);
+  CGUIDialogSelect* dialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
+  dialog->Reset();
+  dialog->SetHeading(CVariant{20427});
+  int selected = -1;
+  for (auto field = fields.begin(); field != fields.end(); field++)
+  {
+    dialog->Add(CSmartPlaylistRule::GetLocalizedField(*field));
+    if (*field == m_rule.m_field)
+      selected = std::distance(fields.begin(), field);
+  }
+  if (selected > -1)
+    dialog->SetSelected(selected);
+  dialog->Open();
+  int newSelected = dialog->GetSelectedItem();
+  // check if selection has changed
+  if (!dialog->IsConfirmed() || newSelected < 0 || newSelected == selected)
+    return;
 
-  // update the parameter edit control appropriately
+  m_rule.m_field = fields[newSelected];
+  // check if operator is still valid. if not, reset to first valid one
+  std::vector< std::pair<std::string, int> > validOperators = GetValidOperators(m_rule);
+  bool isValid = false;
+  for (auto op : validOperators)
+    if (std::get<0>(op) == std::get<0>(OperatorLabel(m_rule.m_operator)))
+      isValid = true;
+  if (!isValid)
+    m_rule.m_operator = (CDatabaseQueryRule::SEARCH_OPERATOR)std::get<1>(validOperators[0]);
+
+  m_rule.SetParameter("");
+  UpdateButtons();
+}
+
+void CGUIDialogSmartPlaylistRule::OnOperator()
+{
+  const auto labels = GetValidOperators(m_rule);
+  CGUIDialogSelect* dialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
+  dialog->Reset();
+  dialog->SetHeading(CVariant{ 16023 });
+  for (auto label : labels)
+    dialog->Add(std::get<0>(label));
+  dialog->SetSelected(CSmartPlaylistRule::GetLocalizedOperator(m_rule.m_operator));
+  dialog->Open();
+  int newSelected = dialog->GetSelectedItem();
+  // check if selection has changed
+  if (!dialog->IsConfirmed() || newSelected < 0)
+    return;
+ 
+  m_rule.m_operator = (CDatabaseQueryRule::SEARCH_OPERATOR)std::get<1>(labels[newSelected]);
+  UpdateButtons();
+}
+
+void CGUIDialogSmartPlaylistRule::UpdateButtons()
+{
+  if (m_rule.m_field == 0)
+    m_rule.m_field = CSmartPlaylistRule::GetFields(m_type)[0];
+  SET_CONTROL_LABEL(CONTROL_FIELD, CSmartPlaylistRule::GetLocalizedField(m_rule.m_field));
+
+  CONTROL_ENABLE(CONTROL_VALUE);
+  if (CSmartPlaylistRule::IsFieldBrowseable(m_rule.m_field))
+    CONTROL_ENABLE(CONTROL_BROWSE);
+  else
+    CONTROL_DISABLE(CONTROL_BROWSE);
+  SET_CONTROL_LABEL(CONTROL_OPERATOR, std::get<0>(OperatorLabel(m_rule.m_operator)));
+
+  // update label2 appropriately
   SET_CONTROL_LABEL2(CONTROL_VALUE, m_rule.GetParameter());
   CGUIEditControl::INPUT_TYPE type = CGUIEditControl::INPUT_TYPE_TEXT;
   CDatabaseQueryRule::FIELD_TYPE fieldType = m_rule.GetFieldType(m_rule.m_field);
@@ -481,6 +510,7 @@ void CGUIDialogSmartPlaylistRule::UpdateButtons()
   case CDatabaseQueryRule::TEXT_FIELD:
   case CDatabaseQueryRule::PLAYLIST_FIELD:
   case CDatabaseQueryRule::TEXTIN_FIELD:
+  case CDatabaseQueryRule::REAL_FIELD:
   case CDatabaseQueryRule::NUMERIC_FIELD:
     type = CGUIEditControl::INPUT_TYPE_TEXT;
     break;
@@ -505,14 +535,6 @@ void CGUIDialogSmartPlaylistRule::OnInitWindow()
 {
   CGUIDialog::OnInitWindow();
 
-  // add the fields to the field spincontrol
-  std::vector< std::pair<std::string, int> > labels;
-  std::vector<Field> fields = CSmartPlaylistRule::GetFields(m_type);
-  for (unsigned int i = 0; i < fields.size(); i++)
-    labels.push_back(std::make_pair(CSmartPlaylistRule::GetLocalizedField(fields[i]), fields[i]));
-
-  SET_CONTROL_LABELS(CONTROL_FIELD, 0, &labels);
-
   UpdateButtons();
 
   CGUIEditControl *editControl = dynamic_cast<CGUIEditControl*>(GetControl(CONTROL_VALUE));
@@ -532,7 +554,7 @@ void CGUIDialogSmartPlaylistRule::OnDeinitWindow(int nextWindowID)
 
 bool CGUIDialogSmartPlaylistRule::EditRule(CSmartPlaylistRule &rule, const std::string& type)
 {
-  CGUIDialogSmartPlaylistRule *editor = (CGUIDialogSmartPlaylistRule *)g_windowManager.GetWindow(WINDOW_DIALOG_SMART_PLAYLIST_RULE);
+  CGUIDialogSmartPlaylistRule *editor = g_windowManager.GetWindow<CGUIDialogSmartPlaylistRule>(WINDOW_DIALOG_SMART_PLAYLIST_RULE);
   if (!editor) return false;
 
   editor->m_rule = rule;

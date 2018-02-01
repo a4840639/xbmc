@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -36,9 +36,9 @@ class CViewStateSettings : public ISubSettings
 public:
   static CViewStateSettings& GetInstance();
 
-  virtual bool Load(const TiXmlNode *settings) override;
-  virtual bool Save(TiXmlNode *settings) const override;
-  virtual void Clear() override;
+  bool Load(const TiXmlNode *settings) override;
+  bool Save(TiXmlNode *settings) const override;
+  void Clear() override;
 
   const CViewState* Get(const std::string &viewState) const;
   CViewState* Get(const std::string &viewState);
@@ -58,9 +58,9 @@ public:
 
 protected:
   CViewStateSettings();
-  CViewStateSettings(const CViewStateSettings&);
-  CViewStateSettings const& operator=(CViewStateSettings const&);
-  virtual ~CViewStateSettings();
+  CViewStateSettings(const CViewStateSettings&) = delete;
+  CViewStateSettings& operator=(CViewStateSettings const&) = delete;
+  ~CViewStateSettings() override;
 
 private:
   std::map<std::string, CViewState*> m_viewStates;

@@ -1,9 +1,9 @@
 include ../../Makefile.include
-DEPS= ../../Makefile.include Makefile
+DEPS= ../../Makefile.include Makefile 01-disable_testsuite.patch
 
 # lib name, version
 LIBNAME=nettle
-VERSION=2.7.1
+VERSION=3.2
 SOURCE=$(LIBNAME)-$(VERSION)
 ARCHIVE=$(SOURCE).tar.gz
 

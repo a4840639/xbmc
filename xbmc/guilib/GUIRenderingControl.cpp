@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,7 +21,9 @@
 #include "GUIRenderingControl.h"
 #include "threads/SingleLock.h"
 #include "guilib/IRenderingCallback.h"
-#include "windowing/WindowingFactory.h"
+#ifdef TARGET_WINDOWS
+#include "rendering/dx/DeviceResources.h"
+#endif
 
 #define LABEL_ROW1 10
 #define LABEL_ROW2 11
@@ -58,8 +60,8 @@ bool CGUIRenderingControl::InitCallback(IRenderingCallback *callback)
   if (y + h > g_graphicsContext.GetHeight()) h = g_graphicsContext.GetHeight() - y;
 
   void *device = NULL;
-#if HAS_DX
-  device = g_Windowing.Get3D11Device();
+#if TARGET_WINDOWS
+  device = DX::DeviceResources::Get()->GetD3DDevice();
 #endif
   if (callback->Create((int)(x+0.5f), (int)(y+0.5f), (int)(w+0.5f), (int)(h+0.5f), device))
     m_callback = callback;
@@ -81,7 +83,7 @@ void CGUIRenderingControl::UpdateVisibility(const CGUIListItem *item)
 
 void CGUIRenderingControl::Process(unsigned int currentTime, CDirtyRegionList &dirtyregions)
 {
-  // TODO Add processing to the addon so it could mark when actually changing
+  //! @todo Add processing to the addon so it could mark when actually changing
   CSingleLock lock(m_rendering);
   if (m_callback && m_callback->IsDirty())
     MarkDirtyRegion();
@@ -113,7 +115,7 @@ void CGUIRenderingControl::FreeResources(bool immediately)
 
   if (!m_callback) return;
 
-  g_graphicsContext.CaptureStateBlock(); //TODO locking
+  g_graphicsContext.CaptureStateBlock(); //! @todo locking
   m_callback->Stop();
   g_graphicsContext.ApplyStateBlock();
   m_callback = NULL;

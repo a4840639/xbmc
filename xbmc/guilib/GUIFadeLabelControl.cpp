@@ -19,6 +19,7 @@
  */
 
 #include "GUIFadeLabelControl.h"
+#include "utils/Random.h"
 
 CGUIFadeLabelControl::CGUIFadeLabelControl(int parentID, int controlID, float posX, float posY, float width, float height, const CLabelInfo& labelInfo, bool scrollOut, unsigned int timeToDelayAtEnd, bool resetOnLabelChange, bool randomized)
     : CGUIControl(parentID, controlID, posX, posY, width, height), m_label(labelInfo), m_scrollInfo(50, labelInfo.offsetX, labelInfo.scrollSpeed)
@@ -54,16 +55,14 @@ CGUIFadeLabelControl::CGUIFadeLabelControl(const CGUIFadeLabelControl &from)
   m_randomized = from.m_randomized;
 }
 
-CGUIFadeLabelControl::~CGUIFadeLabelControl(void)
-{
-}
+CGUIFadeLabelControl::~CGUIFadeLabelControl(void) = default;
 
 void CGUIFadeLabelControl::SetInfo(const std::vector<CGUIInfoLabel> &infoLabels)
 {
   m_lastLabel = -1;
   m_infoLabels = infoLabels;
   if (m_randomized)
-    std::random_shuffle(m_infoLabels.begin(), m_infoLabels.end());
+    KODI::UTILS::RandomShuffle(m_infoLabels.begin(), m_infoLabels.end());
 }
 
 void CGUIFadeLabelControl::AddLabel(const std::string &label)
@@ -182,7 +181,7 @@ void CGUIFadeLabelControl::Render()
       posX = m_posX + m_width * 0.5f;
     else if (m_label.align & XBFONT_RIGHT)
       posX = m_posX + m_width;
-    m_textLayout.Render(posX, posY, 0, m_label.textColor, m_label.shadowColor, m_label.align, m_width - m_label.offsetX);
+    m_textLayout.Render(posX, posY, m_label.angle, m_label.textColor, m_label.shadowColor, m_label.align, m_width - m_label.offsetX);
     CGUIControl::Render();
     return;
   }

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@
 #include "guilib/GUIWindowManager.h"
 #include "filesystem/Directory.h"
 #include "FileItem.h"
+#include "ServiceBroker.h"
 #include "input/Key.h"
 #include "guilib/LocalizeStrings.h"
 #include "utils/Variant.h"
@@ -40,7 +41,6 @@
 using namespace XFILE;
 
 #define CONTROL_PROFILES 2
-#define CONTROL_LASTLOADED_PROFILE 3
 #define CONTROL_LOGINSCREEN 4
 #define CONTROL_AUTOLOGIN 5
 
@@ -82,7 +82,7 @@ void CGUIWindowSettingsProfile::OnPopupMenu(int iItem)
     g_application.StopPlaying();
     CGUIMessage msg2(GUI_MSG_ITEM_SELECTED, g_windowManager.GetActiveWindow(), iCtrlID);
     g_windowManager.SendMessage(msg2);
-    g_application.getNetwork().NetworkMessage(CNetwork::SERVICES_DOWN,1);
+    CServiceBroker::GetNetwork().NetworkMessage(CNetwork::SERVICES_DOWN,1);
     CProfilesManager::GetInstance().LoadMasterProfileForLogin();
     CGUIWindowLoginScreen::LoadProfile(iItem);
     return;
@@ -234,7 +234,7 @@ void CGUIWindowSettingsProfile::OnInitWindow()
 
 bool CGUIWindowSettingsProfile::GetAutoLoginProfileChoice(int &iProfile)
 {
-  CGUIDialogSelect *dialog = (CGUIDialogSelect*)g_windowManager.GetWindow(WINDOW_DIALOG_SELECT);
+  CGUIDialogSelect *dialog = g_windowManager.GetWindow<CGUIDialogSelect>(WINDOW_DIALOG_SELECT);
   if (!dialog) return false;
 
   // add items
@@ -243,7 +243,7 @@ bool CGUIWindowSettingsProfile::GetAutoLoginProfileChoice(int &iProfile)
   CFileItemList items;
   CFileItemPtr item(new CFileItem());
   item->SetLabel(g_localizeStrings.Get(37014)); // Last used profile
-  item->SetIconImage("unknown-user.png");
+  item->SetIconImage("DefaultUser.png");
   items.Add(item);
 
   for (unsigned int i = 0; i < CProfilesManager::GetInstance().GetNumberOfProfiles(); i++)
@@ -251,16 +251,17 @@ bool CGUIWindowSettingsProfile::GetAutoLoginProfileChoice(int &iProfile)
     const CProfile *profile = CProfilesManager::GetInstance().GetProfile(i);
     std::string locked = g_localizeStrings.Get(profile->getLockMode() > 0 ? 20166 : 20165);
     CFileItemPtr item(new CFileItem(profile->getName()));
-    item->SetProperty("Addon.Summary", locked); // lock setting
+    item->SetLabel2(locked); // lock setting
     std::string thumb = profile->getThumb();
     if (thumb.empty())
-      thumb = "unknown-user.png";
+      thumb = "DefaultUser.png";
     item->SetIconImage(thumb);
     items.Add(item);
   }
 
   dialog->SetHeading(CVariant{20093}); // Profile name
   dialog->Reset();
+  dialog->SetUseDetails(true);
   dialog->SetItems(items);
   dialog->SetSelected(autoLoginProfileId);
   dialog->Open();

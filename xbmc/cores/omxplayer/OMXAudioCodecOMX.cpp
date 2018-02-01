@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,15 +25,16 @@
 #include "utils/log.h"
 
 #include "cores/AudioEngine/Utils/AEUtil.h"
-#include "cores/AudioEngine/AEFactory.h"
+#include "ServiceBroker.h"
+#include "cores/AudioEngine/Interfaces/AE.h"
 #include "settings/Settings.h"
-#include "linux/RBP.h"
+#include "platform/linux/RBP.h"
 
 // the size of the audio_render output port buffers
 #define AUDIO_DECODE_OUTPUT_BUFFER (32*1024)
 static const char rounded_up_channels_shift[] = {0,0,1,2,2,3,3,3,3};
 
-COMXAudioCodecOMX::COMXAudioCodecOMX()
+COMXAudioCodecOMX::COMXAudioCodecOMX(CProcessInfo &processInfo) : m_processInfo(processInfo)
 {
   m_pBufferOutput = NULL;
   m_iBufferOutputAlloced = 0;
@@ -41,7 +42,6 @@ COMXAudioCodecOMX::COMXAudioCodecOMX()
 
   m_pCodecContext = NULL;
   m_pConvert = NULL;
-  m_bOpenedCodec = false;
 
   m_channels = 0;
   m_pFrame1 = NULL;
@@ -65,10 +65,9 @@ COMXAudioCodecOMX::~COMXAudioCodecOMX()
 bool COMXAudioCodecOMX::Open(CDVDStreamInfo &hints)
 {
   AVCodec* pCodec = NULL;
-  m_bOpenedCodec = false;
 
-  if (hints.codec == AV_CODEC_ID_DTS && g_RBP.RasberryPiVersion() > 1)
-    pCodec = avcodec_find_decoder_by_name("libdcadec");
+  if (hints.codec == AV_CODEC_ID_DTS && g_RBP.RaspberryPiVersion() > 1)
+    pCodec = avcodec_find_decoder_by_name("dcadec");
 
   if (!pCodec)
     pCodec = avcodec_find_decoder(hints.codec);
@@ -81,6 +80,9 @@ bool COMXAudioCodecOMX::Open(CDVDStreamInfo &hints)
 
   m_bFirstFrame = true;
   m_pCodecContext = avcodec_alloc_context3(pCodec);
+  if (!m_pCodecContext)
+    return false;
+
   m_pCodecContext->debug_mv = 0;
   m_pCodecContext->debug = 0;
   m_pCodecContext->workaround_bugs = 1;
@@ -96,9 +98,9 @@ bool COMXAudioCodecOMX::Open(CDVDStreamInfo &hints)
   m_pCodecContext->bits_per_coded_sample = hints.bitspersample;
   if (hints.codec == AV_CODEC_ID_TRUEHD)
   {
-    if (CAEFactory::HasStereoAudioChannelCount())
+    if (CServiceBroker::GetActiveAE().HasStereoAudioChannelCount())
       m_pCodecContext->request_channel_layout = AV_CH_LAYOUT_STEREO;
-    else if (!CAEFactory::HasHDAudioChannelCount())
+    else if (!CServiceBroker::GetActiveAE().HasHDAudioChannelCount())
       m_pCodecContext->request_channel_layout = AV_CH_LAYOUT_5POINT1;
   }
   if (m_pCodecContext->request_channel_layout)
@@ -109,9 +111,12 @@ bool COMXAudioCodecOMX::Open(CDVDStreamInfo &hints)
 
   if( hints.extradata && hints.extrasize > 0 )
   {
-    m_pCodecContext->extradata_size = hints.extrasize;
     m_pCodecContext->extradata = (uint8_t*)av_mallocz(hints.extrasize + FF_INPUT_BUFFER_PADDING_SIZE);
-    memcpy(m_pCodecContext->extradata, hints.extradata, hints.extrasize);
+    if(m_pCodecContext->extradata)
+    {
+      m_pCodecContext->extradata_size = hints.extrasize;
+      memcpy(m_pCodecContext->extradata, hints.extradata, hints.extrasize);
+    }
   }
 
   if (avcodec_open2(m_pCodecContext, pCodec, NULL) < 0)
@@ -122,30 +127,23 @@ bool COMXAudioCodecOMX::Open(CDVDStreamInfo &hints)
   }
 
   m_pFrame1 = av_frame_alloc();
-  m_bOpenedCodec = true;
+  if (!m_pFrame1)
+  {
+    Dispose();
+    return false;
+  }
+
   m_iSampleFormat = AV_SAMPLE_FMT_NONE;
   m_desiredSampleFormat = m_pCodecContext->sample_fmt == AV_SAMPLE_FMT_S16 ? AV_SAMPLE_FMT_S16 : AV_SAMPLE_FMT_FLTP;
+  m_processInfo.SetAudioDecoderName(m_pCodecContext->codec->name);
   return true;
 }
 
 void COMXAudioCodecOMX::Dispose()
 {
-  if (m_pFrame1) av_free(m_pFrame1);
-  m_pFrame1 = NULL;
-
-  if (m_pConvert)
-    swr_free(&m_pConvert);
-
-  if (m_pCodecContext)
-  {
-    if (m_pCodecContext->extradata) av_free(m_pCodecContext->extradata);
-    m_pCodecContext->extradata = NULL;
-    if (m_bOpenedCodec) avcodec_close(m_pCodecContext);
-    m_bOpenedCodec = false;
-    av_free(m_pCodecContext);
-    m_pCodecContext = NULL;
-  }
-
+  av_frame_free(&m_pFrame1);
+  swr_free(&m_pConvert);
+  avcodec_free_context(&m_pCodecContext);
   m_bGotFrame = false;
 }
 
@@ -155,6 +153,11 @@ int COMXAudioCodecOMX::Decode(BYTE* pData, int iSize, double dts, double pts)
   if (!m_pCodecContext) return -1;
 
   AVPacket avpkt;
+  if (!m_iBufferOutputUsed)
+  {
+    m_dts = dts;
+    m_pts = pts;
+  }
   if (m_bGotFrame)
     return 0;
   av_init_packet(&avpkt);
@@ -185,11 +188,6 @@ int COMXAudioCodecOMX::Decode(BYTE* pData, int iSize, double dts, double pts)
   }
 
   m_bGotFrame = true;
-  if (!m_iBufferOutputUsed)
-  {
-    m_dts = dts;
-    m_pts = pts;
-  }
   return iBytesUsed;
 }
 

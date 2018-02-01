@@ -21,6 +21,7 @@
 #include <cstdlib>
 
 #include "LabelFormatter.h"
+#include "ServiceBroker.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "RegExp.h"
@@ -101,14 +102,14 @@ using namespace MUSIC_INFO;
  *  %Y - Year
  *  %Z - tvshow title
  *  %a - Date Added
- *  %c - Relevance - Used for actors' appearences
+ *  %c - Relevance - Used for actors' appearances
  *  %d - Date and Time
  *  %p - Last Played
  *  %r - User Rating
  *  *t - Date Taken (suitable for Pictures)
  */
 
-#define MASK_CHARS "NSATBGYFLDIJRCKMEPHZOQUVXWacdiprtuv"
+#define MASK_CHARS "NSATBGYFLDIJRCKMEPHZOQUVXWacdiprstuv"
 
 CLabelFormatter::CLabelFormatter(const std::string &mask, const std::string &mask2)
 {
@@ -116,7 +117,7 @@ CLabelFormatter::CLabelFormatter(const std::string &mask, const std::string &mas
   AssembleMask(0, mask);
   AssembleMask(1, mask2);
   // save a bool for faster lookups
-  m_hideFileExtensions = !CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_SHOWEXTENSIONS);
+  m_hideFileExtensions = !CServiceBroker::GetSettings().GetBool(CSettings::SETTING_FILELISTS_SHOWEXTENSIONS);
 }
 
 std::string CLabelFormatter::GetContent(unsigned int label, const CFileItem *item) const
@@ -209,10 +210,8 @@ std::string CLabelFormatter::GetMaskContent(const CMaskString &mask, const CFile
     {
       if (movie->m_firstAired.IsValid())
         value = movie->m_firstAired.GetAsLocalizedDate();
-      else if (movie->m_premiered.IsValid())
-        value = movie->m_premiered.GetAsLocalizedDate();
-      else if (movie->m_iYear > 0)
-        value = StringUtils::Format("%i", movie->m_iYear);
+      else if (movie->HasYear())
+        value = StringUtils::Format("%i", movie->GetYear());
     }
     break;
   case 'F': // filename
@@ -310,7 +309,7 @@ std::string CLabelFormatter::GetMaskContent(const CMaskString &mask, const CFile
     if (music)
       value = StringUtils::Format("%i", music->GetPlayCount());
     if (movie)
-      value = StringUtils::Format("%i", movie->m_playCount);
+      value = StringUtils::Format("%i", movie->GetPlayCount());
     break;
   case 'X': // Bitrate
     if( !item->m_bIsFolder && item->m_dwSize != 0 )
@@ -348,17 +347,21 @@ std::string CLabelFormatter::GetMaskContent(const CMaskString &mask, const CFile
     if (pic && pic->GetDateTimeTaken().IsValid())
       value = pic->GetDateTimeTaken().GetAsLocalizedDate();
     break;
+  case 's': // Addon status
+    if (item->HasProperty("Addon.Status"))
+      value = item->GetProperty("Addon.Status").asString();
+    break;
   case 'i': // Install date
-    if (item->HasAddonInfo())
-      value = item->GetAddonInfo()->InstallDate().GetAsLocalizedDateTime();
+    if (item->HasAddonInfo() && item->GetAddonInfo()->InstallDate().IsValid())
+      value = item->GetAddonInfo()->InstallDate().GetAsLocalizedDate();
     break;
   case 'u': // Last used
-    if (item->HasAddonInfo())
-      value = item->GetAddonInfo()->LastUsed().GetAsLocalizedDateTime();
+    if (item->HasAddonInfo() && item->GetAddonInfo()->LastUsed().IsValid())
+      value = item->GetAddonInfo()->LastUsed().GetAsLocalizedDate();
     break;
   case 'v': // Last updated
-    if (item->HasAddonInfo())
-      value = item->GetAddonInfo()->LastUpdated().GetAsLocalizedDateTime();
+    if (item->HasAddonInfo() && item->GetAddonInfo()->LastUpdated().IsValid())
+      value = item->GetAddonInfo()->LastUpdated().GetAsLocalizedDate();
     break;
   }
   if (!value.empty())

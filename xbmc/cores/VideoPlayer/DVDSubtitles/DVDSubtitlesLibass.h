@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ class CDVDSubtitlesLibass : public IDVDResourceCounted<CDVDSubtitlesLibass>
 {
 public:
   CDVDSubtitlesLibass();
-  virtual ~CDVDSubtitlesLibass();
+  ~CDVDSubtitlesLibass() override;
 
   ASS_Image* RenderImage(int frameWidth, int frameHeight, int videoWidth, int videoHeight, double pts, int useMargin = 0, double position = 0.0, int* changes = NULL);
   ASS_Event* GetEvents();

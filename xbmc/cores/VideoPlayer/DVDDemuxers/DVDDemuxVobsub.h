@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,33 +33,31 @@ class CDVDDemuxVobsub : public CDVDDemux
 {
 public:
   CDVDDemuxVobsub();
-  virtual ~CDVDDemuxVobsub();
+  ~CDVDDemuxVobsub() override;
 
-  virtual void          Reset();
-  virtual void          Abort() {};
-  virtual void          Flush();
-  virtual DemuxPacket*  Read();
-  virtual bool          SeekTime(int time, bool backwords, double* startpts = NULL);
-  virtual void          SetSpeed(int speed) {}
-  virtual CDemuxStream* GetStream(int index) { return m_Streams[index]; }
-  virtual int           GetNrOfStreams()     { return m_Streams.size(); }
-  virtual int           GetStreamLength()    { return 0; }
-  virtual std::string   GetFileName()        { return m_Filename; }
+  bool Open(const std::string& filename, int source, const std::string& subfilename);
 
-  bool                  Open(const std::string& filename, int source, const std::string& subfilename);
+  // implementation of CDVDDemux
+  bool Reset() override;
+  void Flush() override;
+  DemuxPacket* Read() override;
+  bool SeekTime(double time, bool backwards, double* startpts = NULL) override;
+  CDemuxStream* GetStream(int index) const override { return m_Streams[index]; }
+  std::vector<CDemuxStream*> GetStreams() const override;
+  int GetNrOfStreams() const override { return m_Streams.size(); }
+  std::string GetFileName() override { return m_Filename; }
+  void EnableStream(int id, bool enable) override;
 
 private:
   class CStream
     : public CDemuxStreamSubtitle
   {
   public:
-    CStream(CDVDDemuxVobsub* parent)
-      : m_discard(AVDISCARD_NONE), m_parent(parent)
+    explicit CStream(CDVDDemuxVobsub* parent)
+      : m_discard(false), m_parent(parent)
     {}
-    virtual void      SetDiscard(AVDiscard discard) { m_discard = discard; }
-    virtual AVDiscard GetDiscard()                  { return m_discard; }
 
-    AVDiscard        m_discard;
+    bool m_discard;
     CDVDDemuxVobsub* m_parent;
   };
 
@@ -70,18 +68,18 @@ private:
     int     id;
   } STimestamp;
 
-  std::string                        m_Filename;
-  std::unique_ptr<CDVDInputStream>     m_Input;
-  std::unique_ptr<CDVDDemuxFFmpeg>     m_Demuxer;
-  std::vector<STimestamp>            m_Timestamps;
-  std::vector<STimestamp>::iterator  m_Timestamp;
+  std::string m_Filename;
+  std::shared_ptr<CDVDInputStream> m_Input;
+  std::unique_ptr<CDVDDemuxFFmpeg> m_Demuxer;
+  std::vector<STimestamp> m_Timestamps;
+  std::vector<STimestamp>::iterator m_Timestamp;
   std::vector<CStream*> m_Streams;
-  int m_source;
+  int m_source = -1;
 
   typedef struct SState
   {
-    int         id;
-    double      delay;
+    int id;
+    double delay;
     std::string extra;
   } SState;
 

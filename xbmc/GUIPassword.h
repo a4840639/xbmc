@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -61,7 +61,7 @@ class CGUIPassword : public ISettingCallback
 {
 public:
   CGUIPassword(void);
-  virtual ~CGUIPassword(void);
+  ~CGUIPassword(void) override;
   bool IsItemUnlocked(CFileItem* pItem, const std::string &strType);
   bool IsItemUnlocked(CMediaSource* pItem, const std::string &strType);
   bool CheckLock(LockType btnType, const std::string& strPassword, int iHeading);
@@ -87,7 +87,7 @@ public:
   void RemoveSourceLocks();
   bool IsDatabasePathUnlocked(const std::string& strPath, VECSOURCES& vecSources);
 
-  virtual void OnSettingAction(const CSetting *setting) override;
+  void OnSettingAction(std::shared_ptr<const CSetting> setting) override;
 
   bool bMasterUser;
   int iMasterLockRetriesLeft;

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,9 +29,7 @@ CGUISpinControlEx::CGUISpinControlEx(int parentID, int controlID, float posX, fl
   m_spinPosX = 0;
 }
 
-CGUISpinControlEx::~CGUISpinControlEx(void)
-{
-}
+CGUISpinControlEx::~CGUISpinControlEx(void) = default;
 
 void CGUISpinControlEx::AllocResources()
 {

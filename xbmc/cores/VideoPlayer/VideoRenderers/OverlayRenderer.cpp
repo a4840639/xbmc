@@ -1,7 +1,7 @@
 /*
  *      Initial code sponsored by: Voddler Inc (voddler.com)
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,7 +28,9 @@
 #include "cores/VideoPlayer/DVDCodecs/Overlay/DVDOverlayText.h"
 #include "cores/VideoPlayer/VideoRenderers/RenderManager.h"
 #include "guilib/GraphicContext.h"
+#include "guilib/GUIFontManager.h"
 #include "Application.h"
+#include "ServiceBroker.h"
 #include "settings/Settings.h"
 #include "settings/AdvancedSettings.h"
 #include "threads/SingleLock.h"
@@ -54,20 +56,19 @@ COverlay::COverlay()
   m_pos    = POSITION_RELATIVE;
 }
 
-COverlay::~COverlay()
-{
-}
+COverlay::~COverlay() = default;
 
 unsigned int CRenderer::m_textureid = 1;
 
 CRenderer::CRenderer()
 {
+  m_font = "__subtitle__";
+  m_fontBorder = "__subtitleborder__";
 }
 
 CRenderer::~CRenderer()
 {
-  for(int i = 0; i < NUM_BUFFERS; i++)
-    Release(m_buffers[i]);
+  Flush();
 }
 
 void CRenderer::AddOverlay(CDVDOverlay* o, double pts, int index)
@@ -85,10 +86,10 @@ void CRenderer::Release(std::vector<SElement>& list)
   std::vector<SElement> l = list;
   list.clear();
 
-  for(std::vector<SElement>::iterator it = l.begin(); it != l.end(); ++it)
+  for (auto &elem : l)
   {
-    if (it->overlay_dvd)
-      it->overlay_dvd->Release();
+    if (elem.overlay_dvd)
+      elem.overlay_dvd->Release();
   }
 }
 
@@ -100,6 +101,9 @@ void CRenderer::Flush()
     Release(m_buffers[i]);
 
   ReleaseCache();
+
+  g_fontManager.Unload(m_font);
+  g_fontManager.Unload(m_fontBorder);
 }
 
 void CRenderer::Release(int idx)
@@ -167,11 +171,25 @@ void CRenderer::Render(int idx)
 
   float total_height = 0.0f;
   float cur_height = 0.0f;
-  int subalign = CSettings::GetInstance().GetInt(CSettings::SETTING_SUBTITLES_ALIGN);
+  int subalign = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SUBTITLES_ALIGN);
   for (std::vector<COverlay*>::iterator it = render.begin(); it != render.end(); ++it)
   {
-    COverlay* o = *it;
-    o->PrepareRender();
+    COverlay* o = nullptr;
+    COverlayText *text = dynamic_cast<COverlayText*>(*it);
+    if (text)
+    {
+      text->PrepareRender(CServiceBroker::GetSettings().GetString(CSettings::SETTING_SUBTITLES_FONT),
+                          CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SUBTITLES_COLOR),
+                          CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SUBTITLES_HEIGHT),
+                          CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SUBTITLES_STYLE),
+                          m_font, m_fontBorder);
+      o = text;
+    }
+    else
+    {
+      o = *it;
+      o->PrepareRender();
+    }
     total_height += o->m_height;
   }
 
@@ -315,7 +333,7 @@ COverlay* CRenderer::Convert(CDVDOverlaySSA* o, double pts)
   int targetHeight = MathUtils::round_int(m_rv.Height());
   int useMargin;
 
-  int subalign = CSettings::GetInstance().GetInt(CSettings::SETTING_SUBTITLES_ALIGN);
+  int subalign = CServiceBroker::GetSettings().GetInt(CSettings::SETTING_SUBTITLES_ALIGN);
   if(subalign == SUBTITLE_ALIGN_BOTTOM_OUTSIDE
   || subalign == SUBTITLE_ALIGN_TOP_OUTSIDE
   ||(subalign == SUBTITLE_ALIGN_MANUAL && g_advancedSettings.m_videoAssFixedWorks))
@@ -375,7 +393,7 @@ COverlay* CRenderer::Convert(CDVDOverlay* o, double pts)
   COverlay* r = NULL;
 
   if(o->IsOverlayType(DVDOVERLAY_TYPE_SSA))
-    r = Convert((CDVDOverlaySSA*)o, pts);
+    r = Convert(static_cast<CDVDOverlaySSA*>(o), pts);
   else if(o->m_textureid)
   {
     std::map<unsigned int, COverlay*>::iterator it = m_textureCache.find(o->m_textureid);
@@ -390,18 +408,18 @@ COverlay* CRenderer::Convert(CDVDOverlay* o, double pts)
 
 #if defined(HAS_GL) || defined(HAS_GLES)
   if (o->IsOverlayType(DVDOVERLAY_TYPE_IMAGE))
-    r = new COverlayTextureGL((CDVDOverlayImage*)o);
+    r = new COverlayTextureGL(static_cast<CDVDOverlayImage*>(o));
   else if(o->IsOverlayType(DVDOVERLAY_TYPE_SPU))
-    r = new COverlayTextureGL((CDVDOverlaySpu*)o);
+    r = new COverlayTextureGL(static_cast<CDVDOverlaySpu*>(o));
 #elif defined(HAS_DX)
   if (o->IsOverlayType(DVDOVERLAY_TYPE_IMAGE))
-    r = new COverlayImageDX((CDVDOverlayImage*)o);
+    r = new COverlayImageDX(static_cast<CDVDOverlayImage*>(o));
   else if(o->IsOverlayType(DVDOVERLAY_TYPE_SPU))
-    r = new COverlayImageDX((CDVDOverlaySpu*)o);
+    r = new COverlayImageDX(static_cast<CDVDOverlaySpu*>(o));
 #endif
 
   if(!r && o->IsOverlayType(DVDOVERLAY_TYPE_TEXT))
-    r = new COverlayText((CDVDOverlayText*)o);
+    r = new COverlayText(static_cast<CDVDOverlayText*>(o));
 
   m_textureCache[m_textureid] = r;
   o->m_textureid = m_textureid;
@@ -409,4 +427,3 @@ COverlay* CRenderer::Convert(CDVDOverlay* o, double pts)
 
   return r;
 }
-

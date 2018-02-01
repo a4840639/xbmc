@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,19 +19,117 @@
  */
 
 #include "DVDVideoCodec.h"
+#include "ServiceBroker.h"
+#include "cores/VideoPlayer/DVDCodecs/DVDFactoryCodec.h"
+#include "rendering/RenderSystem.h"
 #include "settings/Settings.h"
 #include "settings/lib/Setting.h"
-#include "windowing/WindowingFactory.h"
+#include "windowing/WinSystem.h"
+#include <string>
+#include <vector>
 
-bool CDVDVideoCodec::IsSettingVisible(const std::string &condition, const std::string &value, const CSetting *setting, void *data)
+//******************************************************************************
+// VideoPicture
+//******************************************************************************
+
+VideoPicture::VideoPicture() = default;
+
+VideoPicture::~VideoPicture()
+{
+  if (videoBuffer)
+  {
+    videoBuffer->Release();
+  }
+}
+
+void VideoPicture::Reset()
+{
+  if (videoBuffer)
+    videoBuffer->Release();
+  videoBuffer = nullptr;
+  pts = DVD_NOPTS_VALUE;
+  dts = DVD_NOPTS_VALUE;
+  iFlags = 0;
+  iRepeatPicture = 0;
+  iDuration = 0;
+  iFrameType = 0;
+  color_space = AVCOL_SPC_UNSPECIFIED;
+  color_range = 0;
+  chroma_position = 0;
+  color_primaries = 0;
+  color_transfer = 0;
+  colorBits = 8;
+  stereoMode.clear();
+
+  qp_table = nullptr;
+  qstride = 0;
+  qscale_type = 0;
+  pict_type = 0;
+
+  hasDisplayMetadata = false;
+  hasLightMetadata = false;
+
+  iWidth = 0;
+  iHeight = 0;
+  iDisplayWidth = 0;
+  iDisplayHeight = 0;
+}
+
+VideoPicture& VideoPicture::CopyRef(const VideoPicture &pic)
+{
+  if (videoBuffer)
+    videoBuffer->Release();
+  *this = pic;
+  if (videoBuffer)
+    videoBuffer->Acquire();
+  return *this;
+}
+
+VideoPicture& VideoPicture::SetParams(const VideoPicture &pic)
+{
+  if (videoBuffer)
+    videoBuffer->Release();
+  *this = pic;
+  videoBuffer = nullptr;
+  return *this;
+}
+
+VideoPicture::VideoPicture(VideoPicture const&) = default;
+VideoPicture& VideoPicture::operator=(VideoPicture const&) = default;
+
+//******************************************************************************
+// VideoCodec
+//******************************************************************************
+bool CDVDVideoCodec::IsSettingVisible(const std::string &condition, const std::string &value, std::shared_ptr<const CSetting> setting, void *data)
 {
   if (setting == NULL || value.empty())
     return false;
 
   const std::string &settingId = setting->GetId();
 
+  if (settingId == CSettings::SETTING_VIDEOPLAYER_USEVDPAU)
+  {
+    auto hwaccels = CDVDFactoryCodec::GetHWAccels();
+    for (auto &id : hwaccels)
+    {
+      if (id == "vdpau")
+        return true;
+    }
+    return false;
+  }
+  else if (settingId == CSettings::SETTING_VIDEOPLAYER_USEVAAPI)
+  {
+    auto hwaccels = CDVDFactoryCodec::GetHWAccels();
+    for (auto &id : hwaccels)
+    {
+      if (id == "vaapi")
+        return true;
+    }
+    return false;
+  }
+
   // check if we are running on nvidia hardware
-  std::string gpuvendor = g_Windowing.GetRenderVendor();
+  std::string gpuvendor = CServiceBroker::GetRenderSystem().GetRenderVendor();
   std::transform(gpuvendor.begin(), gpuvendor.end(), gpuvendor.begin(), ::tolower);
   bool isNvidia = (gpuvendor.compare(0, 6, "nvidia") == 0);
   bool isIntel = (gpuvendor.compare(0, 5, "intel") == 0);
@@ -60,24 +158,15 @@ bool CDVDVideoCodec::IsSettingVisible(const std::string &condition, const std::s
   return true;
 }
 
-bool CDVDVideoCodec::IsCodecDisabled(DVDCodecAvailableType* map, unsigned int size, AVCodecID id)
+bool CDVDVideoCodec::IsCodecDisabled(const std::map<AVCodecID, std::string> &map, AVCodecID id)
 {
-  int index = -1;
-  for (unsigned int i = 0; i < size; ++i)
+  auto codec = map.find(id);
+  if (codec != map.end())
   {
-    if (map[i].codec == id)
-    {
-      index = (int) i;
-      break;
-    }
-  }
-  if (index > -1)
-  {
-    return (!CSettings::GetInstance().GetBool(map[index].setting) ||
+    return (!CServiceBroker::GetSettings().GetBool(codec->second) ||
             !CDVDVideoCodec::IsSettingVisible("unused", "unused",
-                                              CSettings::GetInstance().GetSetting(map[index].setting),
+                                              CServiceBroker::GetSettings().GetSetting(codec->second),
                                               NULL));
   }
-
   return false; // don't disable what we don't have
 }

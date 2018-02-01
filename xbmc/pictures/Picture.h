@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -81,8 +81,8 @@ class CThumbnailWriter : public CJob
   public:
     //WARNING: buffer is deleted from DoWork()
     CThumbnailWriter(unsigned char* buffer, int width, int height, int stride, const std::string& thumbFile);
-    ~CThumbnailWriter();
-    bool DoWork();
+    ~CThumbnailWriter() override;
+    bool DoWork() override;
 
   private:
     unsigned char* m_buffer;

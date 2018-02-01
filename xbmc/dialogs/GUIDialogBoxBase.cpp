@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -37,9 +37,7 @@ CGUIDialogBoxBase::CGUIDialogBoxBase(int id, const std::string &xmlFile)
   m_hasTextbox = false;
 }
 
-CGUIDialogBoxBase::~CGUIDialogBoxBase(void)
-{
-}
+CGUIDialogBoxBase::~CGUIDialogBoxBase(void) = default;
 
 bool CGUIDialogBoxBase::OnMessage(CGUIMessage& message)
 {
@@ -144,11 +142,6 @@ void CGUIDialogBoxBase::Process(unsigned int currentTime, CDirtyRegionList &dirt
 
 void CGUIDialogBoxBase::OnInitWindow()
 {
-  // hide all controls
-  for (int i = 0; i < DIALOG_MAX_CHOICES; ++i)
-    SET_CONTROL_HIDDEN(CONTROL_CHOICES_START + i);
-  SET_CONTROL_HIDDEN(CONTROL_PROGRESS_BAR);
-
   // set focus to default
   m_lastControlID = m_defaultControl;
 

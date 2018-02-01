@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include "Tween.h"
 #include "utils/XBMCTinyXML.h"
 #include "utils/XMLUtils.h"
+#include "GUIControlFactory.h"
 
 CAnimEffect::CAnimEffect(const TiXmlElement *node, EFFECT_TYPE effect)
 {
@@ -50,9 +51,7 @@ CAnimEffect::CAnimEffect(unsigned int delay, unsigned int length, EFFECT_TYPE ef
   m_pTweener = std::shared_ptr<Tweener>(new LinearTweener());
 }
 
-CAnimEffect::~CAnimEffect()
-{
-}
+CAnimEffect::~CAnimEffect() = default;
 
 CAnimEffect::CAnimEffect(const CAnimEffect &src)
 {
@@ -268,21 +267,21 @@ CZoomEffect::CZoomEffect(const TiXmlElement *node, const CRect &rect) : CAnimEff
     std::vector<std::string> params = StringUtils::Split(start, ",");
     if (params.size() == 1)
     {
-      m_startX = (float)atof(params[0].c_str());
+      m_startX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
       m_startY = m_startX;
     }
     else if (params.size() == 2)
     {
-      m_startX = (float)atof(params[0].c_str());
-      m_startY = (float)atof(params[1].c_str());
+      m_startX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      m_startY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
     }
     else if (params.size() == 4)
     { // format is start="x,y,width,height"
       // use width and height from our rect to calculate our sizing
-      startPosX = (float)atof(params[0].c_str());
-      startPosY = (float)atof(params[1].c_str());
-      m_startX = (float)atof(params[2].c_str());
-      m_startY = (float)atof(params[3].c_str());
+      startPosX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      startPosY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
+      m_startX = CGUIControlFactory::ParsePosition(params[2].c_str(), rect.Width());
+      m_startY = CGUIControlFactory::ParsePosition(params[3].c_str(), rect.Height());
       m_startX *= 100.0f / width;
       m_startY *= 100.0f / height;
     }
@@ -293,21 +292,21 @@ CZoomEffect::CZoomEffect(const TiXmlElement *node, const CRect &rect) : CAnimEff
     std::vector<std::string> params = StringUtils::Split(end, ",");
     if (params.size() == 1)
     {
-      m_endX = (float)atof(params[0].c_str());
+      m_endX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
       m_endY = m_endX;
     }
     else if (params.size() == 2)
     {
-      m_endX = (float)atof(params[0].c_str());
-      m_endY = (float)atof(params[1].c_str());
+      m_endX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      m_endY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
     }
     else if (params.size() == 4)
     { // format is start="x,y,width,height"
       // use width and height from our rect to calculate our sizing
-      endPosX = (float)atof(params[0].c_str());
-      endPosY = (float)atof(params[1].c_str());
-      m_endX = (float)atof(params[2].c_str());
-      m_endY = (float)atof(params[3].c_str());
+      endPosX = CGUIControlFactory::ParsePosition(params[0].c_str(), rect.Width());
+      endPosY = CGUIControlFactory::ParsePosition(params[1].c_str(), rect.Height());
+      m_endX = CGUIControlFactory::ParsePosition(params[2].c_str(), rect.Width());
+      m_endY = CGUIControlFactory::ParsePosition(params[3].c_str(), rect.Height());
       m_endX *= 100.0f / width;
       m_endY *= 100.0f / height;
     }
@@ -321,9 +320,9 @@ CZoomEffect::CZoomEffect(const TiXmlElement *node, const CRect &rect) : CAnimEff
     {
       std::vector<std::string> commaSeparated = StringUtils::Split(centerPos, ",");
       if (commaSeparated.size() > 1)
-        m_center.y = (float)atof(commaSeparated[1].c_str());
+        m_center.y = CGUIControlFactory::ParsePosition(commaSeparated[1].c_str(), rect.Height());
       if (!commaSeparated.empty())
-        m_center.x = (float)atof(commaSeparated[0].c_str());
+        m_center.x = CGUIControlFactory::ParsePosition(commaSeparated[0].c_str(), rect.Width());
     }
   }
   else
@@ -404,15 +403,15 @@ CAnimation &CAnimation::operator =(const CAnimation &src)
   {
     CAnimEffect *newEffect = NULL;
     if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_FADE)
-      newEffect = new CFadeEffect(*(CFadeEffect *)src.m_effects[i]);
+      newEffect = new CFadeEffect(*static_cast<CFadeEffect*>(src.m_effects[i]));
     else if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ZOOM)
-      newEffect = new CZoomEffect(*(CZoomEffect *)src.m_effects[i]);
+      newEffect = new CZoomEffect(*static_cast<CZoomEffect*>(src.m_effects[i]));
     else if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_SLIDE)
-      newEffect = new CSlideEffect(*(CSlideEffect *)src.m_effects[i]);
+      newEffect = new CSlideEffect(*static_cast<CSlideEffect*>(src.m_effects[i]));
     else if (src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ROTATE_X ||
              src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ROTATE_Y ||
              src.m_effects[i]->GetType() == CAnimEffect::EFFECT_TYPE_ROTATE_Z)
-      newEffect = new CRotateEffect(*(CRotateEffect *)src.m_effects[i]);
+      newEffect = new CRotateEffect(*static_cast<CRotateEffect*>(src.m_effects[i]));
     if (newEffect)
       m_effects.push_back(newEffect);
   }
@@ -439,8 +438,7 @@ void CAnimation::Animate(unsigned int time, bool startAnim)
     m_currentProcess = ANIM_PROCESS_REVERSE;
   }
   // reset the queued state once we've rendered to ensure allocation has occured
-  if (startAnim || m_queuedProcess == ANIM_PROCESS_REVERSE)
-    m_queuedProcess = ANIM_PROCESS_NONE;
+  m_queuedProcess = ANIM_PROCESS_NONE;
 
   // Update our animation process
   if (m_currentProcess == ANIM_PROCESS_NORMAL)
@@ -706,7 +704,6 @@ CScroller::CScroller(unsigned int duration /* = 200 */, std::shared_ptr<Tweener>
   m_startTime = 0;
   m_startPosition = 0;
   m_hasResumePoint = false;
-  m_lastTime = 0;
   m_duration = duration > 0 ? duration : 1;
   m_pTweener = tweener;
 }
@@ -726,15 +723,12 @@ CScroller& CScroller::operator=(const CScroller &right)
   m_startTime = right.m_startTime;
   m_startPosition = right.m_startPosition;
   m_hasResumePoint = right.m_hasResumePoint;
-  m_lastTime = right.m_lastTime;
   m_duration = right.m_duration;
   m_pTweener = right.m_pTweener;
   return *this;
 }
 
-CScroller::~CScroller()
-{
-}
+CScroller::~CScroller() = default;
 
 void CScroller::ScrollTo(float endPos)
 {
@@ -744,7 +738,7 @@ void CScroller::ScrollTo(float endPos)
 
   m_delta = delta;
   m_startPosition = m_scrollValue;
-  m_startTime = m_lastTime;
+  m_startTime = 0;
 }
 
 float CScroller::Tween(float progress)
@@ -776,7 +770,8 @@ float CScroller::Tween(float progress)
 
 bool CScroller::Update(unsigned int time)
 {
-  m_lastTime = time;
+  if (!m_startTime)
+    m_startTime = time;
   if (m_delta != 0)
   {
     if (time - m_startTime >= m_duration) // we are finished

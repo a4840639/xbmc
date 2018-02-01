@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,14 +21,11 @@
 
 #include "JSONRPC.h"
 #include "FileItemHandler.h"
+#include "pvr/PVRTypes.h"
+
+#include <string>
 
 class CVariant;
-
-namespace EPG
-{
-  class CEpgInfoTag;
-  typedef std::shared_ptr<EPG::CEpgInfoTag> CEpgInfoTagPtr;
-}
 
 namespace JSONRPC
 {
@@ -80,6 +77,6 @@ namespace JSONRPC
     static int ParseRepeatState(const CVariant &repeat);
     static double ParseTimeInSeconds(const CVariant &time);
     static bool IsPVRChannel();
-    static EPG::CEpgInfoTagPtr GetCurrentEpg();
+    static PVR::CPVREpgInfoTagPtr GetCurrentEpg();
   };
 }

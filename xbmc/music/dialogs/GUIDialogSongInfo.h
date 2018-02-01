@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,17 +29,18 @@ class CGUIDialogSongInfo :
 {
 public:
   CGUIDialogSongInfo(void);
-  virtual ~CGUIDialogSongInfo(void);
-  virtual bool OnMessage(CGUIMessage& message);
+  ~CGUIDialogSongInfo(void) override;
+  bool OnMessage(CGUIMessage& message) override;
   void SetSong(CFileItem *item);
-  virtual bool OnAction(const CAction &action);
-  virtual bool OnBack(int actionID);
+  bool OnAction(const CAction &action) override;
+  bool OnBack(int actionID) override;
   bool NeedsUpdate() const { return m_needsUpdate; };
 
-  virtual bool HasListItems() const { return true; };
-  virtual CFileItemPtr GetCurrentListItem(int offset = 0);
+  bool HasListItems() const override { return true; };
+  CFileItemPtr GetCurrentListItem(int offset = 0) override;
 protected:
-  virtual void OnInitWindow();
+  void OnInitWindow() override;
+  void Update();
   bool DownloadThumbnail(const std::string &thumbFile);
   void OnGetThumb();
   void SetUserrating(int userrating);

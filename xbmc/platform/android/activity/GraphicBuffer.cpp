@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -98,7 +98,7 @@ enum
 };
 
 CGraphicBuffer::CGraphicBuffer(uint32_t width, uint32_t height, uint32_t format, gfxImageUsage usage):
-  m_width(width), m_height(height), m_usage(usage), m_format(format), m_handle(0)
+  m_handle(0)
 {
   CLog::Log(LOGDEBUG, "CGraphicBuffer::CGraphicBuffer");
   if (!m_dll)

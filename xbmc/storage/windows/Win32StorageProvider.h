@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,8 +18,20 @@
  *  <http://www.gnu.org/licenses/>.
  *
  */
+#pragma once
+#include <vector>
+
 #include "storage/IStorageProvider.h"
 #include "utils/Job.h"
+#include <Cfgmgr32.h>
+
+enum Drive_Types
+{
+  ALL_DRIVES = 0,
+  LOCAL_DRIVES,
+  REMOVABLE_DRIVES,
+  DVD_DRIVES
+};
 
 class CWin32StorageProvider : public IStorageProvider
 {
@@ -41,6 +53,10 @@ public:
 
   static void SetEvent() { xbevent = true; }
   static bool xbevent;
+
+private:
+  static void GetDrivesByType(VECSOURCES &localDrives, Drive_Types eDriveType=ALL_DRIVES, bool bonlywithmedia=false);
+  static DEVINST GetDrivesDevInstByDiskNumber(long DiskNumber);
 };
 
 class CDetectDisc : public CJob

@@ -18,51 +18,74 @@
  *
  */
 
-#include "squish.h"
-#include "system.h"
 #include "TextureBundleXBT.h"
+
+#include "ServiceBroker.h"
+#include "system.h"
 #include "Texture.h"
 #include "GraphicContext.h"
 #include "utils/log.h"
-#include "addons/Skin.h"
 #include "settings/Settings.h"
 #include "filesystem/SpecialProtocol.h"
 #include "filesystem/XbtManager.h"
 #include "utils/URIUtils.h"
 #include "utils/StringUtils.h"
 #include "XBTF.h"
+#include "XBTFReader.h"
 #include <lzo/lzo1x.h>
 
-#ifdef TARGET_WINDOWS
-#pragma comment(lib,"liblzo2.lib")
+#ifdef TARGET_WINDOWS_DESKTOP
+#ifdef NDEBUG
+#pragma comment(lib,"lzo2.lib")
+#elif defined _WIN64
+#pragma comment(lib, "lzo2d.lib")
+#else
+#pragma comment(lib, "lzo2-no_idb.lib")
+#endif
 #endif
 
-CTextureBundleXBT::CTextureBundleXBT(void)
+CTextureBundleXBT::CTextureBundleXBT()
+  : m_TimeStamp{0}
+  , m_themeBundle{false}
 {
-  m_themeBundle = false;
-  m_TimeStamp = 0;
+}
+
+CTextureBundleXBT::CTextureBundleXBT(bool themeBundle)
+  : m_TimeStamp{0}
+  , m_themeBundle{themeBundle}
+{
 }
 
 CTextureBundleXBT::~CTextureBundleXBT(void)
 {
-  Cleanup();
+  if (m_XBTFReader != nullptr && m_XBTFReader->IsOpen())
+  {
+    XFILE::CXbtManager::GetInstance().Release(CURL(m_path));
+    CLog::Log(LOGDEBUG, "%s - Closed %sbundle", __FUNCTION__, m_themeBundle ? "theme " : "");
+  }
 }
 
 bool CTextureBundleXBT::OpenBundle()
 {
-  Cleanup();
-
   // Find the correct texture file (skin or theme)
+
+  auto mediaDir = g_graphicsContext.GetMediaDir();
+  if (mediaDir.empty())
+  {
+    mediaDir = CSpecialProtocol::TranslatePath(
+      URIUtils::AddFileToFolder("special://home/addons",
+        CServiceBroker::GetSettings().GetString(CSettings::SETTING_LOOKANDFEEL_SKIN)));
+  }
+
   if (m_themeBundle)
   {
     // if we are the theme bundle, we only load if the user has chosen
     // a valid theme (or the skin has a default one)
-    std::string theme = CSettings::GetInstance().GetString(CSettings::SETTING_LOOKANDFEEL_SKINTHEME);
+    std::string theme = CServiceBroker::GetSettings().GetString(CSettings::SETTING_LOOKANDFEEL_SKINTHEME);
     if (!theme.empty() && !StringUtils::EqualsNoCase(theme, "SKINDEFAULT"))
     {
       std::string themeXBT(URIUtils::ReplaceExtension(theme, ".xbt"));
-      m_path = URIUtils::AddFileToFolder(g_graphicsContext.GetMediaDir(), "media");
-      m_path = URIUtils::AddFileToFolder(m_path, themeXBT);
+      m_path = URIUtils::AddFileToFolder(g_graphicsContext.GetMediaDir(), "media", themeXBT);
     }
     else
     {
@@ -71,7 +94,7 @@ bool CTextureBundleXBT::OpenBundle()
   }
   else
   {
-    m_path = URIUtils::AddFileToFolder(g_graphicsContext.GetMediaDir(), "media/Textures.xbt");
+    m_path = URIUtils::AddFileToFolder(g_graphicsContext.GetMediaDir(), "media", "Textures.xbt");
   }
 
   m_path = CSpecialProtocol::TranslatePathConvertCase(m_path);
@@ -192,7 +215,7 @@ int CTextureBundleXBT::LoadAnim(const std::string& Filename, CBaseTexture*** ppT
 bool CTextureBundleXBT::ConvertFrameToTexture(const std::string& name, CXBTFFrame& frame, CBaseTexture** ppTexture)
 {
   // found texture - allocate the necessary buffers
-  squish::u8 *buffer = new squish::u8[(size_t)frame.GetPackedSize()];
+  unsigned char *buffer = new unsigned char [(size_t)frame.GetPackedSize()];
   if (buffer == NULL)
   {
     CLog::Log(LOGERROR, "Out of memory loading texture: %s (need %" PRIu64" bytes)", name.c_str(), frame.GetPackedSize());
@@ -210,7 +233,7 @@ bool CTextureBundleXBT::ConvertFrameToTexture(const std::string& name, CXBTFFram
   // check if it's packed with lzo
   if (frame.IsPacked())
   { // unpack
-    squish::u8 *unpacked = new squish::u8[(size_t)frame.GetUnpackedSize()];
+    unsigned char *unpacked = new unsigned char[(size_t)frame.GetUnpackedSize()];
     if (unpacked == NULL)
     {
       CLog::Log(LOGERROR, "Out of memory unpacking texture: %s (need %" PRIu64" bytes)", name.c_str(), frame.GetUnpackedSize());
@@ -237,15 +260,6 @@ bool CTextureBundleXBT::ConvertFrameToTexture(const std::string& name, CXBTFFram
   delete[] buffer;
 
   return true;
-}
-
-void CTextureBundleXBT::Cleanup()
-{
-  if (m_XBTFReader != nullptr && m_XBTFReader->IsOpen())
-  {
-    XFILE::CXbtManager::GetInstance().Release(CURL(m_path));
-    CLog::Log(LOGDEBUG, "%s - Closed %sbundle", __FUNCTION__, m_themeBundle ? "theme " : "");
-  }
 }
 
 void CTextureBundleXBT::SetThemeBundle(bool themeBundle)

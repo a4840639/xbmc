@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -128,8 +128,7 @@ bool CDatabaseQueryRule::Load(const TiXmlNode *node, const std::string &encoding
 
 bool CDatabaseQueryRule::Load(const CVariant &obj)
 {
-  if (!obj.isObject() ||
-      !obj.isMember("field") || !obj["field"].isString() ||
+  if (!obj.isMember("field") || !obj["field"].isString() ||
       !obj.isMember("operator") || !obj["operator"].isString())
     return false;
 
@@ -239,7 +238,7 @@ void CDatabaseQueryRule::SetParameter(const std::vector<std::string> &values)
 
 std::string CDatabaseQueryRule::ValidateParameter(const std::string &parameter) const
 {
-  if ((GetFieldType(m_field) == NUMERIC_FIELD ||
+  if ((GetFieldType(m_field) == REAL_FIELD || GetFieldType(m_field) == NUMERIC_FIELD ||
        GetFieldType(m_field) == SECONDS_FIELD) && parameter.empty())
     return "0"; // interpret empty fields as 0
   return parameter;
@@ -289,13 +288,13 @@ std::string CDatabaseQueryRule::GetOperatorString(SEARCH_OPERATOR op) const
     case OPERATOR_DOES_NOT_CONTAIN:
       operatorString = " LIKE '%%%s%%'"; break;
     case OPERATOR_EQUALS:
-      if (GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
+      if (GetFieldType(m_field) == REAL_FIELD || GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
         operatorString = " = %s";
       else
         operatorString = " LIKE '%s'";
       break;
     case OPERATOR_DOES_NOT_EQUAL:
-      if (GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
+      if (GetFieldType(m_field) == REAL_FIELD || GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
         operatorString = " != %s";
       else
         operatorString = " LIKE '%s'";
@@ -308,7 +307,7 @@ std::string CDatabaseQueryRule::GetOperatorString(SEARCH_OPERATOR op) const
     case OPERATOR_GREATER_THAN:
     case OPERATOR_IN_THE_LAST:
       operatorString = " > ";
-      if (GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
+      if (GetFieldType(m_field) == REAL_FIELD || GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
         operatorString += "%s";
       else
         operatorString += "'%s'";
@@ -317,7 +316,7 @@ std::string CDatabaseQueryRule::GetOperatorString(SEARCH_OPERATOR op) const
     case OPERATOR_LESS_THAN:
     case OPERATOR_NOT_IN_THE_LAST:
       operatorString = " < ";
-      if (GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
+      if (GetFieldType(m_field) == REAL_FIELD || GetFieldType(m_field) == NUMERIC_FIELD || GetFieldType(m_field) == SECONDS_FIELD)
         operatorString += "%s";
       else
         operatorString += "'%s'";
@@ -340,8 +339,9 @@ std::string CDatabaseQueryRule::GetWhereClause(const CDatabase &db, const std::s
   std::string operatorString = GetOperatorString(op);
   std::string negate;
   if (op == OPERATOR_DOES_NOT_CONTAIN || op == OPERATOR_FALSE ||
-     (op == OPERATOR_DOES_NOT_EQUAL && GetFieldType(m_field) != NUMERIC_FIELD && GetFieldType(m_field) != SECONDS_FIELD))
-    negate = " NOT";
+     (op == OPERATOR_DOES_NOT_EQUAL && GetFieldType(m_field) != REAL_FIELD && GetFieldType(m_field) != NUMERIC_FIELD &&
+      GetFieldType(m_field) != SECONDS_FIELD))
+    negate = " NOT ";
 
   // boolean operators don't have any values in m_parameter, they work on the operator
   if (m_operator == OPERATOR_FALSE || m_operator == OPERATOR_TRUE)
@@ -354,7 +354,9 @@ std::string CDatabaseQueryRule::GetWhereClause(const CDatabase &db, const std::s
       return "";
 
     FIELD_TYPE fieldType = GetFieldType(m_field);
-    if (fieldType == NUMERIC_FIELD)
+    if (fieldType == REAL_FIELD)
+      return db.PrepareSQL("%s BETWEEN %s AND %s", GetField(m_field, strType).c_str(), m_parameter[0].c_str(), m_parameter[1].c_str());
+    else if (fieldType == NUMERIC_FIELD)
       return db.PrepareSQL("CAST(%s as DECIMAL(5,1)) BETWEEN %s AND %s", GetField(m_field, strType).c_str(), m_parameter[0].c_str(), m_parameter[1].c_str());
     else if (fieldType == SECONDS_FIELD)
       return db.PrepareSQL("CAST(%s as INTEGER) BETWEEN %s AND %s", GetField(m_field, strType).c_str(), m_parameter[0].c_str(), m_parameter[1].c_str());

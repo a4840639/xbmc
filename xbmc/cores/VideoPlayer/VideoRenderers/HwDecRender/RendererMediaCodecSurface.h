@@ -1,5 +1,5 @@
 /*
- *      Copyright (C) 2007-2015 Team Kodi
+ *      Copyright (C) 2005-2017 Team Kodi
  *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
@@ -20,44 +20,42 @@
 
 #pragma once
 
-#include "system.h"
+#include "cores/VideoPlayer/VideoRenderers/BaseRenderer.h"
 
-#if defined(TARGET_ANDROID)
+class CMediaCodecVideoBuffer;
 
-#include "cores/VideoPlayer/VideoRenderers/LinuxRendererGLES.h"
-
-class CRendererMediaCodecSurface : public CLinuxRendererGLES
+class CRendererMediaCodecSurface : public CBaseRenderer
 {
 public:
   CRendererMediaCodecSurface();
   virtual ~CRendererMediaCodecSurface();
-  
-  virtual bool RenderCapture(CRenderCapture* capture);
+
+  static CBaseRenderer* Create(CVideoBuffer *buffer);
+  static bool Register();
+
+  virtual bool RenderCapture(CRenderCapture* capture) override;
+  virtual void AddVideoPicture(const VideoPicture &picture, int index, double currentClock) override;
+  virtual void ReleaseBuffer(int idx) override;
+  virtual bool Configure(const VideoPicture &picture, float fps, unsigned int orientation) override;
+  virtual bool IsConfigured() override { return m_bConfigured; };
+  virtual bool ConfigChanged(const VideoPicture &picture) override { return false; };
+  virtual CRenderInfo GetRenderInfo() override;
+  virtual void UnInit() override {};
+  virtual void Update() override {};
+  virtual void RenderUpdate(int index, int index2, bool clear, unsigned int flags, unsigned int alpha) override;
+  virtual bool SupportsMultiPassRendering() override { return false; };
 
   // Player functions
-  virtual void AddVideoPictureHW(DVDVideoPicture &picture, int index);
-  virtual void ReleaseBuffer(int idx);
-  virtual bool IsGuiLayer();
+  virtual bool IsGuiLayer() override { return false; };
 
   // Feature support
-  virtual bool Supports(EINTERLACEMETHOD method);
-  virtual bool Supports(EDEINTERLACEMODE mode);  
-
-  virtual EINTERLACEMETHOD AutoInterlaceMethod();
-  virtual CRenderInfo GetRenderInfo();
+  virtual bool Supports(ESCALINGMETHOD method) override { return false; };
+  virtual bool Supports(ERENDERFEATURE feature) override;
 
 protected:
+  virtual void ReorderDrawPoints() override;
 
-  // textures
-  virtual bool UploadTexture(int index);
-  virtual void DeleteTexture(int index);
-  virtual bool CreateTexture(int index);
-  
-  // hooks for hw dec renderer
-  virtual bool LoadShadersHook();
-  virtual bool RenderHook(int index);  
-  virtual int  GetImageHook(YV12Image *image, int source = AUTOSOURCE, bool readonly = false);
-  virtual bool RenderUpdateVideoHook(bool clear, DWORD flags = 0, DWORD alpha = 255);
+private:
+  bool m_bConfigured;
+  CRect m_surfDestRect;
 };
-
-#endif

@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ class CGUIWindowPictures : public CGUIMediaWindow, public IBackgroundLoaderObser
 {
 public:
   CGUIWindowPictures(void);
-  virtual ~CGUIWindowPictures(void);
+  ~CGUIWindowPictures(void) override;
   bool OnMessage(CGUIMessage& message) override;
   void OnInitWindow() override;
 
@@ -42,6 +42,7 @@ protected:
   bool Update(const std::string &strDirectory, bool updateFilterPath = true) override;
   void GetContextButtons(int itemNumber, CContextButtons &buttons) override;
   bool OnContextButton(int itemNumber, CONTEXT_BUTTON button) override;
+  bool OnAddMediaSource() override;
   std::string GetStartFolder(const std::string &dir) override;
 
   void OnRegenerateThumbs();

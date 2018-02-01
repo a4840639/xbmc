@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,20 +30,18 @@
 
 #include <guid.h>
 
+#if defined(TARGET_ANDROID)
+#include <androidjni/JNIThreading.h>
+#endif
+
 #include "StringUtils.h"
 #include "CharsetConverter.h"
-#if defined(TARGET_ANDROID)
-#include "platform/android/jni/JNIThreading.h"
-#endif
 #include "utils/fstrcmp.h"
 #include "Util.h"
-#include "LangInfo.h"
-#include <locale>
 #include <functional>
-
+#include <array>
 #include <assert.h>
 #include <math.h>
-#include <sstream>
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
@@ -220,15 +218,6 @@ static const wchar_t unicode_uppers[] = {
   (wchar_t)0xFF32, (wchar_t)0xFF33, (wchar_t)0xFF34, (wchar_t)0xFF35, (wchar_t)0xFF36, (wchar_t)0xFF37, (wchar_t)0xFF38, (wchar_t)0xFF39, (wchar_t)0xFF3A
 };
 
-std::string StringUtils::Format(const char *fmt, ...)
-{
-  va_list args;
-  va_start(args, fmt);
-  std::string str = FormatV(fmt, args);
-  va_end(args);
-
-  return str;
-}
 
 std::string StringUtils::FormatV(const char *fmt, va_list args)
 {
@@ -272,16 +261,6 @@ std::string StringUtils::FormatV(const char *fmt, va_list args)
   }
 
   return ""; // unreachable
-}
-
-std::wstring StringUtils::Format(const wchar_t *fmt, ...)
-{
-  va_list args;
-  va_start(args, fmt);
-  std::wstring str = FormatV(fmt, args);
-  va_end(args);
-  
-  return str;
 }
 
 std::wstring StringUtils::FormatV(const wchar_t *fmt, va_list args)
@@ -403,6 +382,10 @@ void StringUtils::ToCapitalize(std::wstring &str)
 
 bool StringUtils::EqualsNoCase(const std::string &str1, const std::string &str2)
 {
+  // before we do the char-by-char comparison, first compare sizes of both strings.
+  // This led to a 33% improvement in benchmarking on average. (size() just returns a member of std::string)
+  if (str1.size() != str2.size())
+    return false;
   return EqualsNoCase(str1.c_str(), str2.c_str());
 }
 
@@ -692,89 +675,77 @@ bool StringUtils::EndsWithNoCase(const std::string &str1, const char *s2)
   return true;
 }
 
-std::string StringUtils::Join(const std::vector<std::string> &strings, const std::string& delimiter)
+std::vector<std::string> StringUtils::Split(const std::string& input, const std::string& delimiter, unsigned int iMaxStrings)
 {
-  std::string result;
-  for(std::vector<std::string>::const_iterator it = strings.begin(); it != strings.end(); ++it )
-    result += (*it) + delimiter;
-  
-  if (!result.empty())
-    result.erase(result.size() - delimiter.size());
+  std::vector<std::string> result;
+  SplitTo(std::back_inserter(result), input, delimiter, iMaxStrings);
   return result;
 }
 
-std::vector<std::string> StringUtils::Split(const std::string& input, const std::string& delimiter, unsigned int iMaxStrings /* = 0 */)
+std::vector<std::string> StringUtils::Split(const std::string& input, const char delimiter, size_t iMaxStrings)
 {
-  std::vector<std::string> results;
+  std::vector<std::string> result;
+  SplitTo(std::back_inserter(result), input, delimiter, iMaxStrings);
+  return result;
+}
+
+std::vector<std::string> StringUtils::Split(const std::string& input, const std::vector<std::string>& delimiters)
+{
+  std::vector<std::string> result;
+  SplitTo(std::back_inserter(result), input, delimiters);
+  return result;
+}
+
+std::vector<std::string> StringUtils::SplitMulti(const std::vector<std::string> &input, const std::vector<std::string> &delimiters, unsigned int iMaxStrings /* = 0 */)
+{
   if (input.empty())
+    return std::vector<std::string>(); 
+
+  std::vector<std::string> results(input);
+
+  if (delimiters.empty() || (iMaxStrings > 0 && iMaxStrings <= input.size()))
     return results;
-  if (delimiter.empty())
+
+  std::vector<std::string> strings1;
+  if (iMaxStrings == 0)
   {
-    results.push_back(input);
+    for (size_t di = 0; di < delimiters.size(); di++)
+    {
+      for (size_t i = 0; i < results.size(); i++)
+      {
+        std::vector<std::string> substrings = StringUtils::Split(results[i], delimiters[di]);
+        for (size_t j = 0; j < substrings.size(); j++)
+          strings1.push_back(substrings[j]);
+      }
+      results = strings1;
+      strings1.clear();
+    }
     return results;
   }
 
-  const size_t delimLen = delimiter.length();
-  size_t nextDelim;
-  size_t textPos = 0;
-  do
+  // Control the number of strings input is split into, keeping the original strings. 
+  // Note iMaxStrings > input.size() 
+  int iNew = iMaxStrings - results.size();
+  for (size_t di = 0; di < delimiters.size(); di++)
   {
-    if (--iMaxStrings == 0)
+    for (size_t i = 0; i < results.size(); i++)
     {
-      results.push_back(input.substr(textPos));
-      break;
+      if (iNew > 0)
+      {
+        std::vector<std::string> substrings = StringUtils::Split(results[i], delimiters[di], iNew + 1);
+        iNew = iNew - substrings.size() + 1;
+        for (size_t j = 0; j < substrings.size(); j++)
+          strings1.push_back(substrings[j]);
+      }
+      else
+        strings1.push_back(results[i]);
     }
-    nextDelim = input.find(delimiter, textPos);
-    results.push_back(input.substr(textPos, nextDelim - textPos));
-    textPos = nextDelim + delimLen;
-  } while (nextDelim != std::string::npos);
-
-  return results;
-}
-
-std::vector<std::string> StringUtils::Split(const std::string& input, const char delimiter, size_t iMaxStrings /*= 0*/)
-{
-  std::vector<std::string> results;
-  if (input.empty())
-    return results;
-
-  size_t nextDelim;
-  size_t textPos = 0;
-  do
-  {
-    if (--iMaxStrings == 0)
-    {
-      results.push_back(input.substr(textPos));
-      break;
-    }
-    nextDelim = input.find(delimiter, textPos);
-    results.push_back(input.substr(textPos, nextDelim - textPos));
-    textPos = nextDelim + 1;
-  } while (nextDelim != std::string::npos);
-
-  return results;
-}
-
-std::vector<std::string> StringUtils::SplitMulti(const std::string& input, const char* delimiters, size_t iMaxStrings /*= 0*/)
-{
-  std::vector<std::string> results;
-  if (input.empty())
-    return results;
-
-  size_t nextDelim;
-  size_t textPos = 0;
-  do
-  {
-    if (--iMaxStrings == 0)
-    {
-      results.push_back(input.substr(textPos));
-      break;
-    }
-    nextDelim = input.find_first_of(delimiters, textPos);
-    results.push_back(input.substr(textPos, nextDelim - textPos));
-    textPos = nextDelim + 1;
-  } while (nextDelim != std::string::npos);
-
+    results = strings1;
+    iNew = iMaxStrings - results.size();
+    strings1.clear();
+    if ((iNew <= 0))
+      break;  //Stop trying any more delimiters
+  }
   return results;
 }
 
@@ -894,6 +865,8 @@ long StringUtils::TimeStringToSeconds(const std::string &timeString)
 
 std::string StringUtils::SecondsToTimeString(long lSeconds, TIME_FORMAT format)
 {
+  bool isNegative = lSeconds < 0;
+  lSeconds = std::abs(lSeconds);
   int hh = lSeconds / 3600;
   lSeconds = lSeconds % 3600;
   int mm = lSeconds / 60;
@@ -910,6 +883,8 @@ std::string StringUtils::SecondsToTimeString(long lSeconds, TIME_FORMAT format)
     strHMS += StringUtils::Format(strHMS.empty() ? "%2.2i" : ":%2.2i", mm);
   if (format & TIME_FORMAT_SS)
     strHMS += StringUtils::Format(strHMS.empty() ? "%2.2i" : ":%2.2i", ss);
+  if (isNegative)
+    strHMS = "-" + strHMS;
   return strHMS;
 }
 
@@ -999,6 +974,29 @@ std::string StringUtils::SizeToString(int64_t size)
     strLabel = StringUtils::Format("%.2lf %cB", s, prefixes[i]);
 
   return strLabel;
+}
+
+std::string StringUtils::BinaryStringToString(const std::string& in)
+{
+  std::string out;
+  out.reserve(in.size() / 2);
+  for (const char *cur = in.c_str(), *end = cur + in.size(); cur != end; ++cur) {
+    if (*cur == '\\') {
+      ++cur;                                                                             
+      if (cur == end) {
+        break;
+      }
+      if (isdigit(*cur)) {                                                             
+        char* end;
+        unsigned long num = strtol(cur, &end, 10);
+        cur = end - 1;
+        out.push_back(num);
+        continue;
+      }
+    }
+    out.push_back(*cur);
+  }
+  return out;
 }
 
 // return -1 if not, else return the utf8 char length.
@@ -1229,4 +1227,30 @@ void StringUtils::Tokenize(const std::string& input, std::vector<std::string>& t
     // Skip delimiters.  Note the "not_of"
     dataPos = input.find_first_not_of(delimiter, nextDelimPos);
   }
+}
+
+uint64_t StringUtils::ToUint64(std::string str, uint64_t fallback) noexcept
+{
+  std::istringstream iss(str);
+  uint64_t result(fallback);
+  iss >> result;
+  return result;
+}
+
+std::string StringUtils::FormatFileSize(uint64_t bytes)
+{
+  const std::array<std::string, 6> units{{"B", "kB", "MB", "GB", "TB", "PB"}};
+  if (bytes < 1000)
+    return Format("%" PRIu64 "B", bytes);
+
+  size_t i = 0;
+  double value = static_cast<double>(bytes);
+  while (i + 1 < units.size() && value >= 999.5)
+  {
+    ++i;
+    value /= 1024.0;
+  }
+  unsigned int decimals = value < 9.995 ? 2 : (value < 99.95 ? 1 : 0);
+  auto frmt = "%.0" + Format("%u", decimals) + "f%s";
+  return Format(frmt.c_str(), value, units[i].c_str());
 }

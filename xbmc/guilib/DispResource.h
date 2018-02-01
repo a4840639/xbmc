@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2015 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,12 +20,21 @@
 
 #pragma once
 
+// interface for registering into windowing
+// to get notified about display events
+// interface only, does not control lifetime of the object
 class IDispResource
 {
 public:
-  virtual ~IDispResource() {};
   virtual void OnLostDisplay() {};
   virtual void OnResetDisplay() {};
   virtual void OnAppFocusChange(bool focus) {};
 };
 
+// interface used by clients to register into render loop
+// interface only, does not control lifetime of the object
+class IRenderLoop
+{
+public:
+  virtual void FrameMove() = 0;
+};

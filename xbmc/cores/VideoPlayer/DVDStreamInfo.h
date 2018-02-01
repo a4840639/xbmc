@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,17 +20,17 @@
 
 #pragma once
 
-#if (defined HAVE_CONFIG_H) && (!defined TARGET_WINDOWS)
-  #include "config.h"
-#endif
-
 #include "DVDDemuxers/DVDDemux.h"
 
 extern "C" {
 #include "libavcodec/avcodec.h"
 }
 
+#define CODEC_FORCE_SOFTWARE 0x01
+#define CODEC_ALLOW_FALLBACK 0x02
+
 class CDemuxStream;
+struct DemuxCryptoSession;
 
 class CDVDStreamInfo
 {
@@ -50,30 +50,28 @@ public:
 
   AVCodecID codec;
   StreamType type;
+  int uniqueId;
+  int demuxerId = -1;
   bool realtime;
   int flags;
-  bool software;  //force software decoding
   std::string filename;
   bool dvd;
-
+  int codecOptions;
 
   // VIDEO
   int fpsscale; // scale of 1001 and a rate of 60000 will result in 59.94 fps
   int fpsrate;
-  int rfpsscale;
-  int rfpsrate;
   int height; // height of the stream reported by the demuxer
   int width; // width of the stream reported by the demuxer
-  float aspect; // display aspect as reported by demuxer
+  double aspect; // display aspect as reported by demuxer
   bool vfr; // variable framerate
   bool stills; // there may be odd still frames in video
   int level; // encoder level of the stream reported by the decoder. used to qualify hw decoders.
   int profile; // encoder profile of the stream reported by the decoder. used to qualify hw decoders.
   bool ptsinvalid;  // pts cannot be trusted (avi's).
   bool forced_aspect; // aspect is forced from container
-  int orientation; // orientation of the video in degress counter clockwise
+  int orientation; // orientation of the video in degrees counter clockwise
   int bitsperpixel;
-  int pid;
   std::string stereo_mode; // stereoscopic 3d mode
 
   // AUDIO
@@ -90,6 +88,10 @@ public:
   void*        extradata; // extra data for codec to use
   unsigned int extrasize; // size of extra data
   unsigned int codec_tag; // extra identifier hints for decoding
+
+  // Crypto initialization Data
+  std::shared_ptr<DemuxCryptoSession> cryptoSession;
+  std::shared_ptr<ADDON::IAddonProvider> externalInterfaces;
 
   bool operator==(const CDVDStreamInfo& right)      { return Equal(right, true);}
   bool operator!=(const CDVDStreamInfo& right)      { return !Equal(right, true);}

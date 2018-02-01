@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2010-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -217,10 +217,10 @@ int CAEPackIEC61937::PackDTS(uint8_t *data, unsigned int size, uint8_t *dest, bo
   return frameSize;
 }
 
-int CAEPackIEC61937::PackPause(uint8_t *dest, unsigned int millis, unsigned int framesize, unsigned int samplerate, unsigned int rep_priod, unsigned int encodedRate)
+int CAEPackIEC61937::PackPause(uint8_t *dest, unsigned int millis, unsigned int framesize, unsigned int samplerate, unsigned int rep_period, unsigned int encodedRate)
 {
-  int periodInBytes = rep_priod * framesize;
-  double periodInTime = (double)rep_priod / samplerate * 1000;
+  int periodInBytes = rep_period * framesize;
+  double periodInTime = (double)rep_period / samplerate * 1000;
   int periodsNeeded = millis / periodInTime;
   int maxPeriods = MAX_IEC61937_PACKET / periodInBytes;
   if (periodsNeeded > maxPeriods)
@@ -239,7 +239,8 @@ int CAEPackIEC61937::PackPause(uint8_t *dest, unsigned int millis, unsigned int 
     memcpy(dest+i*periodInBytes, dest, periodInBytes);
   }
 
-  packet->m_data[1] = (gap & 0x00FF) << 8;
-  packet->m_data[0] = (gap & 0xFF00) >> 8;
+  uint16_t *gapPtr = reinterpret_cast<uint16_t*>(packet->m_data);
+  *gapPtr = gap;
+
   return periodsNeeded * periodInBytes;
 }

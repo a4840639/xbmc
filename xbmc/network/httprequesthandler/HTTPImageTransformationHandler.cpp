@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #include "URL.h"
 #include "filesystem/ImageFile.h"
 #include "network/WebServer.h"
+#include "network/httprequesthandler/HTTPRequestHandlerUtils.h"
 #include "utils/Mime.h"
 #include "utils/StringUtils.h"
 #include "utils/URIUtils.h"
@@ -74,7 +75,7 @@ CHTTPImageTransformationHandler::CHTTPImageTransformationHandler(const HTTPReque
   StringUtils::ToLower(ext);
   m_response.contentType = CMime::GetMimeType(ext);
 
-  // TODO: determine the maximum age
+  //! @todo determine the maximum age
 
   // determine the last modified date
   struct __stat64 statBuffer;
@@ -101,7 +102,7 @@ CHTTPImageTransformationHandler::~CHTTPImageTransformationHandler()
   m_buffer = NULL;
 }
 
-bool CHTTPImageTransformationHandler::CanHandleRequest(const HTTPRequest &request)
+bool CHTTPImageTransformationHandler::CanHandleRequest(const HTTPRequest &request) const
 {
   if ((request.method != GET && request.method != HEAD) ||
     request.pathUrl.find(ImageBasePath) != 0 || request.pathUrl.size() <= ImageBasePath.size())
@@ -109,7 +110,7 @@ bool CHTTPImageTransformationHandler::CanHandleRequest(const HTTPRequest &reques
 
   // get the transformation options
   std::map<std::string, std::string> options;
-  CWebServer::GetRequestHeaderValues(request.connection, MHD_GET_ARGUMENT_KIND, options);
+  HTTPRequestHandlerUtils::GetRequestHeaderValues(request.connection, MHD_GET_ARGUMENT_KIND, options);
 
   return (options.find(TRANSFORMATION_OPTION_WIDTH) != options.end() ||
           options.find(TRANSFORMATION_OPTION_HEIGHT) != options.end());
@@ -131,7 +132,7 @@ int CHTTPImageTransformationHandler::HandleRequest()
 
   // get the transformation options
   std::map<std::string, std::string> options;
-  CWebServer::GetRequestHeaderValues(m_request.connection, MHD_GET_ARGUMENT_KIND, options);
+  HTTPRequestHandlerUtils::GetRequestHeaderValues(m_request.connection, MHD_GET_ARGUMENT_KIND, options);
 
   std::vector<std::string> urlOptions;
   std::map<std::string, std::string>::const_iterator option = options.find(TRANSFORMATION_OPTION_WIDTH);

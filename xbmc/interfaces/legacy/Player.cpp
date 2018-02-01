@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,8 @@
 #include "Application.h"
 #include "messaging/ApplicationMessenger.h"
 #include "GUIInfoManager.h"
+#include "GUIUserMessages.h"
+#include "guilib/GUIWindowManager.h"
 #include "AddonUtils.h"
 #include "utils/log.h"
 #include "cores/IPlayer.h"
@@ -115,9 +117,9 @@ namespace XBMCAddon
       CMediaSettings::GetInstance().SetVideoStartWindowed(windowed);
 
       // play current file in playlist
-      if (g_playlistPlayer.GetCurrentPlaylist() != iPlayList)
-        g_playlistPlayer.SetCurrentPlaylist(iPlayList);
-      CApplicationMessenger::GetInstance().SendMsg(TMSG_PLAYLISTPLAYER_PLAY, g_playlistPlayer.GetCurrentSong());
+      if (CServiceBroker::GetPlaylistPlayer().GetCurrentPlaylist() != iPlayList)
+        CServiceBroker::GetPlaylistPlayer().SetCurrentPlaylist(iPlayList);
+      CApplicationMessenger::GetInstance().SendMsg(TMSG_PLAYLISTPLAYER_PLAY, CServiceBroker::GetPlaylistPlayer().GetCurrentSong());
     }
 
     void Player::playPlaylist(const PlayList* playlist, bool windowed, int startpos)
@@ -131,9 +133,9 @@ namespace XBMCAddon
 
         // play a python playlist (a playlist from playlistplayer.cpp)
         iPlayList = playlist->getPlayListId();
-        g_playlistPlayer.SetCurrentPlaylist(iPlayList);
+        CServiceBroker::GetPlaylistPlayer().SetCurrentPlaylist(iPlayList);
         if (startpos > -1)
-          g_playlistPlayer.SetCurrentSong(startpos);
+          CServiceBroker::GetPlaylistPlayer().SetCurrentSong(startpos);
         CApplicationMessenger::GetInstance().SendMsg(TMSG_PLAYLISTPLAYER_PLAY, startpos);
       }
       else
@@ -173,18 +175,18 @@ namespace XBMCAddon
       XBMC_TRACE;
       DelayedCallGuard dc(languageHook);
 
-      if (g_playlistPlayer.GetCurrentPlaylist() != iPlayList)
+      if (CServiceBroker::GetPlaylistPlayer().GetCurrentPlaylist() != iPlayList)
       {
-        g_playlistPlayer.SetCurrentPlaylist(iPlayList);
+        CServiceBroker::GetPlaylistPlayer().SetCurrentPlaylist(iPlayList);
       }
-      g_playlistPlayer.SetCurrentSong(selected);
+      CServiceBroker::GetPlaylistPlayer().SetCurrentSong(selected);
 
       CApplicationMessenger::GetInstance().SendMsg(TMSG_PLAYLISTPLAYER_PLAY, selected);
-      //g_playlistPlayer.Play(selected);
-      //CLog::Log(LOGNOTICE, "Current Song After Play: %i", g_playlistPlayer.GetCurrentSong());
+      //CServiceBroker::GetPlaylistPlayer().Play(selected);
+      //CLog::Log(LOGNOTICE, "Current Song After Play: %i", CServiceBroker::GetPlaylistPlayer().GetCurrentSong());
     }
 
-    void Player::OnPlayBackStarted()
+    void Player::OnPlayBackStarted(const CFileItem &file)
     { 
       XBMC_TRACE;
       invokeCallback(new CallbackFunction<Player>(this,&Player::onPlayBackStarted));
@@ -200,6 +202,12 @@ namespace XBMCAddon
     { 
       XBMC_TRACE;
       invokeCallback(new CallbackFunction<Player>(this,&Player::onPlayBackStopped));
+    }
+
+    void Player::OnPlayBackError()
+    {
+      XBMC_TRACE;
+      invokeCallback(new CallbackFunction<Player>(this,&Player::onPlayBackError));
     }
 
     void Player::OnPlayBackPaused()
@@ -226,10 +234,10 @@ namespace XBMCAddon
       invokeCallback(new CallbackFunction<Player,int>(this,&Player::onPlayBackSpeedChanged,speed));
     }
 
-    void Player::OnPlayBackSeek(int time, int seekOffset)
+    void Player::OnPlayBackSeek(int64_t time, int64_t seekOffset)
     { 
       XBMC_TRACE;
-      invokeCallback(new CallbackFunction<Player,int,int>(this,&Player::onPlayBackSeek,time,seekOffset));
+      invokeCallback(new CallbackFunction<Player,int,int>(this,&Player::onPlayBackSeek,static_cast<int>(time),static_cast<int>(seekOffset)));
     }
 
     void Player::OnPlayBackSeekChapter(int chapter)
@@ -249,6 +257,11 @@ namespace XBMCAddon
     }
 
     void Player::onPlayBackStopped()
+    {
+      XBMC_TRACE;
+    }
+
+    void Player::onPlayBackError()
     {
       XBMC_TRACE;
     }
@@ -286,31 +299,31 @@ namespace XBMCAddon
     bool Player::isPlaying()
     {
       XBMC_TRACE;
-      return g_application.m_pPlayer->IsPlaying();
+      return g_application.GetAppPlayer().IsPlaying();
     }
 
     bool Player::isPlayingAudio()
     {
       XBMC_TRACE;
-      return g_application.m_pPlayer->IsPlayingAudio();
+      return g_application.GetAppPlayer().IsPlayingAudio();
     }
 
     bool Player::isPlayingVideo()
     {
       XBMC_TRACE;
-      return g_application.m_pPlayer->IsPlayingVideo();
+      return g_application.GetAppPlayer().IsPlayingVideo();
     }
 
     bool Player::isPlayingRDS()
     {
       XBMC_TRACE;
-      return g_application.m_pPlayer->IsPlayingRDS();
+      return g_application.GetAppPlayer().IsPlayingRDS();
     }
 
     String Player::getPlayingFile()
     {
       XBMC_TRACE;
-      if (!g_application.m_pPlayer->IsPlaying())
+      if (!g_application.GetAppPlayer().IsPlaying())
         throw PlayerException("XBMC is not playing any file");
 
       return g_application.CurrentFile();
@@ -319,7 +332,7 @@ namespace XBMCAddon
     InfoTagVideo* Player::getVideoInfoTag()
     {
       XBMC_TRACE;
-      if (!g_application.m_pPlayer->IsPlayingVideo())
+      if (!g_application.GetAppPlayer().IsPlayingVideo())
         throw PlayerException("XBMC is not playing any videofile");
 
       const CVideoInfoTag* movie = g_infoManager.GetCurrentMovieTag();
@@ -332,7 +345,7 @@ namespace XBMCAddon
     InfoTagMusic* Player::getMusicInfoTag()
     {
       XBMC_TRACE;
-      if (g_application.m_pPlayer->IsPlayingVideo() || !g_application.m_pPlayer->IsPlayingAudio())
+      if (g_application.GetAppPlayer().IsPlayingVideo() || !g_application.GetAppPlayer().IsPlayingAudio())
         throw PlayerException("XBMC is not playing any music file");
 
       const MUSIC_INFO::CMusicInfoTag* tag = g_infoManager.GetCurrentSongTag();
@@ -342,10 +355,20 @@ namespace XBMCAddon
       return new InfoTagMusic();
     }
 
-    InfoTagRadioRDS* Player::getRadioRDSInfoTag() throw (PlayerException)
+    void Player::updateInfoTag(const XBMCAddon::xbmcgui::ListItem* item)
     {
       XBMC_TRACE;
-      if (g_application.m_pPlayer->IsPlayingVideo() || !g_application.m_pPlayer->IsPlayingRDS())
+      if (!g_application.GetAppPlayer().IsPlaying())
+        throw PlayerException("Kodi is not playing any file");
+
+      CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_UPDATE_ITEM, 0, item->item);
+      g_windowManager.SendMessage(msg);
+    }
+
+    InfoTagRadioRDS* Player::getRadioRDSInfoTag()
+    {
+      XBMC_TRACE;
+      if (g_application.GetAppPlayer().IsPlayingVideo() || !g_application.GetAppPlayer().IsPlayingRDS())
         throw PlayerException("XBMC is not playing any music file with RDS");
 
       const PVR::CPVRRadioRDSInfoTagPtr tag = g_infoManager.GetCurrentRadioRDSInfoTag();
@@ -358,7 +381,7 @@ namespace XBMCAddon
     double Player::getTotalTime()
     {
       XBMC_TRACE;
-      if (!g_application.m_pPlayer->IsPlaying())
+      if (!g_application.GetAppPlayer().IsPlaying())
         throw PlayerException("XBMC is not playing any media file");
 
       return g_application.GetTotalTime();
@@ -367,7 +390,7 @@ namespace XBMCAddon
     double Player::getTime()
     {
       XBMC_TRACE;
-      if (!g_application.m_pPlayer->IsPlaying())
+      if (!g_application.GetAppPlayer().IsPlaying())
         throw PlayerException("XBMC is not playing any media file");
 
       return g_application.GetTime();
@@ -376,7 +399,7 @@ namespace XBMCAddon
     void Player::seekTime(double pTime)
     {
       XBMC_TRACE;
-      if (!g_application.m_pPlayer->IsPlaying())
+      if (!g_application.GetAppPlayer().IsPlaying())
         throw PlayerException("XBMC is not playing any media file");
 
       g_application.SeekTime( pTime );
@@ -385,28 +408,28 @@ namespace XBMCAddon
     void Player::setSubtitles(const char* cLine)
     {
       XBMC_TRACE;
-      if (g_application.m_pPlayer->HasPlayer())
+      if (g_application.GetAppPlayer().HasPlayer())
       {
-        g_application.m_pPlayer->AddSubtitle(cLine);
+        g_application.GetAppPlayer().AddSubtitle(cLine);
       }
     }
 
     void Player::showSubtitles(bool bVisible)
     {
       XBMC_TRACE;
-      if (g_application.m_pPlayer->HasPlayer())
+      if (g_application.GetAppPlayer().HasPlayer())
       {
-        g_application.m_pPlayer->SetSubtitleVisible(bVisible != 0);
+        g_application.GetAppPlayer().SetSubtitleVisible(bVisible != 0);
       }
     }
 
     String Player::getSubtitles()
     {
       XBMC_TRACE;
-      if (g_application.m_pPlayer->HasPlayer())
+      if (g_application.GetAppPlayer().HasPlayer())
       {
-        SPlayerSubtitleStreamInfo info;
-        g_application.m_pPlayer->GetSubtitleStreamInfo(g_application.m_pPlayer->GetSubtitle(), info);
+        SubtitleStreamInfo info;
+        g_application.GetAppPlayer().GetSubtitleStreamInfo(g_application.GetAppPlayer().GetSubtitle(), info);
 
         if (info.language.length() > 0)
           return info.language;
@@ -417,26 +440,16 @@ namespace XBMCAddon
       return NULL;
     }
 
-    void Player::disableSubtitles()
-    {
-      XBMC_TRACE;
-      CLog::Log(LOGWARNING,"'xbmc.Player().disableSubtitles()' is deprecated and will be removed in future releases, please use 'xbmc.Player().showSubtitles(false)' instead");
-      if (g_application.m_pPlayer->HasPlayer())
-      {
-        g_application.m_pPlayer->SetSubtitleVisible(false);
-      }
-    }
-
     std::vector<String> Player::getAvailableSubtitleStreams()
     {
-      if (g_application.m_pPlayer->HasPlayer())
+      if (g_application.GetAppPlayer().HasPlayer())
       {
-        int subtitleCount = g_application.m_pPlayer->GetSubtitleCount();
+        int subtitleCount = g_application.GetAppPlayer().GetSubtitleCount();
         std::vector<String> ret(subtitleCount);
         for (int iStream=0; iStream < subtitleCount; iStream++)
         {
-          SPlayerSubtitleStreamInfo info;
-          g_application.m_pPlayer->GetSubtitleStreamInfo(iStream, info);
+          SubtitleStreamInfo info;
+          g_application.GetAppPlayer().GetSubtitleStreamInfo(iStream, info);
 
           if (info.language.length() > 0)
             ret[iStream] = info.language;
@@ -451,27 +464,27 @@ namespace XBMCAddon
 
     void Player::setSubtitleStream(int iStream)
     {
-      if (g_application.m_pPlayer->HasPlayer())
+      if (g_application.GetAppPlayer().HasPlayer())
       {
-        int streamCount = g_application.m_pPlayer->GetSubtitleCount();
+        int streamCount = g_application.GetAppPlayer().GetSubtitleCount();
         if(iStream < streamCount)
         {
-          g_application.m_pPlayer->SetSubtitle(iStream);
-          g_application.m_pPlayer->SetSubtitleVisible(true);
+          g_application.GetAppPlayer().SetSubtitle(iStream);
+          g_application.GetAppPlayer().SetSubtitleVisible(true);
         }
       }
     }
 
     std::vector<String> Player::getAvailableAudioStreams()
     {
-      if (g_application.m_pPlayer->HasPlayer())
+      if (g_application.GetAppPlayer().HasPlayer())
       {
-        int streamCount = g_application.m_pPlayer->GetAudioStreamCount();
+        int streamCount = g_application.GetAppPlayer().GetAudioStreamCount();
         std::vector<String> ret(streamCount);
         for (int iStream=0; iStream < streamCount; iStream++)
         {
-          SPlayerAudioStreamInfo info;
-          g_application.m_pPlayer->GetAudioStreamInfo(iStream, info);
+          AudioStreamInfo info;
+          g_application.GetAppPlayer().GetAudioStreamInfo(iStream, info);
 
           if (info.language.length() > 0)
             ret[iStream] = info.language;
@@ -486,22 +499,22 @@ namespace XBMCAddon
 
     void Player::setAudioStream(int iStream)
     {
-      if (g_application.m_pPlayer->HasPlayer())
+      if (g_application.GetAppPlayer().HasPlayer())
       {
-        int streamCount = g_application.m_pPlayer->GetAudioStreamCount();
+        int streamCount = g_application.GetAppPlayer().GetAudioStreamCount();
         if(iStream < streamCount)
-          g_application.m_pPlayer->SetAudioStream(iStream);
+          g_application.GetAppPlayer().SetAudioStream(iStream);
       }
     }
 
     std::vector<String> Player::getAvailableVideoStreams()
     {
-      int streamCount = g_application.m_pPlayer->GetVideoStreamCount();
+      int streamCount = g_application.GetAppPlayer().GetVideoStreamCount();
       std::vector<String> ret(streamCount);
       for (int iStream = 0; iStream < streamCount; ++iStream)
       {
-        SPlayerVideoStreamInfo info;
-        g_application.m_pPlayer->GetVideoStreamInfo(iStream, info);
+        VideoStreamInfo info;
+        g_application.GetAppPlayer().GetVideoStreamInfo(iStream, info);
 
         if (info.language.length() > 0)
           ret[iStream] = info.language;
@@ -513,9 +526,9 @@ namespace XBMCAddon
 
     void Player::setVideoStream(int iStream)
     {
-      int streamCount = g_application.m_pPlayer->GetVideoStreamCount();
+      int streamCount = g_application.GetAppPlayer().GetVideoStreamCount();
       if (iStream < streamCount)
-        g_application.m_pPlayer->SetVideoStream(iStream);
+        g_application.GetAppPlayer().SetVideoStream(iStream);
     }
   }
 }

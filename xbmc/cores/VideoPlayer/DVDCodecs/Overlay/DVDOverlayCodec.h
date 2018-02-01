@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +20,6 @@
  *
  */
 
-#include "DVDOverlay.h"
 #include "PlatformDefs.h"
 #include "cores/VideoPlayer/DVDDemuxers/DVDDemux.h"
 
@@ -31,6 +30,7 @@
 #define OC_BUFFER   0x00000002  // the decoder needs more data
 #define OC_OVERLAY  0x00000004  // the decoder decoded an overlay, call Decode(NULL, 0) again to parse the rest of the data
 
+class CDVDOverlay;
 class CDVDStreamInfo;
 class CDVDCodecOption;
 class CDVDCodecOptions;
@@ -39,9 +39,9 @@ class CDVDOverlayCodec
 {
 public:
 
-  CDVDOverlayCodec(const char* name) : m_codecName(name) {}
+  explicit CDVDOverlayCodec(const char* name) : m_codecName(name) {}
 
-  virtual ~CDVDOverlayCodec() {}
+  virtual ~CDVDOverlayCodec() = default;
 
   /*
    * Open the decoder, returns true on success

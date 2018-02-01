@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -37,9 +37,7 @@ CGUIButtonControl::CGUIButtonControl(int parentID, int controlID, float posX, fl
   ControlType = GUICONTROL_BUTTON;
 }
 
-CGUIButtonControl::~CGUIButtonControl(void)
-{
-}
+CGUIButtonControl::~CGUIButtonControl(void) = default;
 
 void CGUIButtonControl::Process(unsigned int currentTime, CDirtyRegionList &dirtyregions)
 {

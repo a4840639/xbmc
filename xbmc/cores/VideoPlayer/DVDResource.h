@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,24 +21,29 @@
  */
 
 #include <assert.h>
-#include "threads/Atomics.h"
+#include <atomic>
 
 template<typename T> struct IDVDResourceCounted
 {
   IDVDResourceCounted() : m_refs(1) {}
-  virtual ~IDVDResourceCounted() {}
-  virtual T*   Acquire()
+  virtual ~IDVDResourceCounted() = default;
+
+  IDVDResourceCounted(const IDVDResourceCounted &) = delete;
+  IDVDResourceCounted &operator=(const IDVDResourceCounted &) = delete;
+
+  virtual T*  Acquire()
   {
-    AtomicIncrement(&m_refs);
-    return (T*)this;
+    ++m_refs;
+    return static_cast<T*>(this);
   }
 
   virtual long Release()
   {
-    long count = AtomicDecrement(&m_refs);
+    long count = --m_refs;
     assert(count >= 0);
-    if (count == 0) delete (T*)this;
+    if (count == 0)
+      delete static_cast<T*>(this);
     return count;
   }
-  long m_refs;
+  std::atomic<long> m_refs;
 };

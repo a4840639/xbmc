@@ -21,8 +21,8 @@
 #include "network/Network.h"
 #include "threads/SystemClock.h"
 #include "RssReader.h"
+#include "ServiceBroker.h"
 #include "utils/HTMLUtil.h"
-#include "Application.h"
 #include "CharsetConverter.h"
 #include "URL.h"
 #include "filesystem/File.h"
@@ -35,6 +35,9 @@
 #include "guilib/GUIRSSControl.h"
 #include "threads/SingleLock.h"
 #include "log.h"
+#ifdef TARGET_POSIX
+#include "platform/linux/XTimeUtils.h"
+#endif
 
 #define RSS_COLOR_BODY      0
 #define RSS_COLOR_HEADLINE  1
@@ -143,7 +146,7 @@ void CRssReader::Process()
 
     // we wait for the network to come up
     if ((url.IsProtocol("http") || url.IsProtocol("https")) &&
-        !g_application.getNetwork().IsAvailable())
+        !CServiceBroker::GetNetwork().IsAvailable())
     {
       CLog::Log(LOGWARNING, "RSS: No network connection");
       strXML = "<rss><item><title>"+g_localizeStrings.Get(15301)+"</title></item></rss>";
@@ -174,7 +177,7 @@ void CRssReader::Process()
         {
           if (http.Get(strUrl, strXML))
           {
-            fileCharset = http.GetServerReportedCharset();
+            fileCharset = http.GetProperty(XFILE::FILE_PROPERTY_CONTENT_CHARSET);
             CLog::Log(LOGDEBUG, "Got rss feed: %s", strUrl.c_str());
             break;
           }
@@ -266,11 +269,11 @@ void CRssReader::GetNewsItems(TiXmlElement* channelXmlNode, int iFeed)
   if (m_tagSet.empty())
     AddTag("title");
 
-  while (itemNode > 0)
+  while (itemNode != nullptr)
   {
     TiXmlNode* childNode = itemNode->FirstChild();
     mTagElements.clear();
-    while (childNode > 0)
+    while (childNode != nullptr)
     {
       std::string strName = childNode->ValueStr();
 

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,6 +32,10 @@ class CGUIFontCacheImpl
     using HashIter = typename HashMap::iterator;
     using AgeMap = std::multimap<size_t, HashIter>;
 
+    ~EntryList()
+    {
+      Flush();
+    }
     HashIter Insert(size_t hash, CGUIFontCacheEntry<Position, Value> *v)
     {
       auto r (hashMap.insert(typename HashMap::value_type(hash, v)));
@@ -84,7 +88,7 @@ class CGUIFontCacheImpl
   
 public:
 
-  CGUIFontCacheImpl(CGUIFontCache<Position, Value>* parent) : m_parent(parent) {}
+  explicit CGUIFontCacheImpl(CGUIFontCache<Position, Value>* parent) : m_parent(parent) {}
   Value &Lookup(Position &pos,
                 const vecColors &colors, const vecText &text,
                 uint32_t alignment, float maxPixelWidth,

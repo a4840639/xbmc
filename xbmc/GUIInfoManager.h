@@ -8,7 +8,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@
 
 #include "threads/CriticalSection.h"
 #include "guilib/IMsgTargetCallback.h"
+#include "guilib/GUIControl.h"
 #include "messaging/IMessageTarget.h"
 #include "inttypes.h"
 #include "XBDateTime.h"
@@ -37,18 +38,16 @@
 #include "interfaces/info/SkinVariable.h"
 #include "cores/IPlayer.h"
 #include "FileItem.h"
+#include "pvr/PVRTypes.h"
 
-#include <list>
+#include <atomic>
 #include <map>
+#include <string>
+#include <vector>
 
 namespace MUSIC_INFO
 {
   class CMusicInfoTag;
-}
-namespace PVR
-{
-  class CPVRRadioRDSInfoTag;
-  typedef std::shared_ptr<PVR::CPVRRadioRDSInfoTag> CPVRRadioRDSInfoTagPtr;
 }
 class CVideoInfoTag;
 class CFileItem;
@@ -61,13 +60,6 @@ namespace INFO
 
 // forward
 class CGUIWindow;
-namespace EPG
-{
-  class CEpgInfoTag;
-  typedef std::shared_ptr<EPG::CEpgInfoTag> CEpgInfoTagPtr;
-}
-
-
 
 // structure to hold multiple integer data
 // for storage referenced from a single integer
@@ -109,13 +101,13 @@ friend CSetCurrentItemJob;
 
 public:
   CGUIInfoManager(void);
-  virtual ~CGUIInfoManager(void);
+  ~CGUIInfoManager(void) override;
 
   void Clear();
-  virtual bool OnMessage(CGUIMessage &message) override;
+  bool OnMessage(CGUIMessage &message) override;
 
-  virtual int GetMessageMask() override;
-  virtual void OnApplicationMessage(KODI::MESSAGING::ThreadMessage* pMsg) override;
+  int GetMessageMask() override;
+  void OnApplicationMessage(KODI::MESSAGING::ThreadMessage* pMsg) override;
 
   /*! \brief Register a boolean condition/expression
    This routine allows controls or other clients of the info manager to register
@@ -159,7 +151,7 @@ public:
   /*! \brief Set currently playing file item
    \param blocking whether to run in current thread (true) or background thread (false)
    */
-  void SetCurrentItem(const CFileItemPtr item);
+  void SetCurrentItem(const CFileItem &item);
   void ResetCurrentItem();
   // Current song stuff
   /// \brief Retrieves tag info (if necessary) and fills in our current song path.
@@ -169,6 +161,7 @@ public:
   void SetCurrentSlide(CFileItem &item);
   const CFileItem &GetCurrentSlide() const;
   void ResetCurrentSlide();
+  void SetCurrentGame(CFileItem &item);
   void SetCurrentSongTag(const MUSIC_INFO::CMusicInfoTag &tag);
   void SetCurrentVideoTag(const CVideoInfoTag &tag);
 
@@ -180,6 +173,7 @@ public:
   std::string GetMusicLabel(int item);
   std::string GetMusicTagLabel(int info, const CFileItem *item);
   std::string GetVideoLabel(int item);
+  std::string GetGameLabel(int item);
   std::string GetPlaylistLabel(int item, int playlistid = -1 /* PLAYLIST_NONE */) const;
   std::string GetMusicPartyModeLabel(int item);
   const std::string GetMusicPlaylistInfo(const GUIInfo& info);
@@ -196,12 +190,9 @@ public:
   bool GetDisplayAfterSeek();
   void SetDisplayAfterSeek(unsigned int timeOut = 2500, int seekOffset = 0);
   void SetShowTime(bool showtime) { m_playerShowTime = showtime; };
-  void SetShowCodec(bool showcodec) { m_playerShowCodec = showcodec; };
-  void SetShowInfo(bool showinfo) { m_playerShowInfo = showinfo; };
+  void SetShowInfo(bool showinfo);
   bool GetShowInfo() const { return m_playerShowInfo; }
-  void ToggleShowCodec() { m_playerShowCodec = !m_playerShowCodec; };
-  bool ToggleShowInfo() { m_playerShowInfo = !m_playerShowInfo; return m_playerShowInfo; };
-  bool IsPlayerChannelPreviewActive() const;
+  bool ToggleShowInfo();
 
   std::string GetSystemHeatInfo(int info);
   CTemperature GetGPUTemperature();
@@ -269,6 +260,7 @@ protected:
 
   bool GetMultiInfoBool(const GUIInfo &info, int contextWindow = 0, const CGUIListItem *item = NULL);
   bool GetMultiInfoInt(int &value, const GUIInfo &info, int contextWindow = 0) const;
+  CGUIControl * GetActiveContainer(int containerId, int contextWindow) const;
   std::string GetMultiInfoLabel(const GUIInfo &info, int contextWindow = 0, std::string *fallback = NULL);
   int TranslateListItem(const Property &info);
   int TranslateMusicPlayerString(const std::string &info) const;
@@ -297,7 +289,7 @@ protected:
    * @brief Get the EPG tag that is currently active
    * @return the currently active tag or NULL if no active tag was found
    */
-  EPG::CEpgInfoTagPtr GetEpgInfoTag() const;
+  PVR::CPVREpgInfoTagPtr GetEpgInfoTag() const;
 
   void SetCurrentItemJob(const CFileItemPtr item);
 
@@ -324,9 +316,8 @@ protected:
   //Fullscreen OSD Stuff
   unsigned int m_AfterSeekTimeout;
   int m_seekOffset;
-  bool m_playerShowTime;
-  bool m_playerShowCodec;
-  bool m_playerShowInfo;
+  std::atomic_bool m_playerShowTime;
+  std::atomic_bool m_playerShowInfo;
 
   // FPS counters
   float m_fps;
@@ -337,7 +328,9 @@ protected:
   int m_nextWindowID;
   int m_prevWindowID;
 
-  std::vector<INFO::InfoPtr> m_bools;
+  typedef std::set<INFO::InfoPtr, bool(*)(const INFO::InfoPtr&, const INFO::InfoPtr&)> INFOBOOLTYPE;
+  INFOBOOLTYPE m_bools;
+  unsigned int m_refreshCounter;
   std::vector<INFO::CSkinVariableString> m_skinVariableStrings;
 
   int m_libraryHasMusic;
@@ -349,13 +342,17 @@ protected:
   int m_libraryHasCompilations;
   
   //Count of artists in music library contributing to song by role e.g. composers, conductors etc.
-  //For checking visibiliy of custom nodes for a role.
+  //For checking visibility of custom nodes for a role.
   std::vector<std::pair<std::string, int>> m_libraryRoleCounts; 
 
-  SPlayerVideoStreamInfo m_videoInfo;
-  SPlayerAudioStreamInfo m_audioInfo;
+  VideoStreamInfo m_videoInfo;
+  AudioStreamInfo m_audioInfo;
 
   CCriticalSection m_critInfo;
+
+private:
+  static std::string FormatRatingAndVotes(float rating, int votes);
+  bool IsPlayerChannelPreviewActive() const;
 };
 
 /*!

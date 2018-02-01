@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,10 +25,6 @@
 using namespace XFILE;
 using namespace TagLib;
 using namespace MUSIC_INFO;
-
-#ifdef TARGET_WINDOWS
-#pragma comment(lib, "tag.lib")
-#endif
 
 /*!
  * Construct a File object and opens the \a file.  \a file should be a
@@ -125,7 +121,7 @@ void TagLibVFSStream::insert(const ByteVector &data, TagLib::ulong start, TagLib
   // Now I'll explain the steps in this ugliness:
 
   // First, make sure that we're working with a buffer that is longer than
-  // the *differnce* in the tag sizes.  We want to avoid overwriting parts
+  // the *difference* in the tag sizes.  We want to avoid overwriting parts
   // that aren't yet in memory, so this is necessary.
   TagLib::ulong bufferLength = bufferSize();
 
@@ -177,7 +173,7 @@ void TagLibVFSStream::insert(const ByteVector &data, TagLib::ulong start, TagLib
     // Seek to the write position and write our buffer.  Increment the
     // writePosition.
     seek(writePosition);
-    if (m_file.Write(buffer.data(), buffer.size()) < buffer.size())
+    if (m_file.Write(buffer.data(), buffer.size()) < static_cast<ssize_t>(buffer.size()))
       return; // error
     writePosition += buffer.size();
 
@@ -207,7 +203,11 @@ void TagLibVFSStream::removeBlock(TagLib::ulong start, TagLib::ulong length)
   while(bytesRead != 0)
   {
     seek(readPosition);
-    bytesRead = m_file.Read(buffer.data(), bufferLength);
+    ssize_t read = m_file.Read(buffer.data(), bufferLength);
+    if (read < 0)
+      return;// explicit error
+
+    bytesRead = static_cast<TagLib::ulong>(read);
     readPosition += bytesRead;
 
     // Check to see if we just read the last block.  We need to call clear()

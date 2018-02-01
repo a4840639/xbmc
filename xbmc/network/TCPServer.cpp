@@ -41,6 +41,10 @@ static const char     bt_service_prov[] = "XBMC JSON-RPC Provider";
 static const uint32_t bt_service_guid[] = {0x65AE4CC0, 0x775D11E0, 0xBE16CE28, 0x4824019B};
 #endif
 
+#if defined(TARGET_WINDOWS)
+#include "platform/win32/CharsetConverter.h"
+#endif
+
 #ifdef HAVE_LIBBLUETOOTH
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
@@ -67,7 +71,20 @@ bool CTCPServer::StartServer(int port, bool nonlocal)
   ServerInstance = new CTCPServer(port, nonlocal);
   if (ServerInstance->Initialize())
   {
-    ServerInstance->Create();
+    size_t thread_stacksize = 0;
+#if defined(TARGET_DARWIN_TVOS)
+    void *stack_addr;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_getstack(&attr, &stack_addr, &thread_stacksize);
+    pthread_attr_destroy(&attr);
+    // double the stack size under tvos, not sure why yet
+    // but it stoped crashing using Kodi json -> play video.
+    // non-tvos will pass a value of zero which means 'system default'
+    thread_stacksize *= 2;
+  CLog::Log(LOGDEBUG, "CTCPServer: increasing thread stack to %zu", thread_stacksize);
+#endif
+    ServerInstance->Create(false, thread_stacksize);
     return true;
   }
   else
@@ -263,6 +280,14 @@ bool CTCPServer::Initialize()
   return false;
 }
 
+#ifdef TARGET_WINDOWS_STORE
+bool CTCPServer::InitializeBlue()
+{
+  CLog::Log(LOGDEBUG, "%s is not implemented", __FUNCTION__);
+  return true; // need to fake it for now
+}
+
+#else
 bool CTCPServer::InitializeBlue()
 {
   if (!m_nonlocal)
@@ -316,11 +341,13 @@ bool CTCPServer::InitializeBlue()
   addrinfo.RemoteAddr.lpSockaddr      = (SOCKADDR*)&sa;
   addrinfo.RemoteAddr.iSockaddrLength = sizeof(sa);
 
+  using KODI::PLATFORM::WINDOWS::ToW;
+
   WSAQUERYSET service = {};
   service.dwSize = sizeof(service);
-  service.lpszServiceInstanceName = (LPSTR)bt_service_name;
+  service.lpszServiceInstanceName = const_cast<LPWSTR>(ToW(bt_service_name).c_str());
   service.lpServiceClassId        = (LPGUID)&bt_service_guid;
-  service.lpszComment             = (LPSTR)bt_service_desc;
+  service.lpszComment             = const_cast<LPWSTR>(ToW(bt_service_desc).c_str());
   service.dwNameSpace             = NS_BTH;
   service.lpNSProviderId          = NULL; /* RFCOMM? */
   service.lpcsaBuffer             = &addrinfo;
@@ -381,7 +408,7 @@ bool CTCPServer::InitializeBlue()
   sdp_uuid128_create(&svc_uuid, &bt_service_guid);
   sdp_set_service_id(record, svc_uuid);
 
-  // make the service record publicly browsable
+  // make the service record publicly browseable
   sdp_uuid16_create(&root_uuid, PUBLIC_BROWSE_GROUP);
   root_list = sdp_list_append(0, &root_uuid);
   sdp_set_browse_groups(record, root_list);
@@ -443,6 +470,7 @@ bool CTCPServer::InitializeBlue()
 #endif
   return false;
 }
+#endif
 
 bool CTCPServer::InitializeTCP()
 {

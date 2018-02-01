@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2014 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,30 +20,26 @@
 
 #pragma once
 
-#if defined(HAVE_X11)
 #include "GLContext.h"
 #include "EGL/egl.h"
+#include <X11/Xutil.h>
 
 class CGLContextEGL : public CGLContext
 {
 public:
-  CGLContextEGL(Display *dpy);
-  virtual ~CGLContextEGL();
-  virtual bool Refresh(bool force, int screen, Window glWindow, bool &newContext);
-  virtual void Destroy();
-  virtual void Detach();
-  virtual void SetVSync(bool enable, int &mode);
-  virtual void SwapBuffers(int &mode);
-  virtual void QueryExtensions();
-  virtual bool IsExtSupported(const char* extension);
-  XVisualInfo* GetVisual();
+  explicit CGLContextEGL(Display *dpy);
+  ~CGLContextEGL() override;
+  bool Refresh(bool force, int screen, Window glWindow, bool &newContext) override;
+  void Destroy() override;
+  void Detach() override;
+  void SetVSync(bool enable) override;
+  void SwapBuffers() override;
+  void QueryExtensions() override;
   EGLDisplay m_eglDisplay;
   EGLSurface m_eglSurface;
   EGLContext m_eglContext;
   EGLConfig m_eglConfig;
 protected:
   bool IsSuitableVisual(XVisualInfo *vInfo);
-  EGLConfig getEGLConfig(EGLDisplay eglDisplay, XVisualInfo *vInfo);
+  EGLConfig GetEGLConfig(EGLDisplay eglDisplay, XVisualInfo *vInfo);
 };
-
-#endif

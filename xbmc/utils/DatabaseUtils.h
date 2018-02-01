@@ -1,7 +1,7 @@
 #pragma once
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -71,9 +71,11 @@ typedef enum {
   FieldGenre,
   FieldAlbum,
   FieldArtist,
+  FieldArtistSort,
   FieldAlbumArtist,
   FieldTitle,
   FieldSortTitle,
+  FieldOriginalTitle,
   FieldYear,
   FieldTime,
   FieldTrackNumber,
@@ -114,6 +116,7 @@ typedef enum {
   FieldStyles,
   FieldAlbumType,
   FieldMusicLabel,
+  FieldCompilation,
   FieldTrailer,
   FieldVideoResolution,
   FieldVideoAspectRatio,
@@ -128,13 +131,16 @@ typedef enum {
   FieldChannelNumber,
   FieldInstruments,
   FieldBiography,
+  FieldArtistType,
+  FieldGender,
+  FieldDisambiguation,
   FieldBorn,
   FieldBandFormed,
   FieldDisbanded,
   FieldDied,
   FieldStereoMode,
   FieldUserRating,
-  FieldRelevance, // Used for actors' appearences
+  FieldRelevance, // Used for actors' appearances
   FieldMax
 } Field;
 
@@ -159,7 +165,7 @@ public:
   static int GetField(Field field, const MediaType &mediaType);
   static int GetFieldIndex(Field field, const MediaType &mediaType);
   static bool GetSelectFields(const Fields &fields, const MediaType &mediaType, FieldList &selectFields);
-  
+
   static bool GetFieldValue(const dbiplus::field_value &fieldValue, CVariant &variantValue);
   static bool GetDatabaseResults(const MediaType &mediaType, const FieldList &fields, const std::unique_ptr<dbiplus::Dataset> &dataset, DatabaseResults &results);
 

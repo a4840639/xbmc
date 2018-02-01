@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,13 +20,18 @@
 
 #include "DVDFactoryInputStream.h"
 #include "DVDInputStreamPVRManager.h"
-#include "filesystem/PVRFile.h"
+#include "cores/VideoPlayer/Interface/Addon/DemuxPacket.h"
+#include "ServiceBroker.h"
 #include "URL.h"
 #include "pvr/PVRManager.h"
 #include "pvr/channels/PVRChannel.h"
 #include "utils/log.h"
+#include "utils/StringUtils.h"
+#include "utils/URIUtils.h"
 #include "pvr/addons/PVRClients.h"
 #include "pvr/channels/PVRChannelGroupsContainer.h"
+#include "pvr/recordings/PVRRecordingsPath.h"
+#include "pvr/recordings/PVRRecordings.h"
 #include "settings/Settings.h"
 #include "cores/VideoPlayer/DVDDemuxers/DVDDemux.h"
 
@@ -39,26 +44,15 @@ using namespace PVR;
  * Description: Class constructor, initialize member variables
  *              public class is CDVDInputStream
  */
-CDVDInputStreamPVRManager::CDVDInputStreamPVRManager(IVideoPlayer* pPlayer, CFileItem& fileitem)
+CDVDInputStreamPVRManager::CDVDInputStreamPVRManager(IVideoPlayer* pPlayer, const CFileItem& fileitem)
   : CDVDInputStream(DVDSTREAM_TYPE_PVRMANAGER, fileitem)
 {
   m_pPlayer = pPlayer;
-  m_pFile = NULL;
-  m_pRecordable = NULL;
-  m_pLiveTV = NULL;
-  m_pOtherStream = NULL;
   m_eof = true;
   m_ScanTimeout.Set(0);
-  m_isOtherStreamHack = false;
   m_demuxActive = false;
 
   m_StreamProps = new PVR_STREAM_PROPERTIES;
-  m_streamAudio = new CDemuxStreamAudio;
-  m_streamVideo = new CDemuxStreamVideo;
-  m_streamSubtitle = new CDemuxStreamSubtitle;
-  m_streamTeletext = new CDemuxStreamTeletext;
-  m_streamRadioRDS = new CDemuxStreamRadioRDS;
-  m_streamDefault = new CDemuxStream;
 }
 
 /************************************************************************
@@ -68,18 +62,8 @@ CDVDInputStreamPVRManager::~CDVDInputStreamPVRManager()
 {
   Close();
 
+  m_streamMap.clear();
   delete m_StreamProps;
-  delete m_streamAudio;
-  delete m_streamVideo;
-  delete m_streamSubtitle;
-  delete m_streamTeletext;
-  delete m_streamRadioRDS;
-  delete m_streamDefault;
-}
-
-void CDVDInputStreamPVRManager::ResetScanTimeout(unsigned int iTimeoutMs)
-{
-  m_ScanTimeout.Set(iTimeoutMs);
 }
 
 bool CDVDInputStreamPVRManager::IsEOF()
@@ -88,274 +72,168 @@ bool CDVDInputStreamPVRManager::IsEOF()
   if (!m_ScanTimeout.IsTimePast())
     return false;
 
-  if (m_pOtherStream)
-    return m_pOtherStream->IsEOF();
-  else
-    return !m_pFile || m_eof;
+  return m_eof;
 }
 
 bool CDVDInputStreamPVRManager::Open()
 {
-  /* Open PVR File for both cases, to have access to ILiveTVInterface and
-   * IRecordable
-   */
-  m_pFile       = new CPVRFile;
-  m_pLiveTV     = ((CPVRFile*)m_pFile)->GetLiveTV();
-  m_pRecordable = ((CPVRFile*)m_pFile)->GetRecordable();
-
   if (!CDVDInputStream::Open())
     return false;
 
-  CURL url(m_item.GetPath());
-  if (!m_pFile->Open(url))
+  CURL url(m_item.GetDynPath());
+
+  std::string strURL = url.Get();
+
+  if (StringUtils::StartsWith(strURL, "pvr://channels/tv/") ||
+      StringUtils::StartsWith(strURL, "pvr://channels/radio/"))
   {
-    delete m_pFile;
-    m_pFile = NULL;
-    m_pLiveTV = NULL;
-    m_pRecordable = NULL;
-    return false;
+    CFileItemPtr tag = CServiceBroker::GetPVRManager().ChannelGroups()->GetByPath(strURL);
+    if (tag && tag->HasPVRChannelInfoTag())
+    {
+      if (!CServiceBroker::GetPVRManager().OpenLiveStream(*tag))
+        return false;
+
+      m_isRecording = false;
+      CLog::Log(LOGDEBUG, "CDVDInputStreamPVRManager - %s - playback has started on filename %s", __FUNCTION__, strURL.c_str());
+    }
+    else
+    {
+      CLog::Log(LOGERROR, "CDVDInputStreamPVRManager - %s - channel not found with filename %s", __FUNCTION__, strURL.c_str());
+      return false;
+    }
   }
-  m_eof = false;
-
-  /*
-   * Translate the "pvr://....." entry.
-   * The PVR Client can use http or whatever else is supported by VideoPlayer.
-   * to access streams.
-   * If after translation the file protocol is still "pvr://" use this class
-   * to read the stream data over the CPVRFile class and the PVR Library itself.
-   * Otherwise call CreateInputStream again with the translated filename and looks again
-   * for the right protocol stream handler and swap every call to this input stream
-   * handler.
-   */
-  m_isOtherStreamHack = false;
-  std::string transFile = XFILE::CPVRFile::TranslatePVRFilename(m_item.GetPath());
-  if(transFile.substr(0, 6) != "pvr://")
+  else if (CPVRRecordingsPath(strURL).IsActive())
   {
-    m_isOtherStreamHack = true;
-    
-    m_item.SetPath(transFile);
-    m_pOtherStream = CDVDFactoryInputStream::CreateInputStream(m_pPlayer, m_item);
-    if (!m_pOtherStream)
+    CFileItemPtr tag = CServiceBroker::GetPVRManager().Recordings()->GetByPath(strURL);
+    if (tag && tag->HasPVRRecordingInfoTag())
     {
-      CLog::Log(LOGERROR, "CDVDInputStreamPVRManager::Open - unable to create input stream for [%s]", CURL::GetRedacted(transFile).c_str());
-      return false;
-    }
+      if (!CServiceBroker::GetPVRManager().OpenRecordedStream(tag->GetPVRRecordingInfoTag()))
+        return false;
 
-    if (!m_pOtherStream->Open())
+      m_isRecording = true;
+      CLog::Log(LOGDEBUG, "%s - playback has started on recording %s (%s)", __FUNCTION__, strURL.c_str(), tag->GetPVRRecordingInfoTag()->m_strIconPath.c_str());
+    }
+    else
     {
-      CLog::Log(LOGERROR, "CDVDInputStreamPVRManager::Open - error opening [%s]", CURL::GetRedacted(transFile).c_str());
-      delete m_pFile;
-      m_pFile = NULL;
-      m_pLiveTV = NULL;
-      m_pRecordable = NULL;
-      delete m_pOtherStream;
-      m_pOtherStream = NULL;
+      CLog::Log(LOGERROR, "CDVDInputStreamPVRManager - Recording not found with filename %s", strURL.c_str());
       return false;
     }
+  }
+  else if (CPVRRecordingsPath(strURL).IsDeleted())
+  {
+    CLog::Log(LOGNOTICE, "CDVDInputStreamPVRManager - Playback of deleted recordings is not possible (%s)", strURL.c_str());
+    return false;
   }
   else
   {
-    if (URIUtils::IsPVRChannel(url.Get()))
-    {
-      std::shared_ptr<CPVRClient> client;
-      if (g_PVRClients->GetPlayingClient(client) &&
-          client->HandlesDemuxing())
-        m_demuxActive = true;
-    }
+    CLog::Log(LOGERROR, "%s - invalid path specified %s", __FUNCTION__, strURL.c_str());
+    return false;
   }
 
-  ResetScanTimeout((unsigned int) CSettings::GetInstance().GetInt(CSettings::SETTING_PVRPLAYBACK_SCANTIME) * 1000);
-  CLog::Log(LOGDEBUG, "CDVDInputStreamPVRManager::Open - stream opened: %s", CURL::GetRedacted(transFile).c_str());
+  m_eof = false;
+
+  if (URIUtils::IsPVRChannel(url.Get()))
+  {
+    std::shared_ptr<CPVRClient> client;
+    if (CServiceBroker::GetPVRManager().Clients()->GetPlayingClient(client) &&
+        client->GetClientCapabilities().HandlesDemuxing())
+      m_demuxActive = true;
+  }
+
+  CLog::Log(LOGDEBUG, "CDVDInputStreamPVRManager::Open - stream opened: %s", CURL::GetRedacted(m_item.GetDynPath()).c_str());
 
   m_StreamProps->iStreamCount = 0;
   return true;
 }
 
-// close file and reset everyting
+// close file and reset everything
 void CDVDInputStreamPVRManager::Close()
 {
-  if (m_pOtherStream)
-  {
-    m_pOtherStream->Close();
-    delete m_pOtherStream;
-  }
-
-  if (m_pFile)
-  {
-    m_pFile->Close();
-    delete m_pFile;
-  }
+  CServiceBroker::GetPVRManager().CloseStream();
 
   CDVDInputStream::Close();
 
-  m_pPlayer         = NULL;
-  m_pFile           = NULL;
-  m_pLiveTV         = NULL;
-  m_pRecordable     = NULL;
-  m_pOtherStream    = NULL;
-  m_eof             = true;
+  m_eof = true;
 
   CLog::Log(LOGDEBUG, "CDVDInputStreamPVRManager::Close - stream closed");
 }
 
 int CDVDInputStreamPVRManager::Read(uint8_t* buf, int buf_size)
 {
-  if(!m_pFile) return -1;
+  int ret = CServiceBroker::GetPVRManager().Clients()->ReadStream((BYTE*)buf, buf_size);
+  if (ret < 0)
+    ret = -1;
 
-  if (m_pOtherStream)
-  {
-    return m_pOtherStream->Read(buf, buf_size);
-  }
-  else
-  {
-    unsigned int ret = m_pFile->Read(buf, buf_size);
+  /* we currently don't support non completing reads */
+  if( ret == 0 )
+    m_eof = true;
 
-    /* we currently don't support non completing reads */
-    if( ret == 0 ) m_eof = true;
-
-    return (int)(ret & 0xFFFFFFFF);
-  }
+  return ret;
 }
 
 int64_t CDVDInputStreamPVRManager::Seek(int64_t offset, int whence)
 {
-  if (!m_pFile)
-    return -1;
-
-  if (m_pOtherStream)
+  if (whence == SEEK_POSSIBLE)
   {
-    return m_pOtherStream->Seek(offset, whence);
+    if (CServiceBroker::GetPVRManager().Clients()->CanSeekStream())
+      return 1;
+    else
+      return 0;
   }
-  else
-  {
-    if (whence == SEEK_POSSIBLE)
-      return m_pFile->IoControl(IOCTRL_SEEK_POSSIBLE, NULL);
 
-    int64_t ret = m_pFile->Seek(offset, whence);
+  int64_t ret = CServiceBroker::GetPVRManager().Clients()->SeekStream(offset, whence);
 
-    /* if we succeed, we are not eof anymore */
-    if( ret >= 0 ) m_eof = false;
+  // if we succeed, we are not eof anymore
+  if( ret >= 0 )
+    m_eof = false;
 
-    return ret;
-  }
+  return ret;
 }
 
 int64_t CDVDInputStreamPVRManager::GetLength()
 {
-  if(!m_pFile) return -1;
-
-  if (m_pOtherStream)
-    return m_pOtherStream->GetLength();
-  else
-    return m_pFile->GetLength();
+  return CServiceBroker::GetPVRManager().Clients()->GetStreamLength();
 }
 
 int CDVDInputStreamPVRManager::GetTotalTime()
 {
-  if (m_pLiveTV)
-    return m_pLiveTV->GetTotalTime();
+  if (!m_isRecording)
+    return CServiceBroker::GetPVRManager().GetTotalTime();
   return 0;
 }
 
 int CDVDInputStreamPVRManager::GetTime()
 {
-  if (m_pLiveTV)
-    return m_pLiveTV->GetStartTime();
+  if (!m_isRecording)
+    return CServiceBroker::GetPVRManager().GetStartTime();
   return 0;
 }
 
-bool CDVDInputStreamPVRManager::NextChannel(bool preview/* = false*/)
+bool CDVDInputStreamPVRManager::GetTimes(Times &times)
 {
-  PVR_CLIENT client;
-  if (!preview && IsOtherStreamHack())
+  PVR_STREAM_TIMES streamTimes;
+  bool ret = CServiceBroker::GetPVRManager().Clients()->GetStreamTimes(&streamTimes);
+  if (ret)
   {
-    CPVRChannelPtr channel(g_PVRManager.GetCurrentChannel());
-    CFileItemPtr item(g_PVRChannelGroups->Get(channel->IsRadio())->GetSelectedGroup()->GetByChannelUp(channel));
-    if (item)
-      return CloseAndOpen(item->GetPath().c_str());
-  }
-  else if (m_pLiveTV)
-    return m_pLiveTV->NextChannel(preview);
-  return false;
-}
-
-bool CDVDInputStreamPVRManager::PrevChannel(bool preview/* = false*/)
-{
-  PVR_CLIENT client;
-  if (!preview && IsOtherStreamHack())
-  {
-    CPVRChannelPtr channel(g_PVRManager.GetCurrentChannel());
-    CFileItemPtr item(g_PVRChannelGroups->Get(channel->IsRadio())->GetSelectedGroup()->GetByChannelDown(channel));
-    if (item)
-      return CloseAndOpen(item->GetPath().c_str());
-  }
-  else if (m_pLiveTV)
-    return m_pLiveTV->PrevChannel(preview);
-  return false;
-}
-
-bool CDVDInputStreamPVRManager::SelectChannelByNumber(unsigned int iChannelNumber)
-{
-  PVR_CLIENT client;
-  CPVRChannelPtr currentChannel(g_PVRManager.GetCurrentChannel());
-  CFileItemPtr item(g_PVRChannelGroups->Get(currentChannel->IsRadio())->GetSelectedGroup()->GetByChannelNumber(iChannelNumber));
-  if (!item)
-    return false;
-
-  if (IsOtherStreamHack())
-  {
-    return CloseAndOpen(item->GetPath().c_str());
-  }
-  else if (m_pLiveTV)
-  {
-    if (item->HasPVRChannelInfoTag())
-      return m_pLiveTV->SelectChannelById(item->GetPVRChannelInfoTag()->ChannelID());
+    times.startTime = streamTimes.startTime;
+    times.ptsStart = streamTimes.ptsStart;
+    times.ptsBegin = streamTimes.ptsBegin;
+    times.ptsEnd = streamTimes.ptsEnd;
   }
 
-  return false;
-}
-
-bool CDVDInputStreamPVRManager::SelectChannel(const CPVRChannelPtr &channel)
-{
-  assert(channel.get());
-
-  PVR_CLIENT client;
-  if (IsOtherStreamHack())
-  {
-    CFileItem item(channel);
-    return CloseAndOpen(item.GetPath().c_str());
-  }
-  else if (m_pLiveTV)
-  {
-    return m_pLiveTV->SelectChannelById(channel->ChannelID());
-  }
-
-  return false;
+  return ret;
 }
 
 CPVRChannelPtr CDVDInputStreamPVRManager::GetSelectedChannel()
 {
-  return g_PVRManager.GetCurrentChannel();
-}
-
-bool CDVDInputStreamPVRManager::UpdateItem(CFileItem& item)
-{
-  if (m_pLiveTV)
-    return m_pLiveTV->UpdateItem(item);
-  return false;
+  return CServiceBroker::GetPVRManager().GetPlayingChannel();
 }
 
 CDVDInputStream::ENextStream CDVDInputStreamPVRManager::NextStream()
 {
-  if(!m_pFile)
-    return NEXTSTREAM_NONE;
-
   m_eof = IsEOF();
 
-  CDVDInputStream::ENextStream next;
-  if (m_pOtherStream && ((next = m_pOtherStream->NextStream()) != NEXTSTREAM_NONE))
-    return next;
-  else if(m_pFile->SkipNext())
+  if(!m_isRecording)
   {
     if (m_eof)
       return NEXTSTREAM_OPEN;
@@ -365,70 +243,24 @@ CDVDInputStream::ENextStream CDVDInputStreamPVRManager::NextStream()
   return NEXTSTREAM_NONE;
 }
 
-bool CDVDInputStreamPVRManager::CanRecord()
-{
-  if (m_pRecordable)
-    return m_pRecordable->CanRecord();
-  return false;
-}
-
-bool CDVDInputStreamPVRManager::IsRecording()
-{
-  if (m_pRecordable)
-    return m_pRecordable->IsRecording();
-  return false;
-}
-
-bool CDVDInputStreamPVRManager::Record(bool bOnOff)
-{
-  if (m_pRecordable)
-    return m_pRecordable->Record(bOnOff);
-  return false;
-}
-
 bool CDVDInputStreamPVRManager::CanPause()
 {
-  return g_PVRClients->CanPauseStream();
+  return CServiceBroker::GetPVRManager().Clients()->CanPauseStream();
 }
 
 bool CDVDInputStreamPVRManager::CanSeek()
 {
-  return g_PVRClients->CanSeekStream();
+  return CServiceBroker::GetPVRManager().Clients()->CanSeekStream();
 }
 
 void CDVDInputStreamPVRManager::Pause(bool bPaused)
 {
-  g_PVRClients->PauseStream(bPaused);
-}
-
-std::string CDVDInputStreamPVRManager::GetInputFormat()
-{
-  if (!m_pOtherStream && g_PVRManager.IsStarted())
-    return g_PVRClients->GetCurrentInputFormat();
-  return "";
-}
-
-bool CDVDInputStreamPVRManager::CloseAndOpen(const char* strFile)
-{
-  Close();
-
-  m_item.SetPath(strFile);
-  if (Open())
-  {
-    return true;
-  }
-
-  return false;
-}
-
-bool CDVDInputStreamPVRManager::IsOtherStreamHack(void)
-{
-  return m_isOtherStreamHack;
+  CServiceBroker::GetPVRManager().Clients()->PauseStream(bPaused);
 }
 
 bool CDVDInputStreamPVRManager::IsRealtime()
 {
-  return g_PVRClients->IsRealTimeStream();
+  return CServiceBroker::GetPVRManager().Clients()->IsRealTimeStream();
 }
 
 inline CDVDInputStream::IDemux* CDVDInputStreamPVRManager::GetIDemux()
@@ -441,25 +273,27 @@ inline CDVDInputStream::IDemux* CDVDInputStreamPVRManager::GetIDemux()
 
 bool CDVDInputStreamPVRManager::OpenDemux()
 {
-  PVR_CLIENT client;
-  if (!g_PVRClients->GetPlayingClient(client))
+  CPVRClientPtr client;
+  if (!CServiceBroker::GetPVRManager().Clients()->GetPlayingClient(client))
   {
     return false;
   }
 
   client->GetStreamProperties(m_StreamProps);
+  UpdateStreamMap();
   return true;
 }
 
 DemuxPacket* CDVDInputStreamPVRManager::ReadDemux()
 {
-  PVR_CLIENT client;
-  if (!g_PVRClients->GetPlayingClient(client))
+  CPVRClientPtr client;
+  if (!CServiceBroker::GetPVRManager().Clients()->GetPlayingClient(client))
   {
     return nullptr;
   }
 
-  DemuxPacket* pPacket = client->DemuxRead();
+  DemuxPacket* pPacket = nullptr;
+  client->DemuxRead(pPacket);
   if (!pPacket)
   {
     return nullptr;
@@ -472,89 +306,53 @@ DemuxPacket* CDVDInputStreamPVRManager::ReadDemux()
   else if (pPacket->iStreamId == DMX_SPECIALID_STREAMCHANGE)
   {
     client->GetStreamProperties(m_StreamProps);
+    UpdateStreamMap();
   }
 
   return pPacket;
 }
 
-CDemuxStream* CDVDInputStreamPVRManager::GetStream(int iStreamId)
+CDemuxStream* CDVDInputStreamPVRManager::GetStream(int iStreamId) const
 {
-  CDemuxStream *ret = m_streamDefault;
-  m_streamDefault->type = STREAM_NONE;
-
-  if (m_StreamProps->stream[iStreamId].iCodecType == XBMC_CODEC_TYPE_AUDIO)
+  auto stream = m_streamMap.find(iStreamId);
+  if (stream != m_streamMap.end())
   {
-    m_streamAudio->iChannels       = m_StreamProps->stream[iStreamId].iChannels;
-    m_streamAudio->iSampleRate     = m_StreamProps->stream[iStreamId].iSampleRate;
-    m_streamAudio->iBlockAlign     = m_StreamProps->stream[iStreamId].iBlockAlign;
-    m_streamAudio->iBitRate        = m_StreamProps->stream[iStreamId].iBitRate;
-    m_streamAudio->iBitsPerSample  = m_StreamProps->stream[iStreamId].iBitsPerSample;
-
-    ret = m_streamAudio;
+    return stream->second.get();
   }
-  else if (m_StreamProps->stream[iStreamId].iCodecType == XBMC_CODEC_TYPE_VIDEO)
-  {
-    m_streamVideo->iFpsScale       = m_StreamProps->stream[iStreamId].iFPSScale;
-    m_streamVideo->iFpsRate        = m_StreamProps->stream[iStreamId].iFPSRate;
-    m_streamVideo->iHeight         = m_StreamProps->stream[iStreamId].iHeight;
-    m_streamVideo->iWidth          = m_StreamProps->stream[iStreamId].iWidth;
-    m_streamVideo->fAspect         = m_StreamProps->stream[iStreamId].fAspect;
-    m_streamVideo->stereo_mode     = "mono";
-
-    ret = m_streamVideo;
-  }
-  else if (m_StreamProps->stream[iStreamId].iCodecType == XBMC_CODEC_TYPE_SUBTITLE)
-  {
-    if(m_StreamProps->stream[iStreamId].iIdentifier)
-    {
-      m_streamSubtitle->ExtraData = new uint8_t[4];
-      m_streamSubtitle->ExtraSize = 4;
-      m_streamSubtitle->ExtraData[0] = (m_StreamProps->stream[iStreamId].iIdentifier >> 8) & 0xff;
-      m_streamSubtitle->ExtraData[1] = (m_StreamProps->stream[iStreamId].iIdentifier >> 0) & 0xff;
-      m_streamSubtitle->ExtraData[2] = (m_StreamProps->stream[iStreamId].iIdentifier >> 24) & 0xff;
-      m_streamSubtitle->ExtraData[3] = (m_StreamProps->stream[iStreamId].iIdentifier >> 16) & 0xff;
-    }
-    ret = m_streamSubtitle;
-  }
-  else if (m_StreamProps->stream[iStreamId].iCodecId == AV_CODEC_ID_DVB_TELETEXT)
-  {
-    ret = m_streamTeletext;
-  }
-  else if (m_StreamProps->stream[iStreamId].iCodecType == XBMC_CODEC_TYPE_RDS &&
-           CSettings::GetInstance().GetBool("pvrplayback.enableradiords"))
-  {
-    ret = m_streamRadioRDS;
-  }
-
-  ret->codec = (AVCodecID)m_StreamProps->stream[iStreamId].iCodecId;
-  ret->iId = iStreamId;
-  ret->iPhysicalId = m_StreamProps->stream[iStreamId].iPhysicalId;
-  ret->language[0] = m_StreamProps->stream[iStreamId].strLanguage[0];
-  ret->language[1] = m_StreamProps->stream[iStreamId].strLanguage[1];
-  ret->language[2] = m_StreamProps->stream[iStreamId].strLanguage[2];
-  ret->language[3] = m_StreamProps->stream[iStreamId].strLanguage[3];
-  ret->realtime = true;
-  return ret;
+  else
+    return nullptr;
 }
 
-int CDVDInputStreamPVRManager::GetNrOfStreams()
+std::vector<CDemuxStream*> CDVDInputStreamPVRManager::GetStreams() const
+{
+  std::vector<CDemuxStream*> streams;
+
+  for (auto& st : m_streamMap)
+  {
+    streams.push_back(st.second.get());
+  }
+
+  return streams;
+}
+
+int CDVDInputStreamPVRManager::GetNrOfStreams() const
 {
   return m_StreamProps->iStreamCount;
 }
 
 void CDVDInputStreamPVRManager::SetSpeed(int Speed)
 {
-  PVR_CLIENT client;
-  if (g_PVRClients->GetPlayingClient(client))
+  CPVRClientPtr client;
+  if (CServiceBroker::GetPVRManager().Clients()->GetPlayingClient(client))
   {
     client->SetSpeed(Speed);
   }
 }
 
-bool CDVDInputStreamPVRManager::SeekTime(int timems, bool backwards, double *startpts)
+bool CDVDInputStreamPVRManager::SeekTime(double timems, bool backwards, double *startpts)
 {
-  PVR_CLIENT client;
-  if (g_PVRClients->GetPlayingClient(client))
+  CPVRClientPtr client;
+  if (CServiceBroker::GetPVRManager().Clients()->GetPlayingClient(client))
   {
     return client->SeekTime(timems, backwards, startpts);
   }
@@ -563,8 +361,8 @@ bool CDVDInputStreamPVRManager::SeekTime(int timems, bool backwards, double *sta
 
 void CDVDInputStreamPVRManager::AbortDemux()
 {
-  PVR_CLIENT client;
-  if (g_PVRClients->GetPlayingClient(client))
+  CPVRClientPtr client;
+  if (CServiceBroker::GetPVRManager().Clients()->GetPlayingClient(client))
   {
     client->DemuxAbort();
   }
@@ -572,9 +370,125 @@ void CDVDInputStreamPVRManager::AbortDemux()
 
 void CDVDInputStreamPVRManager::FlushDemux()
 {
-  PVR_CLIENT client;
-  if (g_PVRClients->GetPlayingClient(client))
+  CPVRClientPtr client;
+  if (CServiceBroker::GetPVRManager().Clients()->GetPlayingClient(client))
   {
     client->DemuxFlush();
   }
+}
+
+std::shared_ptr<CDemuxStream> CDVDInputStreamPVRManager::GetStreamInternal(int iStreamId)
+{
+  auto stream = m_streamMap.find(iStreamId);
+  if (stream != m_streamMap.end())
+  {
+    return stream->second;
+  }
+  else
+    return nullptr;
+}
+
+void CDVDInputStreamPVRManager::UpdateStreamMap()
+{
+  std::map<int, std::shared_ptr<CDemuxStream>> m_newStreamMap;
+
+  int num = GetNrOfStreams();
+  for (int i = 0; i < num; ++i)
+  {
+    PVR_STREAM_PROPERTIES::PVR_STREAM stream = m_StreamProps->stream[i];
+
+    std::shared_ptr<CDemuxStream> dStream = GetStreamInternal(stream.iPID);
+
+    if (stream.iCodecType == XBMC_CODEC_TYPE_AUDIO)
+    {
+      std::shared_ptr<CDemuxStreamAudio> streamAudio;
+
+      if (dStream)
+        streamAudio = std::dynamic_pointer_cast<CDemuxStreamAudio>(dStream);
+      if (!streamAudio)
+        streamAudio = std::make_shared<CDemuxStreamAudio>();
+
+      streamAudio->iChannels = stream.iChannels;
+      streamAudio->iSampleRate = stream.iSampleRate;
+      streamAudio->iBlockAlign = stream.iBlockAlign;
+      streamAudio->iBitRate = stream.iBitRate;
+      streamAudio->iBitsPerSample = stream.iBitsPerSample;
+
+      dStream = streamAudio;
+    }
+    else if (stream.iCodecType == XBMC_CODEC_TYPE_VIDEO)
+    {
+      std::shared_ptr<CDemuxStreamVideo> streamVideo;
+
+      if (dStream)
+        streamVideo = std::dynamic_pointer_cast<CDemuxStreamVideo>(dStream);
+      if (!streamVideo)
+        streamVideo = std::make_shared<CDemuxStreamVideo>();
+
+      streamVideo->iFpsScale = stream.iFPSScale;
+      streamVideo->iFpsRate = stream.iFPSRate;
+      streamVideo->iHeight = stream.iHeight;
+      streamVideo->iWidth = stream.iWidth;
+      streamVideo->fAspect = stream.fAspect;
+
+      dStream = streamVideo;
+    }
+    else if (stream.iCodecId == AV_CODEC_ID_DVB_TELETEXT)
+    {
+      std::shared_ptr<CDemuxStreamTeletext> streamTeletext;
+
+      if (dStream)
+        streamTeletext = std::dynamic_pointer_cast<CDemuxStreamTeletext>(dStream);
+      if (!streamTeletext)
+        streamTeletext = std::make_shared<CDemuxStreamTeletext>();
+
+      dStream = streamTeletext;
+    }
+    else if (stream.iCodecType == XBMC_CODEC_TYPE_SUBTITLE)
+    {
+      std::shared_ptr<CDemuxStreamSubtitle> streamSubtitle;
+
+      if (dStream)
+        streamSubtitle = std::dynamic_pointer_cast<CDemuxStreamSubtitle>(dStream);
+      if (!streamSubtitle)
+        streamSubtitle = std::make_shared<CDemuxStreamSubtitle>();
+
+      if (stream.iSubtitleInfo)
+      {
+        streamSubtitle->ExtraData = new uint8_t[4];
+        streamSubtitle->ExtraSize = 4;
+        streamSubtitle->ExtraData[0] = (stream.iSubtitleInfo >> 8) & 0xff;
+        streamSubtitle->ExtraData[1] = (stream.iSubtitleInfo >> 0) & 0xff;
+        streamSubtitle->ExtraData[2] = (stream.iSubtitleInfo >> 24) & 0xff;
+        streamSubtitle->ExtraData[3] = (stream.iSubtitleInfo >> 16) & 0xff;
+      }
+      dStream = streamSubtitle;
+    }
+    else if (stream.iCodecType == XBMC_CODEC_TYPE_RDS &&
+      CServiceBroker::GetSettings().GetBool("pvrplayback.enableradiords"))
+    {
+      std::shared_ptr<CDemuxStreamRadioRDS> streamRadioRDS;
+
+      if (dStream)
+        streamRadioRDS = std::dynamic_pointer_cast<CDemuxStreamRadioRDS>(dStream);
+      if (!streamRadioRDS)
+        streamRadioRDS = std::make_shared<CDemuxStreamRadioRDS>();
+
+      dStream = streamRadioRDS;
+    }
+    else
+      dStream = std::make_shared<CDemuxStream>();
+
+    dStream->codec = (AVCodecID)stream.iCodecId;
+    dStream->uniqueId = stream.iPID;
+    dStream->language[0] = stream.strLanguage[0];
+    dStream->language[1] = stream.strLanguage[1];
+    dStream->language[2] = stream.strLanguage[2];
+    dStream->language[3] = stream.strLanguage[3];
+    dStream->realtime = true;
+
+    m_newStreamMap[stream.iPID] = dStream;
+  }
+
+  m_streamMap = m_newStreamMap;
 }

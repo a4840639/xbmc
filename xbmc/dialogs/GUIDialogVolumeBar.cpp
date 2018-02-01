@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,8 +19,10 @@
  */
 
 #include "GUIDialogVolumeBar.h"
+#include "IGUIVolumeBarCallback.h"
 #include "Application.h"
 #include "input/Key.h"
+#include "threads/SingleLock.h"
 
 #define VOLUME_BAR_DISPLAY_TIME 1000L
 
@@ -30,8 +32,7 @@ CGUIDialogVolumeBar::CGUIDialogVolumeBar(void)
   m_loadType = LOAD_ON_GUI_INIT;
 }
 
-CGUIDialogVolumeBar::~CGUIDialogVolumeBar(void)
-{}
+CGUIDialogVolumeBar::~CGUIDialogVolumeBar(void) = default;
 
 bool CGUIDialogVolumeBar::OnAction(const CAction &action)
 {
@@ -60,4 +61,32 @@ bool CGUIDialogVolumeBar::OnMessage(CGUIMessage& message)
     return CGUIDialog::OnMessage(message);
   }
   return false; // don't process anything other than what we need!
+}
+
+void CGUIDialogVolumeBar::RegisterCallback(IGUIVolumeBarCallback *callback)
+{
+  CSingleLock lock(m_callbackMutex);
+
+  m_callbacks.insert(callback);
+}
+
+void CGUIDialogVolumeBar::UnregisterCallback(IGUIVolumeBarCallback *callback)
+{
+  CSingleLock lock(m_callbackMutex);
+
+  m_callbacks.erase(callback);
+}
+
+bool CGUIDialogVolumeBar::IsVolumeBarEnabled() const
+{
+  CSingleLock lock(m_callbackMutex);
+
+  // Hide volume bar if any callbacks are shown
+  for (const auto &callback : m_callbacks)
+  {
+    if (callback->IsShown())
+      return false;
+  }
+
+  return true;
 }

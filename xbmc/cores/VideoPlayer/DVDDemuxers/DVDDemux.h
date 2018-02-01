@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,18 +21,23 @@
  */
 
 #include <string>
+#include <vector>
+#include <memory>
 #include "system.h"
-#include "DVDDemuxPacket.h"
+#include "Interface/StreamInfo.h"
+
+struct DemuxPacket;
+struct DemuxCryptoSession;
 
 class CDVDInputStream;
+
+namespace ADDON {
+  class IAddonProvider;
+}
 
 #ifndef __GNUC__
 #pragma warning(push)
 #pragma warning(disable:4244)
-#endif
-
-#if (defined HAVE_CONFIG_H) && (!defined TARGET_WINDOWS)
-  #include "config.h"
 #endif
 
 extern "C" {
@@ -42,8 +47,6 @@ extern "C" {
 #ifndef __GNUC__
 #pragma warning(pop)
 #endif
-
-enum AVDiscard;
 
 enum StreamType
 {
@@ -76,8 +79,9 @@ class CDemuxStream
 public:
   CDemuxStream()
   {
-    iId = 0;
-    iPhysicalId = 0;
+    uniqueId = 0;
+    dvdNavId = 0;
+    demuxerId = -1;
     codec = (AVCodecID)0; // AV_CODEC_ID_NONE
     codec_fourcc = 0;
     profile = FF_PROFILE_UNKNOWN;
@@ -91,7 +95,7 @@ public:
     memset(language, 0, sizeof(language));
     disabled = false;
     changes = 0;
-    flags = FLAG_NONE;
+    flags = StreamFlags::FLAG_NONE;
     realtime = false;
   }
 
@@ -100,18 +104,11 @@ public:
     delete [] ExtraData;
   }
 
-  virtual std::string GetStreamInfo()
-  {
-    return "";
-  }
-
   virtual std::string GetStreamName();
 
-  virtual void      SetDiscard(AVDiscard discard);
-  virtual AVDiscard GetDiscard();
-
-  int iId;         // most of the time starting from 0
-  int iPhysicalId; // id
+  int uniqueId;          // unique stream id
+  int dvdNavId;
+  int64_t demuxerId; // id of the associated demuxer
   AVCodecID codec;
   unsigned int codec_fourcc; // if available
   int profile; // encoder profile of the stream reported by the decoder. used to qualify hw decoders.
@@ -125,23 +122,17 @@ public:
   uint8_t*     ExtraData; // extra data for codec to use
   unsigned int ExtraSize; // size of extra data
 
+  StreamFlags flags;
   char language[4]; // ISO 639 3-letter language code (empty string if undefined)
   bool disabled; // set when stream is disabled. (when no decoder exists)
 
+  std::string name;
+  std::string codecName;
+
   int  changes; // increment on change which player may need to know about
 
-  enum EFlags
-  { FLAG_NONE             = 0x0000 
-  , FLAG_DEFAULT          = 0x0001
-  , FLAG_DUB              = 0x0002
-  , FLAG_ORIGINAL         = 0x0004
-  , FLAG_COMMENT          = 0x0008
-  , FLAG_LYRICS           = 0x0010
-  , FLAG_KARAOKE          = 0x0020
-  , FLAG_FORCED           = 0x0040
-  , FLAG_HEARING_IMPAIRED = 0x0080
-  , FLAG_VISUAL_IMPAIRED  = 0x0100
-  } flags;
+  std::shared_ptr<DemuxCryptoSession> cryptoSession;
+  std::shared_ptr<ADDON::IAddonProvider> externalInterfaces;
 };
 
 class CDemuxStreamVideo : public CDemuxStream
@@ -151,8 +142,6 @@ public:
   {
     iFpsScale = 0;
     iFpsRate = 0;
-    irFpsScale = 0;
-    irFpsRate = 0;
     iHeight = 0;
     iWidth = 0;
     fAspect = 0.0;
@@ -162,21 +151,21 @@ public:
     type = STREAM_VIDEO;
     iOrientation = 0;
     iBitsPerPixel = 0;
+    iBitRate = 0;
   }
 
-  virtual ~CDemuxStreamVideo() {}
+  ~CDemuxStreamVideo() override = default;
   int iFpsScale; // scale of 1000 and a rate of 29970 will result in 29.97 fps
   int iFpsRate;
-  int irFpsScale;
-  int irFpsRate;
   int iHeight; // height of the stream reported by the demuxer
   int iWidth; // width of the stream reported by the demuxer
-  float fAspect; // display aspect of stream
+  double fAspect; // display aspect of stream
   bool bVFR;  // variable framerate
   bool bPTSInvalid; // pts cannot be trusted (avi's).
   bool bForcedAspect; // aspect is forced from container
-  int iOrientation; // orientation of the video in degress counter clockwise
+  int iOrientation; // orientation of the video in degrees counter clockwise
   int iBitsPerPixel;
+  int iBitRate;
   std::string stereo_mode; // expected stereo mode
 };
 
@@ -194,7 +183,7 @@ public:
     type = STREAM_AUDIO;
   }
 
-  virtual ~CDemuxStreamAudio() {}
+  ~CDemuxStreamAudio() override = default;
 
   std::string GetStreamType();
 
@@ -222,7 +211,6 @@ public:
   {
     type = STREAM_TELETEXT;
   }
-  virtual std::string GetStreamInfo();
 };
 
 class CDemuxStreamRadioRDS : public CDemuxStream
@@ -232,27 +220,26 @@ public:
   {
     type = STREAM_RADIO_RDS;
   }
-  virtual std::string GetStreamInfo();
 };
 
 class CDVDDemux
 {
 public:
 
-  CDVDDemux() {}
-  virtual ~CDVDDemux() {}
+  CDVDDemux() : m_demuxerId(NewGuid()) {}
+  virtual ~CDVDDemux() = default;
 
 
   /*
    * Reset the entire demuxer (same result as closing and opening it)
    */
-  virtual void Reset() = 0;
+  virtual bool Reset() = 0;
 
   /*
    * Aborts any internal reading that might be stalling main thread
    * NOTICE - this can be called from another thread
    */
-  virtual void Abort() = 0;
+  virtual void Abort() { }
 
   /*
    * Flush the demuxer, if any data is kept in buffers, this should be freed now
@@ -268,7 +255,7 @@ public:
   /*
    * Seek, time in msec calculated from stream start
    */
-  virtual bool SeekTime(int time, bool backwords = false, double* startpts = NULL) = 0;
+  virtual bool SeekTime(double time, bool backwards = false, double* startpts = NULL) = 0;
 
   /*
    * Seek to a specified chapter.
@@ -303,27 +290,39 @@ public:
    * Set the playspeed, if demuxer can handle different
    * speeds of playback
    */
-  virtual void SetSpeed(int iSpeed) = 0;
+  virtual void SetSpeed(int iSpeed) { }
 
   /*
    * returns the total time in msec
    */
-  virtual int GetStreamLength() = 0;
+  virtual int GetStreamLength() { return 0; }
 
   /*
-   * returns the stream or NULL on error, starting from 0
+   * returns the stream or NULL on error
    */
-  virtual CDemuxStream* GetStream(int iStreamId) = 0;
+  virtual CDemuxStream* GetStream(int64_t demuxerId, int iStreamId) const { return GetStream(iStreamId); };
+
+  virtual std::vector<CDemuxStream*> GetStreams() const = 0;
 
   /*
    * return nr of streams, 0 if none
    */
-  virtual int GetNrOfStreams() = 0;
+  virtual int GetNrOfStreams() const = 0;
+
+  /*
+   * get a list of available programs
+   */
+  virtual int GetPrograms(std::vector<ProgramInfo>& programs) { return 0; }
+
+  /*
+   * select programs
+   */
+  virtual void SetProgram(int progId) {}
 
   /*
    * returns opened filename
    */
-  virtual std::string GetFileName() = 0;
+  virtual std::string GetFileName() { return ""; }
 
   /*
    * return nr of subtitle streams, 0 if none
@@ -333,5 +332,44 @@ public:
   /*
    * return a user-presentable codec name of the given stream
    */
+  virtual std::string GetStreamCodecName(int64_t demuxerId, int iStreamId) { return GetStreamCodecName(iStreamId); };
+
+  /*
+   * enable / disable demux stream
+   */
+  virtual void EnableStream(int64_t demuxerId, int id, bool enable) { EnableStream(id, enable); };
+
+  /*
+  * implicitly enable and open a demux stream for playback
+  */
+  virtual void OpenStream(int64_t demuxerId, int id) { OpenStream(id); };
+
+  /*
+   * sets desired width / height for video stream
+   * adaptive demuxers like DASH can use this to choose best fitting video stream
+   */
+  virtual void SetVideoResolution(int width, int height) {};
+  
+  /*
+  * return the id of the demuxer
+  */
+  int64_t GetDemuxerId() { return m_demuxerId; };
+
+protected:
+  virtual void EnableStream(int id, bool enable) {};
+  virtual void OpenStream(int id) {};
+  virtual CDemuxStream* GetStream(int iStreamId) const = 0;
   virtual std::string GetStreamCodecName(int iStreamId) { return ""; };
+
+  int GetNrOfStreams(StreamType streamType);
+
+  int64_t m_demuxerId;
+
+private:
+
+  int64_t NewGuid()
+  {
+    static int64_t guid = 0;
+    return guid++;
+  }
 };

@@ -4,7 +4,7 @@
  * the Boxee project. http://www.boxee.tv
  *
  *      Copyright (C) 2011-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,9 +21,6 @@
  *  <http://www.gnu.org/licenses/>.
  *
  */
-#include "system.h"
-
-#ifdef HAS_AIRTUNES
 
 #include "DllLibShairplay.h"
 #include <sys/types.h>
@@ -47,19 +44,20 @@ class CAirTunesServer : public ANNOUNCEMENT::IAnnouncer, public IActionListener,
 {
 public:
   // ANNOUNCEMENT::IAnnouncer
-  virtual void Announce(ANNOUNCEMENT::AnnouncementFlag flag, const char *sender, const char *message, const CVariant &data);
+  void Announce(ANNOUNCEMENT::AnnouncementFlag flag, const char *sender, const char *message, const CVariant &data) override;
 
   void RegisterActionListener(bool doRegister);
   static void EnableActionProcessing(bool enable);
   // IACtionListener
-  virtual bool OnAction(const CAction &action);
+  bool OnAction(const CAction &action) override;
   
   //CThread
-  virtual void Process();
+  void Process() override;
 
   static bool StartServer(int port, bool nonlocal, bool usePassword, const std::string &password="");
   static void StopServer(bool bWait);
   static bool IsRunning();
+  bool IsRAOPRunningInternal();
   static void SetMetadataFromBuffer(const char *buffer, unsigned int size);
   static void SetCoverArtFromBuffer(const char *buffer, unsigned int size);
   static void SetupRemoteControl();
@@ -67,7 +65,7 @@ public:
 
 private:
   CAirTunesServer(int port, bool nonlocal);
-  ~CAirTunesServer();
+  ~CAirTunesServer() override;
   bool Initialize(const std::string &password);
   void Deinitialize();
   static void RefreshCoverArt(const char *outputFilename = NULL);
@@ -105,5 +103,3 @@ private:
       static void  audio_set_progress(void *cls, void *session, unsigned int start, unsigned int curr, unsigned int end);
     };
 };
-
-#endif

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2012-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,10 +19,11 @@
  */
 
 #include "AndroidFeatures.h"
-#include "utils/log.h"
 
 #include <cpu-features.h>
-#include "platform/android/jni/JNIThreading.h"
+#include <androidjni/JNIThreading.h>
+
+#include "utils/log.h"
 
 bool CAndroidFeatures::HasNeon()
 {

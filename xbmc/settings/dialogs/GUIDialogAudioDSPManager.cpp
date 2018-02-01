@@ -21,9 +21,9 @@
 #include "GUIDialogAudioDSPManager.h"
 
 #include "FileItem.h"
-#include "cores/AudioEngine/DSPAddons/ActiveAEDSP.h"
+#include "Util.h"
+#include "cores/AudioEngine/Engines/ActiveAE/AudioDSPAddons/ActiveAEDSP.h"
 #include "dialogs/GUIDialogTextViewer.h"
-#include "dialogs/GUIDialogOK.h"
 #include "dialogs/GUIDialogBusy.h"
 #include "dialogs/GUIDialogYesNo.h"
 #include "guilib/GUIWindowManager.h"
@@ -31,11 +31,13 @@
 #include "guilib/GUIListContainer.h"
 #include "guilib/GUIRadioButtonControl.h"
 #include "input/Key.h"
+#include "messaging/helpers/DialogOKHelper.h"
+#include "utils/log.h"
 #include "utils/StringUtils.h"
 
 #define CONTROL_LIST_AVAILABLE                  20
 #define CONTROL_LIST_ACTIVE                     21
-#define CONTROL_RADIO_BUTTON_CONTINOUS_SAVING   22
+#define CONTROL_RADIO_BUTTON_CONTINUOUS_SAVING   22
 #define CONTROL_BUTTON_APPLY_CHANGES            23
 #define CONTROL_BUTTON_CLEAR_ACTIVE_MODES       24
 #define CONTROL_LIST_MODE_SELECTION             9000
@@ -50,20 +52,23 @@
 #define LIST_OUTPUT_RESAMPLE                    4
 
 using namespace ActiveAE;
+using namespace KODI::MESSAGING;
 
 typedef struct
 {
   const char* sModeType;
   int iModeType;
+  int iName;
+  int iDescription;
 } DSP_MODE_TYPES;
 
 static const DSP_MODE_TYPES dsp_mode_types[] = {
-  { "preprocessing",    AE_DSP_MODE_TYPE_PRE_PROCESS },
-  { "inputresampling",  AE_DSP_MODE_TYPE_INPUT_RESAMPLE },
-  { "masterprocessing", AE_DSP_MODE_TYPE_MASTER_PROCESS },
-  { "outputresampling", AE_DSP_MODE_TYPE_OUTPUT_RESAMPLE },
-  { "postprocessing",   AE_DSP_MODE_TYPE_POST_PROCESS },
-  { "undefined",        AE_DSP_MODE_TYPE_UNDEFINED }
+  { "inputresampling",  AE_DSP_MODE_TYPE_INPUT_RESAMPLE,  15057, 15114 },
+  { "preprocessing",    AE_DSP_MODE_TYPE_PRE_PROCESS,     15058, 15113 },
+  { "masterprocessing", AE_DSP_MODE_TYPE_MASTER_PROCESS,  15059, 15115 },
+  { "postprocessing",   AE_DSP_MODE_TYPE_POST_PROCESS,    15060, 15117 },
+  { "outputresampling", AE_DSP_MODE_TYPE_OUTPUT_RESAMPLE, 15061, 15116 },
+  { "undefined",        AE_DSP_MODE_TYPE_UNDEFINED,       0,     0 }
 };
 
 CGUIDialogAudioDSPManager::CGUIDialogAudioDSPManager(void)
@@ -71,7 +76,7 @@ CGUIDialogAudioDSPManager::CGUIDialogAudioDSPManager(void)
 {
   m_bMovingMode               = false;
   m_bContainsChanges          = false;
-  m_bContinousSaving          = true;
+  m_bContinuousSaving          = true;
   m_iSelected[LIST_AVAILABLE] = 0;
   m_iSelected[LIST_ACTIVE]    = 0;
 
@@ -183,7 +188,7 @@ void CGUIDialogAudioDSPManager::OnInitWindow()
   m_bMovingMode               = false;
   m_bContainsChanges          = false;
 
-  CGUIRadioButtonControl *radioButton = dynamic_cast<CGUIRadioButtonControl*>(GetControl(CONTROL_RADIO_BUTTON_CONTINOUS_SAVING));
+  CGUIRadioButtonControl *radioButton = dynamic_cast<CGUIRadioButtonControl*>(GetControl(CONTROL_RADIO_BUTTON_CONTINUOUS_SAVING));
   CGUIButtonControl *applyButton = dynamic_cast<CGUIButtonControl*>(GetControl(CONTROL_BUTTON_APPLY_CHANGES));
   if (!radioButton || !applyButton)
   {
@@ -191,8 +196,8 @@ void CGUIDialogAudioDSPManager::OnInitWindow()
     return;
   }
 
-  SET_CONTROL_SELECTED(GetID(), CONTROL_RADIO_BUTTON_CONTINOUS_SAVING, m_bContinousSaving);
-  applyButton->SetEnabled(!m_bContinousSaving);
+  SET_CONTROL_SELECTED(GetID(), CONTROL_RADIO_BUTTON_CONTINUOUS_SAVING, m_bContinuousSaving);
+  applyButton->SetEnabled(!m_bContinuousSaving);
 
   Update();
   SetSelectedModeType();
@@ -202,7 +207,7 @@ void CGUIDialogAudioDSPManager::OnDeinitWindow(int nextWindowID)
 {
   if (m_bContainsChanges)
   {
-    if (m_bContinousSaving)
+    if (m_bContinuousSaving)
     {
       SaveList();
     }
@@ -214,7 +219,7 @@ void CGUIDialogAudioDSPManager::OnDeinitWindow(int nextWindowID)
       }
       else
       {
-        m_bContinousSaving = false;
+        m_bContinuousSaving = false;
       }
     }
   }
@@ -273,7 +278,7 @@ bool CGUIDialogAudioDSPManager::OnClickListActive(CGUIMessage &message)
       m_bMovingMode = false;
       m_bContainsChanges = true;
 
-      if (m_bContinousSaving)
+      if (m_bContinuousSaving)
       {
         SaveList();
       }
@@ -290,7 +295,7 @@ bool CGUIDialogAudioDSPManager::OnClickListActive(CGUIMessage &message)
       // reenable all buttons and mode selection list
       modeList->SetEnabled(true);
       clearActiveModesButton->SetEnabled(true);
-      if (!m_bContinousSaving)
+      if (!m_bContinuousSaving)
       {
         applyButton->SetEnabled(true);
       }
@@ -302,9 +307,9 @@ bool CGUIDialogAudioDSPManager::OnClickListActive(CGUIMessage &message)
   return false;
 }
 
-bool CGUIDialogAudioDSPManager::OnClickRadioContinousSaving(CGUIMessage &message)
+bool CGUIDialogAudioDSPManager::OnClickRadioContinuousSaving(CGUIMessage &message)
 {
-  CGUIRadioButtonControl *radioButton = dynamic_cast<CGUIRadioButtonControl*>(GetControl(CONTROL_RADIO_BUTTON_CONTINOUS_SAVING));
+  CGUIRadioButtonControl *radioButton = dynamic_cast<CGUIRadioButtonControl*>(GetControl(CONTROL_RADIO_BUTTON_CONTINUOUS_SAVING));
   CGUIButtonControl *applyChangesButton = dynamic_cast<CGUIButtonControl*>(GetControl(CONTROL_BUTTON_APPLY_CHANGES));
 
   if (!radioButton || !applyChangesButton)
@@ -316,11 +321,11 @@ bool CGUIDialogAudioDSPManager::OnClickRadioContinousSaving(CGUIMessage &message
   if (!radioButton->IsSelected())
   {
     applyChangesButton->SetEnabled(true);
-    m_bContinousSaving = false;
+    m_bContinuousSaving = false;
   }
   else
   {
-    m_bContinousSaving = true;
+    m_bContinuousSaving = true;
     applyChangesButton->SetEnabled(false);
   }
 
@@ -360,7 +365,7 @@ bool CGUIDialogAudioDSPManager::OnClickClearActiveModes(CGUIMessage &message)
     m_activeViewControl.SetItems(*m_activeItems[m_iCurrentType]);
 
     m_bContainsChanges = true;
-    if (m_bContinousSaving)
+    if (m_bContinuousSaving)
     {
       SaveList();
     }
@@ -378,8 +383,8 @@ bool CGUIDialogAudioDSPManager::OnMessageClick(CGUIMessage &message)
     return OnClickListAvailable(message);
   case CONTROL_LIST_ACTIVE:
     return OnClickListActive(message);
-  case CONTROL_RADIO_BUTTON_CONTINOUS_SAVING:
-    return OnClickRadioContinousSaving(message);
+  case CONTROL_RADIO_BUTTON_CONTINUOUS_SAVING:
+    return OnClickRadioContinuousSaving(message);
   case CONTROL_BUTTON_CLEAR_ACTIVE_MODES:
     return OnClickClearActiveModes(message);
   case CONTROL_BUTTON_APPLY_CHANGES:
@@ -429,8 +434,6 @@ bool CGUIDialogAudioDSPManager::OnMessage(CGUIMessage& message)
 
 void CGUIDialogAudioDSPManager::OnWindowLoaded(void)
 {
-  g_graphicsContext.Lock();
-
   m_availableViewControl.Reset();
   m_availableViewControl.SetParentWindow(GetID());
   m_availableViewControl.AddView(GetControl(CONTROL_LIST_AVAILABLE));
@@ -438,8 +441,6 @@ void CGUIDialogAudioDSPManager::OnWindowLoaded(void)
   m_activeViewControl.Reset();
   m_activeViewControl.SetParentWindow(GetID());
   m_activeViewControl.AddView(GetControl(CONTROL_LIST_ACTIVE));
-
-  g_graphicsContext.Unlock();
 
   CGUIDialog::OnWindowLoaded();
 }
@@ -553,21 +554,7 @@ bool CGUIDialogAudioDSPManager::OnContextButton(int itemNumber, CONTEXT_BUTTON b
     return false;
   }
 
-  if (button == CONTEXT_BUTTON_HELP)
-  {
-    /*!
-    * Open audio dsp addon mode help text dialog
-    */
-    AE_DSP_ADDON addon;
-    if (CActiveAEDSP::GetInstance().GetAudioDSPAddon((int)pItem->GetProperty("AddonId").asInteger(), addon))
-    {
-      CGUIDialogTextViewer* pDlgInfo = (CGUIDialogTextViewer*)g_windowManager.GetWindow(WINDOW_DIALOG_TEXT_VIEWER);
-      pDlgInfo->SetHeading(g_localizeStrings.Get(15062) + " - " + pItem->GetProperty("Name").asString());
-      pDlgInfo->SetText(g_localizeStrings.GetAddonString(addon->ID(), (uint32_t)pItem->GetProperty("Help").asInteger()));
-      pDlgInfo->Open();
-    }
-  }
-  else if (button == CONTEXT_BUTTON_ACTIVATE)
+  if (button == CONTEXT_BUTTON_ACTIVATE)
   {
     /*!
     * Deactivate selected processing mode
@@ -613,7 +600,7 @@ bool CGUIDialogAudioDSPManager::OnContextButton(int itemNumber, CONTEXT_BUTTON b
     }
 
     m_bContainsChanges = true;
-    if (m_bContinousSaving)
+    if (m_bContinuousSaving)
     {
       SaveList();
     }
@@ -644,40 +631,14 @@ bool CGUIDialogAudioDSPManager::OnContextButton(int itemNumber, CONTEXT_BUTTON b
     // if we are in MovingMode all buttons and mode selection list will be disabled!
     modeList->SetEnabled(false);
     clearActiveModesButton->SetEnabled(false);
-    if (!m_bContinousSaving)
+    if (!m_bContinuousSaving)
     {
       applyButton->SetEnabled(false);
     }
   }
   else if (button == CONTEXT_BUTTON_SETTINGS)
   {
-    int hookId = (int)pItem->GetProperty("SettingsDialog").asInteger();
-    if (hookId > 0)
-    {
-      AE_DSP_ADDON addon;
-      if (CActiveAEDSP::GetInstance().GetAudioDSPAddon((int)pItem->GetProperty("AddonId").asInteger(), addon))
-      {
-        AE_DSP_MENUHOOK       hook;
-        AE_DSP_MENUHOOK_DATA  hookData;
-
-        hook.category           = AE_DSP_MENUHOOK_ALL;
-        hook.iHookId            = hookId;
-        hook.iRelevantModeId    = (unsigned int)pItem->GetProperty("AddonModeNumber").asInteger();
-        hookData.category       = AE_DSP_MENUHOOK_ALL;
-        hookData.data.iStreamId = -1;
-
-        /*!
-         * @note the addon dialog becomes always opened on the back of Kodi ones for this reason a
-         * "<animation effect="fade" start="100" end="0" time="400" condition="Window.IsVisible(Addon)">Conditional</animation>"
-         * on skin is needed to hide dialog.
-         */
-        addon->CallMenuHook(hook, hookData);
-      }
-    }
-    else
-    {
-      CGUIDialogOK::ShowAndGetInput(19033, 0, 15040, 0);
-    }
+    HELPERS::ShowOKDialogLines(CVariant{19033}, CVariant{0}, CVariant{15040}, CVariant{0});
   }
 
   return true;
@@ -685,7 +646,7 @@ bool CGUIDialogAudioDSPManager::OnContextButton(int itemNumber, CONTEXT_BUTTON b
 
 void CGUIDialogAudioDSPManager::Update()
 {
-  CGUIDialogBusy* pDlgBusy = (CGUIDialogBusy*)g_windowManager.GetWindow(WINDOW_DIALOG_BUSY);
+  CGUIDialogBusy* pDlgBusy = g_windowManager.GetWindow<CGUIDialogBusy>(WINDOW_DIALOG_BUSY);
   if (!pDlgBusy)
   {
     helper_LogError(__FUNCTION__);
@@ -704,14 +665,24 @@ void CGUIDialogAudioDSPManager::Update()
     return;
   }
 
-  for (int iModeType = 0; iModeType < AE_DSP_MODE_TYPE_MAX; iModeType++)
+  // construct a CFileItemList to pass 'em on to the list
+  CFileItemList items;
+  for (int i = 0; i < AE_DSP_MODE_TYPE_MAX; ++i)
   {
+    int iModeType = dsp_mode_types[i].iModeType;
+
     modes.clear();
     db.GetModes(modes, iModeType);
 
     // No modes available, nothing to do.
     if (!modes.empty())
     {
+      CFileItemPtr item(new CFileItem());
+      item->SetLabel(g_localizeStrings.Get(dsp_mode_types[i].iName));
+      item->SetLabel2(g_localizeStrings.Get(dsp_mode_types[i].iDescription));
+      item->SetProperty("currentMode", dsp_mode_types[i].sModeType);
+      items.Add(item);
+
       AE_DSP_MENUHOOK_CAT menuHook = helper_GetMenuHookCategory(iModeType);
       int continuesNo = 1;
       for (unsigned int iModePtr = 0; iModePtr < modes.size(); iModePtr++)
@@ -730,7 +701,7 @@ void CGUIDialogAudioDSPManager::Update()
             m_availableItems[iModeType]->Add(pItem);
           }
         }
-        g_windowManager.ProcessRenderLoop(false);
+        ProcessRenderLoop(false);
       }
 
       m_availableItems[iModeType]->Sort(SortByLabel, SortOrderAscending);
@@ -742,6 +713,9 @@ void CGUIDialogAudioDSPManager::Update()
     }
   }
 
+  CGUIMessage msg(GUI_MSG_LABEL_BIND, GetID(), CONTROL_LIST_MODE_SELECTION, 0, 0, &items);
+  OnMessage(msg);
+
   db.Close();
 
   pDlgBusy->Close();
@@ -749,8 +723,6 @@ void CGUIDialogAudioDSPManager::Update()
 
 void CGUIDialogAudioDSPManager::SetSelectedModeType(void)
 {
-  /* lock our display, as this window is rendered from the player thread */
-  g_graphicsContext.Lock();
   if (m_iCurrentType > AE_DSP_MODE_TYPE_UNDEFINED && m_iCurrentType < AE_DSP_MODE_TYPE_MAX && !m_bMovingMode)
   {
     m_availableViewControl.SetCurrentView(CONTROL_LIST_AVAILABLE);
@@ -759,8 +731,6 @@ void CGUIDialogAudioDSPManager::SetSelectedModeType(void)
     m_availableViewControl.SetItems(*m_availableItems[m_iCurrentType]);
     m_activeViewControl.SetItems(*m_activeItems[m_iCurrentType]);
   }
-
-  g_graphicsContext.Unlock();
 }
 
 void CGUIDialogAudioDSPManager::Clear(void)
@@ -781,7 +751,7 @@ void CGUIDialogAudioDSPManager::SaveList(void)
    return;
 
   /* display the progress dialog */
-  CGUIDialogBusy* pDlgBusy = (CGUIDialogBusy*)g_windowManager.GetWindow(WINDOW_DIALOG_BUSY);
+  CGUIDialogBusy* pDlgBusy = g_windowManager.GetWindow<CGUIDialogBusy>(WINDOW_DIALOG_BUSY);
   if (!pDlgBusy)
   {
     helper_LogError(__FUNCTION__);
@@ -789,14 +759,6 @@ void CGUIDialogAudioDSPManager::SaveList(void)
   }
   pDlgBusy->Open();
 
-  /* persist all modes */
-  if (UpdateDatabase(pDlgBusy))
-  {
-    CActiveAEDSP::GetInstance().TriggerModeUpdate();
-
-    m_bContainsChanges = false;
-    SetItemsUnchanged();
-  }
 
   pDlgBusy->Close();
 }
@@ -850,7 +812,7 @@ bool CGUIDialogAudioDSPManager::UpdateDatabase(CGUIDialogBusy* pDlgBusy)
         }
       }
 
-      g_windowManager.ProcessRenderLoop(false);
+      ProcessRenderLoop(false);
     }
 
     for (int iListPtr = 0; iListPtr < m_availableItems[i]->Size(); iListPtr++)
@@ -883,7 +845,7 @@ bool CGUIDialogAudioDSPManager::UpdateDatabase(CGUIDialogBusy* pDlgBusy)
         }
       }
 
-      g_windowManager.ProcessRenderLoop(false);
+      ProcessRenderLoop(false);
     }
   }
   db.Close();
@@ -949,6 +911,7 @@ int CGUIDialogAudioDSPManager::helper_TranslateModeType(std::string ModeString)
 CFileItem *CGUIDialogAudioDSPManager::helper_CreateModeListItem(CActiveAEDSPModePtr &ModePointer, AE_DSP_MENUHOOK_CAT &MenuHook, int *ContinuesNo)
 {
   CFileItem *pItem = NULL;
+  return pItem;
 
   if (!ContinuesNo)
   {
@@ -959,17 +922,7 @@ CFileItem *CGUIDialogAudioDSPManager::helper_CreateModeListItem(CActiveAEDSPMode
   const int AddonID = ModePointer->AddonID();
 
   std::string addonName;
-  if (!CActiveAEDSP::GetInstance().GetAudioDSPAddonName(AddonID, addonName))
-  {
-    return pItem;
-  }
-
   AE_DSP_ADDON addon;
-  if (!CActiveAEDSP::GetInstance().GetAudioDSPAddon(AddonID, addon))
-  {
-    return pItem;
-  }
-
   std::string modeName = g_localizeStrings.GetAddonString(addon->ID(), ModePointer->ModeName());
 
   std::string description;
@@ -1011,14 +964,17 @@ CFileItem *CGUIDialogAudioDSPManager::helper_CreateModeListItem(CActiveAEDSPMode
   // set list item properties
   pItem->SetProperty("ActiveMode", isActive);
   pItem->SetProperty("Number", number);
-  pItem->SetProperty("Name", modeName);
+  pItem->SetLabel(modeName);
   pItem->SetProperty("Description", description);
   pItem->SetProperty("Help", ModePointer->ModeHelp());
-  pItem->SetProperty("Icon", ModePointer->IconOwnModePath());
+  if (ModePointer->IconOwnModePath().empty())
+    pItem->SetIconImage("DefaultAddonAudioDSP.png");
+  else
+    pItem->SetIconImage(ModePointer->IconOwnModePath());
   pItem->SetProperty("SettingsDialog", dialogId);
   pItem->SetProperty("AddonId", AddonID);
   pItem->SetProperty("AddonModeNumber", ModePointer->AddonModeNumber());
-  pItem->SetProperty("AddonName", addonName);
+  pItem->SetLabel2(addonName);
   pItem->SetProperty("Changed", false);
 
   return pItem;
@@ -1031,38 +987,7 @@ int CGUIDialogAudioDSPManager::helper_GetDialogId(CActiveAEDSPModePtr &ModePoint
   if (ModePointer->HasSettingsDialog())
   {
     AE_DSP_MENUHOOKS hooks;
-
-    // Find first general settings dialog about mode
-    if (CActiveAEDSP::GetInstance().GetMenuHooks(ModePointer->AddonID(), AE_DSP_MENUHOOK_SETTING, hooks))
-    {
-      for (unsigned int i = 0; i < hooks.size() && dialogId == 0; i++)
-      {
-        if (hooks[i].iRelevantModeId == ModePointer->AddonModeNumber())
-        {
-          dialogId = hooks[i].iHookId;
-        }
-      }
-    }
-
-    // If nothing was present, check for playback settings
-    if (dialogId == 0 && CActiveAEDSP::GetInstance().GetMenuHooks(ModePointer->AddonID(), MenuHook, hooks))
-    {
-      for (unsigned int i = 0; i < hooks.size() && (dialogId == 0 || dialogId != -1); i++)
-      {
-        if (hooks[i].iRelevantModeId == ModePointer->AddonModeNumber())
-        {
-          if (!hooks[i].bNeedPlayback)
-          {
-            dialogId = hooks[i].iHookId;
-          }
-          else
-          {
-            dialogId = -1;
-          }
-        }
-      }
-    }
-
+    
     if (dialogId == 0)
       CLog::Log(LOGERROR, "DSP Dialog Manager - %s - Present marked settings dialog of mode %s on addon %s not found",
                             __FUNCTION__,

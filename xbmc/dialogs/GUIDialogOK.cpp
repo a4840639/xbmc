@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,8 +28,7 @@ CGUIDialogOK::CGUIDialogOK(void)
 {
 }
 
-CGUIDialogOK::~CGUIDialogOK(void)
-{}
+CGUIDialogOK::~CGUIDialogOK(void) = default;
 
 bool CGUIDialogOK::OnMessage(CGUIMessage& message)
 {
@@ -47,35 +46,55 @@ bool CGUIDialogOK::OnMessage(CGUIMessage& message)
 }
 
 // \brief Show CGUIDialogOK dialog, then wait for user to dismiss it.
-void CGUIDialogOK::ShowAndGetInput(CVariant heading, CVariant text)
+bool CGUIDialogOK::ShowAndGetInput(CVariant heading, CVariant text)
 {
-  CGUIDialogOK *dialog = (CGUIDialogOK *)g_windowManager.GetWindow(WINDOW_DIALOG_OK);
+  CGUIDialogOK *dialog = g_windowManager.GetWindow<CGUIDialogOK>(WINDOW_DIALOG_OK);
   if (!dialog)
-    return;
+    return false;
   dialog->SetHeading(heading);
   dialog->SetText(text);
   dialog->Open();
+  return dialog->IsConfirmed();
 }
 
 // \brief Show CGUIDialogOK dialog, then wait for user to dismiss it.
-void CGUIDialogOK::ShowAndGetInput(CVariant heading, CVariant line0, CVariant line1, CVariant line2)
+bool CGUIDialogOK::ShowAndGetInput(CVariant heading, CVariant line0, CVariant line1, CVariant line2)
 {
-  CGUIDialogOK *dialog = (CGUIDialogOK *)g_windowManager.GetWindow(WINDOW_DIALOG_OK);
+  CGUIDialogOK *dialog = g_windowManager.GetWindow<CGUIDialogOK>(WINDOW_DIALOG_OK);
   if (!dialog) 
-    return;
+    return false;
   dialog->SetHeading(heading);
   dialog->SetLine(0, line0);
   dialog->SetLine(1, line1);
   dialog->SetLine(2, line2);
   dialog->Open();
+  return dialog->IsConfirmed();
+}
+
+bool CGUIDialogOK::ShowAndGetInput(const HELPERS::DialogOKMessage & options)
+{
+  if (!options.heading.isNull())
+    SetHeading(options.heading);
+  if (!options.text.isNull())
+    SetText(options.text);
+
+  for (size_t i = 0; i < 3; ++i)
+  {
+    if (!options.lines[i].isNull())
+      SetLine(i, options.lines[i]);
+  }
+  Open();
+  return IsConfirmed();
 }
 
 void CGUIDialogOK::OnInitWindow()
 {
-  CGUIDialogBoxBase::OnInitWindow();
-
-  SET_CONTROL_VISIBLE(CONTROL_YES_BUTTON);
+  SET_CONTROL_HIDDEN(CONTROL_NO_BUTTON);
+  SET_CONTROL_HIDDEN(CONTROL_CUSTOM_BUTTON);
+  SET_CONTROL_HIDDEN(CONTROL_PROGRESS_BAR);
   SET_CONTROL_FOCUS(CONTROL_YES_BUTTON, 0);
+
+  CGUIDialogBoxBase::OnInitWindow();
 }
 
 int CGUIDialogOK::GetDefaultLabelID(int controlId) const

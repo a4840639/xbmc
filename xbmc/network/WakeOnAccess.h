@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #include "settings/lib/ISettingCallback.h"
 #include "settings/lib/ISettingsHandler.h"
 #include <string>
+#include <vector>
 
 class CWakeOnAccess : private IJobCallback, public ISettingCallback, public ISettingsHandler
 {
@@ -35,14 +36,14 @@ public:
 
   void QueueMACDiscoveryForAllRemotes();
 
-  virtual void OnJobComplete(unsigned int jobID, bool success, CJob *job) override;
-  virtual void OnSettingChanged(const CSetting *setting) override;
-  virtual void OnSettingsLoaded() override;
+  void OnJobComplete(unsigned int jobID, bool success, CJob *job) override;
+  void OnSettingChanged(std::shared_ptr<const CSetting> setting) override;
+  void OnSettingsLoaded() override;
 
   // struct to keep per host settings
   struct WakeUpEntry
   {
-    WakeUpEntry (bool isAwake = false);
+    explicit WakeUpEntry (bool isAwake = false);
 
     std::string host;
     std::string mac;
@@ -55,6 +56,8 @@ public:
     unsigned short ping_mode; // how to ping
 
     CDateTime nextWake;
+    std::string upnpUuid; // empty unless upnpmode
+    std::string friendlyName;
   };
 
 private:
@@ -72,12 +75,15 @@ private:
   typedef std::vector<WakeUpEntry> EntriesVector;
   EntriesVector m_entries;
   CCriticalSection m_entrylist_protect;
-  bool FindOrTouchHostEntry (const std::string& hostName, WakeUpEntry& server);
-  void TouchHostEntry (const std::string& hostName);
+  bool FindOrTouchHostEntry(const std::string& hostName, bool upnpMode, WakeUpEntry& server);
+  void TouchHostEntry(const std::string& hostName, bool upnpMode);
 
   unsigned int m_netinit_sec, m_netsettle_ms; //time to wait for network connection
 
   bool m_enabled;
 
+  bool WakeUpHost(const std::string& hostName, const std::string& customMessage, bool upnpMode);
   bool WakeUpHost(const WakeUpEntry& server);
+
+  std::vector<struct UPnPServer> m_UPnPServers; // list of wakeable upnp servers
 };

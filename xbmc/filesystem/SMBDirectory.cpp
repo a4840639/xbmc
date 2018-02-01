@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 
 /*
 * know bugs:
-* - when opening a server for the first time with ip adres and the second time
+* - when opening a server for the first time with ip address and the second time
 *   with server name, access to the server is denied.
 * - when browsing entire network, user can't go back one step
 *   share = smb://, user selects a workgroup, user selects a server.
@@ -41,6 +41,9 @@
 #include "utils/URIUtils.h"
 #include "threads/SingleLock.h"
 #include "PasswordManager.h"
+#ifdef TARGET_POSIX
+#include "platform/linux/XTimeUtils.h"
+#endif
 
 #include <libsmbclient.h>
 
@@ -242,8 +245,7 @@ int CSMBDirectory::OpenDir(const CURL& url, std::string& strAuth)
     s.erase(len - 1, 1);
   }
 
-  if (g_advancedSettings.CanLogComponent(LOGSAMBA))
-    CLog::LogFunction(LOGDEBUG, __FUNCTION__, "Using authentication url %s", CURL::GetRedacted(s).c_str());
+  CLog::LogF(LOGDEBUG, LOGSAMBA, "Using authentication url %s", CURL::GetRedacted(s).c_str());
 
   { CSingleLock lock(smb);
     fd = smbc_opendir(s.c_str());

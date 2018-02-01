@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@ typedef struct USBDevicePrivateData {
 } USBDevicePrivateData;
 #endif
 
-CPeripheralBusUSB::CPeripheralBusUSB(CPeripherals *manager) :
+CPeripheralBusUSB::CPeripheralBusUSB(CPeripherals& manager) :
     CPeripheralBus("PeripBusUSB", manager, PERIPHERAL_BUS_USB)
 {
   m_bNeedsPolling = false;
@@ -95,7 +95,7 @@ bool CPeripheralBusUSB::PerformDeviceScan(PeripheralScanResults &results)
 }
 
 #ifdef TARGET_DARWIN_OSX
-const PeripheralType CPeripheralBusUSB::GetType(int iDeviceClass)
+PeripheralType CPeripheralBusUSB::GetType(int iDeviceClass)
 {
   switch (iDeviceClass)
   {

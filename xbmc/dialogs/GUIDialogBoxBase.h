@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -41,8 +41,8 @@ class CGUIDialogBoxBase :
 {
 public:
   CGUIDialogBoxBase(int id, const std::string &xmlFile);
-  virtual ~CGUIDialogBoxBase(void);
-  virtual bool OnMessage(CGUIMessage& message);
+  ~CGUIDialogBoxBase(void) override;
+  bool OnMessage(CGUIMessage& message) override;
   bool IsConfirmed() const;
   void SetLine(unsigned int iLine, CVariant line);
   void SetText(CVariant text);
@@ -52,15 +52,15 @@ protected:
   std::string GetDefaultLabel(int controlId) const;
   virtual int GetDefaultLabelID(int controlId) const;
   /*! \brief Get a localized string from a variant
-   If the varaint is already a string we return directly, else if it's an integer we return the corresponding
+   If the variant is already a string we return directly, else if it's an integer we return the corresponding
    localized string.
    \param var the variant to localize.
    */
   std::string GetLocalized(const CVariant &var) const;
 
-  virtual void Process(unsigned int currentTime, CDirtyRegionList &dirtyregions);
-  virtual void OnInitWindow();
-  virtual void OnDeinitWindow(int nextWindowID);
+  void Process(unsigned int currentTime, CDirtyRegionList &dirtyregions) override;
+  void OnInitWindow() override;
+  void OnDeinitWindow(int nextWindowID) override;
 
   bool m_bConfirmed;
   bool m_hasTextbox;

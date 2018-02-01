@@ -1,7 +1,7 @@
 /*
  *      Initial code sponsored by: Voddler Inc (voddler.com)
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -82,7 +82,7 @@ namespace OVERLAY {
     virtual ~CRenderer();
 
     void AddOverlay(CDVDOverlay* o, double pts, int index);
-    void Render(int idx);
+    virtual void Render(int idx);
     void Flush();
     void Release(int idx);
     bool HasOverlay(int idx);
@@ -114,5 +114,6 @@ namespace OVERLAY {
     std::map<unsigned int, COverlay*> m_textureCache;
     static unsigned int m_textureid;
     CRect m_rv, m_rs, m_rd;
+    std::string m_font, m_fontBorder;
   };
 }

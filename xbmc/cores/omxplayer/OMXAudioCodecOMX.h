@@ -2,7 +2,7 @@
 
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,12 +30,13 @@ extern "C" {
 }
 
 #include "DVDStreamInfo.h"
-#include "linux/PlatformDefs.h"
+#include "platform/linux/PlatformDefs.h"
+#include "cores/VideoPlayer/Process/ProcessInfo.h"
 
 class COMXAudioCodecOMX
 {
 public:
-  COMXAudioCodecOMX();
+  explicit COMXAudioCodecOMX(CProcessInfo &processInfo);
   virtual ~COMXAudioCodecOMX();
   bool Open(CDVDStreamInfo &hints);
   void Dispose();
@@ -52,6 +53,7 @@ public:
   unsigned int GetFrameSize() { return m_frameSize; }
 
 protected:
+  CProcessInfo &m_processInfo;
   AVCodecContext* m_pCodecContext;
   SwrContext*     m_pConvert;
   enum AVSampleFormat m_iSampleFormat;
@@ -62,8 +64,6 @@ protected:
   BYTE *m_pBufferOutput;
   int   m_iBufferOutputUsed;
   int   m_iBufferOutputAlloced;
-
-  bool m_bOpenedCodec;
 
   int     m_channels;
   CAEChannelInfo m_channelLayout;

@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -63,6 +63,7 @@
 #include "filesystem/Directory.h"
 #include "FileItem.h"
 #include "settings/AdvancedSettings.h"
+#include "Util.h"
 
 #include <set>
 
@@ -74,7 +75,7 @@ class CueReader
 public:
   virtual bool ready() const = 0;
   virtual bool ReadLine(std::string &line) = 0;
-  virtual ~CueReader() {}
+  virtual ~CueReader() = default;
 private:
   std::string m_sourcePath;
 };
@@ -83,11 +84,11 @@ class FileReader
   : public CueReader
 {
 public:
-  FileReader(const std::string &strFile)
+  explicit FileReader(const std::string &strFile) : m_szBuffer{}
   {
     m_opened = m_file.Open(strFile);
   }
-  virtual bool ReadLine(std::string &line)
+  bool ReadLine(std::string &line) override
   {
     // Read the next line.
     while (m_file.ReadString(m_szBuffer, 1023)) // Bigger than MAX_PATH_SIZE, for usage with relax!
@@ -101,11 +102,11 @@ public:
     }
     return false;
   }
-  virtual bool ready() const
+  bool ready() const override
   {
     return m_opened;
   }
-  virtual ~FileReader()
+  ~FileReader() override
   {
     if (m_opened)
       m_file.Close();
@@ -121,12 +122,12 @@ class BufferReader
   : public CueReader
 {
 public:
-  BufferReader(const std::string &strContent)
+  explicit BufferReader(const std::string &strContent)
     : m_data(strContent)
     , m_pos(0)
   {
   }
-  virtual bool ReadLine(std::string &line)
+  bool ReadLine(std::string &line) override
   {
     // Read the next line.
     line.clear();
@@ -146,7 +147,7 @@ public:
     }
     return false;
   }
-  virtual bool ready() const
+  bool ready() const override
   {
     return m_data.size() > 0;
   }
@@ -163,8 +164,7 @@ CCueDocument::CCueDocument()
 {
 }
 
-CCueDocument::~CCueDocument()
-{}
+CCueDocument::~CCueDocument() = default;
 
 ////////////////////////////////////////////////////////////////////////////////////
 // Function: ParseFile()
@@ -194,9 +194,42 @@ void CCueDocument::GetSongs(VECSONGS &songs)
 {
   for (size_t i = 0; i < m_tracks.size(); ++i)
   {
-    CSong song;
-    GetSong(i, song);
-    songs.push_back(song);
+    CSong aSong;
+    const CCueTrack& track = m_tracks[i];
+    //Pass artist to MusicInfoTag object by setting artist description string only.
+    //Artist credits not used during loading from cue sheet.
+    if (track.strArtist.empty() && !m_strArtist.empty())
+      aSong.strArtistDesc = m_strArtist;
+    else
+      aSong.strArtistDesc = track.strArtist;
+    //Pass album artist to MusicInfoTag object by setting album artist vector. 
+    aSong.SetAlbumArtist(StringUtils::Split(m_strArtist, g_advancedSettings.m_musicItemSeparator));
+    aSong.strAlbum = m_strAlbum;
+    aSong.genre = StringUtils::Split(m_strGenre, g_advancedSettings.m_musicItemSeparator);
+    aSong.iYear = m_iYear;
+    aSong.iTrack = track.iTrackNumber;
+    if (m_iDiscNumber > 0)
+      aSong.iTrack |= (m_iDiscNumber << 16); // see CMusicInfoTag::GetDiscNumber()
+    if (track.strTitle.length() == 0) // No track information for this track!
+      aSong.strTitle = StringUtils::Format("Track {:2d}", track.iTrackNumber);
+    else
+      aSong.strTitle = track.strTitle;
+    aSong.strFileName = track.strFile;
+    aSong.iStartOffset = track.iStartTime;
+    aSong.iEndOffset = track.iEndTime;
+    if (aSong.iEndOffset)
+      // Convert offset in frames (75 per second) to duration in whole seconds with rounding 
+      aSong.iDuration = CUtil::ConvertMilliSecsToSecsIntRounded(aSong.iEndOffset - aSong.iStartOffset);
+    else
+      aSong.iDuration = 0;
+
+    if (m_albumReplayGain.Valid())
+      aSong.replayGain.Set(ReplayGain::ALBUM, m_albumReplayGain);
+
+    if (track.replayGain.Valid())
+      aSong.replayGain.Set(ReplayGain::TRACK, track.replayGain);
+
+    songs.push_back(aSong);
   }
 }
 
@@ -233,45 +266,6 @@ bool CCueDocument::IsLoaded() const
 bool CCueDocument::IsOneFilePerTrack() const
 {
   return m_bOneFilePerTrack;
-}
-
-bool CCueDocument::GetSong(int aTrackNumber, CSong& aSong)
-{
-  if (aTrackNumber < 0 || aTrackNumber >= static_cast<int>(m_tracks.size()))
-    return false;
-  const CCueTrack& track = m_tracks[aTrackNumber];
-  //Pass artist to MusicInfoTag object by setting artist description string only.
-  //Artist credits not used during loading from cue sheet.
-  if ((track.strArtist.length() == 0) && (m_strArtist.length() > 0))
-    aSong.strArtistDesc = m_strArtist;
-  else
-    aSong.strArtistDesc = track.strArtist;
-  //Pass album artist to MusicInfoTag object by setting album artist vector. 
-  aSong.SetAlbumArtist(StringUtils::Split(m_strArtist, g_advancedSettings.m_musicItemSeparator));
-  aSong.strAlbum = m_strAlbum;
-  aSong.genre = StringUtils::Split(m_strGenre, g_advancedSettings.m_musicItemSeparator);
-  aSong.iYear = m_iYear;
-  aSong.iTrack = track.iTrackNumber;
-  if (m_iDiscNumber > 0)
-    aSong.iTrack |= (m_iDiscNumber << 16); // see CMusicInfoTag::GetDiscNumber()
-  if (track.strTitle.length() == 0) // No track information for this track!
-    aSong.strTitle = StringUtils::Format("Track %2d", track.iTrackNumber);
-  else
-    aSong.strTitle = track.strTitle;
-  aSong.strFileName = track.strFile;
-  aSong.iStartOffset = track.iStartTime;
-  aSong.iEndOffset = track.iEndTime;
-  if (aSong.iEndOffset)
-    aSong.iDuration = (aSong.iEndOffset - aSong.iStartOffset + 37) / 75;
-  else
-    aSong.iDuration = 0;
-
-  if (m_albumReplayGain.Valid())
-    aSong.replayGain.Set(ReplayGain::ALBUM, m_albumReplayGain);
-
-  if (track.replayGain.Valid())
-    aSong.replayGain.Set(ReplayGain::TRACK, track.replayGain);
-  return true;
 }
 
 // Private Functions start here
@@ -324,7 +318,7 @@ bool CCueDocument::Parse(CueReader& reader, const std::string& strFile)
         CLog::Log(LOGERROR, "Mangled Time in INDEX 0x tag in CUE file!");
         return false;
       }
-      if (totalTracks > 0) // Set the end time of the last track
+      if (totalTracks > 0 && m_tracks[totalTracks - 1].strFile == strCurrentFile) // Set the end time of the last track
         m_tracks[totalTracks - 1].iEndTime = time;
 
       if (totalTracks >= 0) // start time of the next track
@@ -463,7 +457,7 @@ int CCueDocument::ExtractTimeFromIndex(const std::string &index)
   int secs = atoi(time[1].c_str());
   int frames = atoi(time[2].c_str());
 
-  return (mins*60 + secs)*75 + frames;
+  return CUtil::ConvertSecsToMilliSecs(mins*60 + secs) + frames * 1000 / 75;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////

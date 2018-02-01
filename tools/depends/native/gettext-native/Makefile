@@ -1,11 +1,11 @@
 include ../../Makefile.include
 PREFIX=$(NATIVEPREFIX)
 PLATFORM=$(NATIVEPLATFORM)
-DEPS= ../../Makefile.include.in Makefile
+DEPS= ../../Makefile.include Makefile 01-gettext-tools-stpncpy.patch
 
 # lib name, version
 LIBNAME=gettext
-VERSION=0.18.2
+VERSION=0.19.8
 SOURCE=$(LIBNAME)-$(VERSION)
 ARCHIVE=$(SOURCE).tar.gz
 

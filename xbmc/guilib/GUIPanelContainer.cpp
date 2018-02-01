@@ -1,6 +1,6 @@
 /*
  *      Copyright (C) 2005-2013 Team XBMC
- *      http://xbmc.org
+ *      http://kodi.tv
  *
  *  This Program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,9 +33,7 @@ CGUIPanelContainer::CGUIPanelContainer(int parentID, int controlID, float posX, 
   m_itemsPerRow = 1;
 }
 
-CGUIPanelContainer::~CGUIPanelContainer(void)
-{
-}
+CGUIPanelContainer::~CGUIPanelContainer(void) = default;
 
 void CGUIPanelContainer::Process(unsigned int currentTime, CDirtyRegionList &dirtyregions)
 {
